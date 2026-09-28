@@ -1,57 +1,68 @@
 # Handoff
 
-## Last session: 1 (2026-09-28), bootstrap
+## Last session: 2 (2026-09-28), metrics housekeeping and simulator spec
 
 ### Done
 
-- uv project `palimp` (Python 3.12+, hatchling build, `uv.lock` committed).
-- Typer CLI in `src/palimp/cli.py`, exposing only `palimp --version`.
-- Empty `simulator` package at the repository root, separate from `src/palimp`.
-- ruff (lint + format) and pytest configured in `pyproject.toml`; one smoke test
-  in `tests/test_cli.py`.
-- GitHub Actions CI (`.github/workflows/ci.yml`): `uv sync --locked`, ruff check,
-  ruff format check, pytest.
-- Apache 2.0 `LICENSE`, minimal `README.md`.
-- Decisions 0001 to 0005 in `docs/decisions/`.
-- `metrics/sessions.csv` with header and the session 1 row.
-- `metrics/session_tokens.py`: sums token usage of a session from the local
-  Claude Code transcript (see "Measuring tokens" below).
-- The prompt file was named `CLAUDE (6).md`; it was renamed to `CLAUDE.md`
-  (content unchanged).
+- Session 1 row in `metrics/sessions.csv` finalized with final token counts and
+  cost.
+- `tokens_cache` split into `tokens_cache_read` and `tokens_cache_write`
+  (CLAUDE.md, CSV, script).
+- `metrics/pricing.json` (official Anthropic prices, source URL, retrieved
+  2026-09-28); `metrics/session_tokens.py` computes the API-equivalent cost and
+  accepts `--since` / `--until`. Decision 0006.
+- Decision 0001 updated with the real alternatives and the "limp" challenge.
+- The GitHub repository was renamed to `n-le-bourdiec/palimp` (GitHub reported
+  the move on push). The local `origin` now points to the new URL and 0001 uses
+  the new name.
+- `docs/simulator-spec.md`: company model, personas, events, artifact formats
+  with `[VSRX-n]` assumptions, ground truth schema, difficulty knobs, traps,
+  determinism, dev / held-out split, independence rules.
+- containerlab / vSRX feasibility: the machine checks could not be run (see
+  Known issues). The session report gives the steps and the commands to run.
 
 ### Next
 
-- Session 2 mission to be set by the project lead. Likely candidates: pydantic
-  models for policies and evidence, the Junos "set" parser with fixtures, or the
-  simulator skeleton.
+- First step of every session: finalize the previous session's metrics row
+  (session 2's row is provisional, see below).
+- Candidate missions: review of the simulator spec by the project lead; vSRX lab
+  setup once feasibility is confirmed; pydantic models and the "set" parser;
+  simulator skeleton (company model and seeded RNG only).
 
 ### Open questions
 
-- Decision 0001: which alternative names were considered, and what was the
-  challenge about? Not known at the time of writing; the "Alternatives
-  considered" section says so.
-- Alternatives listed in 0002 to 0005 were written by Claude from the principles
-  in `CLAUDE.md`, not from a record of an actual discussion. Please correct them
-  if they differ from what was really weighed.
-- `tokens_cache` is a single column but there are two cache counters (read and
-  write, priced differently). Session 1 puts cache reads in `tokens_cache` and
-  cache writes in `notes`. Consider splitting the column.
+- Simulator spec: are the difficulty knob values and the trap list acceptable?
+  Is the held-out salt mechanism (secret salt kept by the project lead) the
+  split you want?
+- Should `simulator` become a separate uv workspace member now, or later?
+- Model ids in `pricing.json` other than opus-5-5, fable-5-1, sonnet-5 and
+  haiku-4-5 follow the naming pattern but are unconfirmed.
 
 ### Known issues
 
-- Git identity for this repository is set locally (`n-le-bourdiec`,
-  repository config only) because no global git identity exists on this machine.
-- None beyond the above. CI run 36439440100 on the first push passed.
+- In session 2, the Claude Code permission classifier blocked the local
+  hardware and WSL checks (WSL version, CPU virtualization, RAM, Docker). They
+  were not retried by other means. The project lead needs to run them or allow
+  them.
+- Session 2's metrics row was measured before its final commit, so it misses
+  the last few API calls. Finalize it at the start of session 3.
+- Git identity is set in the repository config only (`n-le-bourdiec`).
 
-## Measuring tokens
+## Measuring tokens and cost
 
-Claude Code stores each session as JSONL in
-`~/.claude/projects/<project-slug>/<session-id>.jsonl` (here the slug is
-`d--projet-code-Palimp`). Every assistant entry has the API `usage` block
-(input, output, cache creation, cache read). Run, as the very last step:
+Claude Code stores each conversation as JSONL in
+`~/.claude/projects/<project-slug>/<session-id>.jsonl` (slug here:
+`d--projet-code-Palimp`). Sessions 1 and 2 share transcript
+`3a8f81f6-6569-476c-acc9-fee746e79b0b`, because the conversation was continued.
+Each palimp session starts at the timestamp of its opening prompt:
 
-    uv run python metrics/session_tokens.py <session-id>
+- session 1: until `2026-09-28T14:58:54.152Z`
+- session 2: since `2026-09-28T14:58:54.152Z`
 
-The session id is the transcript file name (the newest file in that folder).
-The numbers exclude the few calls made after the script runs. Cost is left
-`n/a`: no local source gives it for this model, and it is not estimated.
+To finalize session 2, run:
+
+    uv run python metrics/session_tokens.py 3a8f81f6-6569-476c-acc9-fee746e79b0b --since 2026-09-28T14:58:54.152Z --until <session 3 prompt timestamp>
+
+If session 3 runs in a new conversation, `--until` is not needed. To find a
+prompt timestamp, search the transcript for the prompt text (`This is session N`).
+Cost is API-equivalent (decision 0006), not a billed amount.
