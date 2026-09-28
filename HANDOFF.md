@@ -41,8 +41,7 @@
 
 - Git identity for this repository is set locally (`n-le-bourdiec`,
   repository config only) because no global git identity exists on this machine.
-- CI has not been observed green on GitHub yet at the time of writing; check the
-  Actions tab after the first push.
+- None beyond the above. CI run 36439440100 on the first push passed.
 
 ## Measuring tokens
 
