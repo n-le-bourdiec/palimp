@@ -91,7 +91,8 @@ silently: propose a new decision file that supersedes it.
 ## Metrics row (metrics/sessions.csv)
 
 Columns: date, session_id, phase, mission, duration_min, model,
-tokens_input, tokens_output, tokens_cache, est_cost_usd, commits,
+tokens_input, tokens_output, tokens_cache_read, tokens_cache_write,
+est_cost_usd, commits,
 lines_added, lines_removed, tests_total, tests_passing, eval_accuracy,
 eval_calibration, eval_dangerous_errors, challenges_received,
 decisions_changed, notes
