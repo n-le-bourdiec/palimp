@@ -18,7 +18,13 @@ still be recovered from traces. That is what the tool does with firewall rules.
 
 ## Alternatives considered
 
-Not recorded when this file was written. The project lead may add them.
+Each candidate was rejected because of a name collision:
+
+- `sherd`: taken on PyPI, and an active CLI binary with the same name exists.
+- `trowel`: taken on PyPI.
+- `midden`: taken on PyPI.
+- `ostracon`: name of a blockchain consensus binary.
+- `exhume`: used by several CLIs, including a forensics toolkit.
 
 ## Consequences
 
@@ -28,5 +34,5 @@ Not recorded when this file was written. The project lead may add them.
 
 ## Challenged by Nathan
 
-Yes, the name was challenged during session 1. Outcome: name kept, decision
-unchanged.
+Yes. The challenge: "palimp" contains "limp", which has a negative meaning in
+English. Outcome: name kept, decision unchanged.
