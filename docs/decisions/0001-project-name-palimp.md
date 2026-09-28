@@ -28,7 +28,7 @@ Each candidate was rejected because of a name collision:
 
 ## Consequences
 
-- Package `palimp`, command `palimp`, repository `n-le-bourdiec/Palimp`.
+- Package `palimp`, command `palimp`, repository `n-le-bourdiec/palimp`.
 - The name is short and easy to type, but not self-explanatory: the README must
   say what the tool does in its first sentence.
 
