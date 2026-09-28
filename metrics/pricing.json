@@ -1,0 +1,32 @@
+{
+  "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "retrieved": "2026-09-28",
+  "currency": "USD",
+  "unit": "per million tokens",
+  "notes": [
+    "Keys are API model ids without date suffix. claude-opus-5-5, claude-fable-5-1, claude-sonnet-5 and claude-haiku-4-5 were confirmed from Claude Code; the other ids follow the same naming pattern and are unconfirmed.",
+    "cache_write_5m is 1.25x input, cache_write_1h is 2x input, cache_read is 0.1x input except Opus 5.5 (0.05x) and Fable 5.1 (0.025x), as stated on the source page.",
+    "Retired models and limited availability models (Mythos) are omitted."
+  ],
+  "web_search_per_request": 0.01,
+  "us_inference_multiplier": 1.1,
+  "models": {
+    "claude-fable-5-1": {"input": 10, "cache_write_5m": 12.5, "cache_write_1h": 20, "cache_read": 0.25, "output": 50},
+    "claude-fable-5": {"input": 10, "cache_write_5m": 12.5, "cache_write_1h": 20, "cache_read": 1, "output": 50},
+    "claude-opus-5-5": {"input": 4, "cache_write_5m": 5, "cache_write_1h": 8, "cache_read": 0.2, "output": 20},
+    "claude-opus-5": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25},
+    "claude-opus-4-8": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25},
+    "claude-opus-4-7": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25},
+    "claude-opus-4-6": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25},
+    "claude-opus-4-5": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25},
+    "claude-sonnet-5": {"input": 2, "cache_write_5m": 2.5, "cache_write_1h": 4, "cache_read": 0.2, "output": 10},
+    "claude-sonnet-4-6": {"input": 3, "cache_write_5m": 3.75, "cache_write_1h": 6, "cache_read": 0.3, "output": 15},
+    "claude-sonnet-4-5": {"input": 3, "cache_write_5m": 3.75, "cache_write_1h": 6, "cache_read": 0.3, "output": 15},
+    "claude-haiku-4-5": {"input": 1, "cache_write_5m": 1.25, "cache_write_1h": 2, "cache_read": 0.1, "output": 5}
+  },
+  "fast_mode": {
+    "claude-opus-5-5": {"input": 8, "output": 40},
+    "claude-opus-5": {"input": 10, "output": 50},
+    "claude-opus-4-8": {"input": 10, "output": 50}
+  }
+}

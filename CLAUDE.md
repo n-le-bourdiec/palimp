@@ -100,6 +100,12 @@ decisions_changed, notes
 Use real measured values only. If a value cannot be measured (for example
 token usage is not accessible), write `n/a`. Never estimate silently.
 `challenges_received` and `decisions_changed` are filled from the prompt if provided.
+`est_cost_usd` is the API-equivalent cost computed by `metrics/session_tokens.py`
+from `metrics/pricing.json` (decision 0006), not a billed amount.
+
+Every session starts by finalizing the previous session's row with its final
+token counts and cost, measured with `metrics/session_tokens.py` (use `--since`
+and `--until` when several sessions share one transcript).
 
 ## Session report format
 
