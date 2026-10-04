@@ -7,7 +7,7 @@ one upgrade (hit count reset), admin turnover and routine commits. No traps.
 
 from datetime import date, timedelta
 
-from palimp_sim import catalog
+from palimp_sim import catalog, voice
 from palimp_sim.catalog import FlowTemplate
 from palimp_sim.junos import ANY, Config, Policy, Zone
 from palimp_sim.levels import Level
@@ -224,13 +224,27 @@ class Simulation:
         event.commits.append(commit.seq)
         return commit
 
-    def _comment(self, ticket: Ticket | None, text: str) -> str:
+    def _owner_name(self, app: App) -> str:
+        return next(p.name for p in self.people if p.person_id == app.owner_id)
+
+    def _comment(
+        self, admin: Admin, kind: str, app: App | None, ticket: Ticket | None, **facts
+    ) -> str:
         if not self.rng_text.chance(self.level.comment_rate):
             return ""
-        return f"{ticket.ticket_id} {text}" if ticket else text
+        if app is not None:
+            facts["requester"] = self._owner_name(app)
+        return voice.commit_comment(
+            admin.persona,
+            kind,
+            app.app_id if app else None,
+            ticket.ticket_id if ticket else None,
+            self.rng_text,
+            **facts,
+        )
 
     def _ticket(
-        self, day: int, admin: Admin, app: App, summary: str, category: str
+        self, day: int, admin: Admin, app: App, category: str, voice_kind: str
     ) -> Ticket | None:
         if not self.rng_tickets.chance(self.level.ticket_rate):
             return None
@@ -243,7 +257,7 @@ class Simulation:
             status="closed",
             requester=owner.name,
             assignee=admin.login,
-            summary=summary,
+            summary=voice.ticket_summary(voice_kind, app.app_id, self.rng_tickets),
             category=category,
             related_ci=app.app_id,
             exported=self.rng_tickets.chance(self.level.ticket_export_coverage),
@@ -267,9 +281,10 @@ class Simulation:
             self._ensure_application(service)
         description = None
         if rng.chance(self.level.description_rate):
-            description = f"{app.name}: {flow.template.summary}"
-            if ticket and rng.chance(0.5):
-                description += f" ({ticket.ticket_id})"
+            persona = next(a.persona for a in self.admins if a.admin_id == event.admin_id)
+            description = voice.description(
+                persona, flow, ticket.ticket_id if ticket else None, self._owner_name(app), rng
+            )
         logged = rng.chance(self.level.log_rate)
         policy = Policy(
             uid=self.next_id("R"),
@@ -333,8 +348,7 @@ class Simulation:
     def _new_app(self, app: App, day: int) -> None:
         admin = self.active_admin(day)
         event = self._event("new_app", day, admin, app)
-        verb = "access rules" if app.shared else "go-live firewall rules"
-        ticket = self._ticket(day, admin, app, f"Firewall access for {app.name}", "change")
+        ticket = self._ticket(day, admin, app, "change", "change")
         event.ticket_id = ticket.ticket_id if ticket else None
         self._create_servers(app, day)
         go_live = day if app.shared else day + self.rng_events.randint(0, 2)
@@ -343,16 +357,16 @@ class Simulation:
         for template in app.template.flows:
             flow = self._new_flow(app, template, go_live)
             created.append(self._add_policy(flow, app, event, ticket))
-        commit = self._commit(
-            day, admin, self._comment(ticket, f"{app.name} {verb}"), event, created=created
-        )
+        kind = "shared" if app.shared else "new_app"
+        comment = self._comment(admin, kind, app, ticket, rules=len(created))
+        commit = self._commit(day, admin, comment, event, created=created)
         for uid in created:
             self.policy_meta[uid].commit_seq = commit.seq
 
     def _decommission(self, app: App, day: int) -> None:
         admin = self.active_admin(day)
         event = self._event("decommission", day, admin, app)
-        ticket = self._ticket(day, admin, app, f"Decommission {app.name}", "decommission")
+        ticket = self._ticket(day, admin, app, "decommission", "decommission")
         event.ticket_id = ticket.ticket_id if ticket else None
         for flow in self.flows.values():
             if flow.app_id == app.app_id and flow.active(day):
@@ -367,14 +381,14 @@ class Simulation:
             if self.rng_events.chance(self.level.cleanup_rate)
         ]
         self._remove_policies(removed)
-        comment = self._comment(ticket, f"Remove {app.name} rules after decommission")
+        comment = self._comment(admin, "decommission", app, ticket)
         self._commit(day, admin, comment, event, removed=removed)
 
     def _migrate(self, app: App, day: int) -> list[str]:
         """Duplicate style migration: new servers and rules, old rules kept for now."""
         admin = self.active_admin(day)
         event = self._event("migration", day, admin, app)
-        ticket = self._ticket(day, admin, app, f"Migrate {app.name} to new servers", "change")
+        ticket = self._ticket(day, admin, app, "change", "migration")
         event.ticket_id = ticket.ticket_id if ticket else None
         old_policies = self._app_policies(app.app_id)
         old_servers = [s for ids in app.tiers.values() for s in ids]
@@ -386,7 +400,7 @@ class Simulation:
                 flow.end = day
                 new_flow = self._new_flow(app, flow.template, day)
                 created.append(self._add_policy(new_flow, app, event, ticket, suffix="-new"))
-        comment = self._comment(ticket, f"{app.name} rules for new servers")
+        comment = self._comment(admin, "migration", app, ticket)
         commit = self._commit(day, admin, comment, event, created=created)
         for uid in created:
             self.policy_meta[uid].commit_seq = commit.seq
@@ -402,7 +416,7 @@ class Simulation:
             self.servers[server_id].active_to = day
         removed = [uid for uid in old_policies if self.rng_events.chance(self.level.cleanup_rate)]
         self._remove_policies(removed)
-        comment = self._comment(ticket, f"Remove {app.name} rules for old servers")
+        comment = self._comment(admin, "migration_cleanup", app, ticket)
         self._commit(day, admin, comment, event, removed=removed)
 
     def _upgrade(self, day: int) -> None:
@@ -410,7 +424,10 @@ class Simulation:
         event = self._event("upgrade", day, admin, note="reboot clears hit counts")
         self.config.version = catalog.JUNOS_VERSIONS[1]
         self.hit_reset_day = day
-        self._commit(day, admin, f"Junos upgrade to {catalog.JUNOS_VERSIONS[1]}", event)
+        version = catalog.JUNOS_VERSIONS[1]
+        self._commit(
+            day, admin, self._comment(admin, "upgrade", None, None, version=version), event
+        )
 
     def _admin_change(self, day: int, target: Admin, joining: bool) -> None:
         admin = next(a for a in self.admins if a.active(day) and a is not target)
@@ -418,11 +435,10 @@ class Simulation:
         event = self._event(kind, day, admin, note=target.admin_id)
         if joining:
             self.config.logins.append(target.login)
-            text = f"Add login for {target.login}"
         else:
             self.config.logins.remove(target.login)
-            text = f"Remove login for {target.login}"
-        self._commit(day, admin, self._comment(None, text), event)
+        comment = self._comment(admin, kind, None, None, login=target.login)
+        self._commit(day, admin, comment, event)
 
     def _routine(self, day: int) -> None:
         admin = self.active_admin(day)
@@ -431,19 +447,19 @@ class Simulation:
         if choice == 0:
             number = int(self.config.snmp_community.rsplit("-", 1)[1]) + 1
             self.config.snmp_community = f"fm-ro-{number}"
-            text = "Rotate SNMP community"
+            text = "snmp"
         elif choice == 1:
             self._banner_revision += 1
             self.config.banner = f"Authorized access only, rev {self._banner_revision}"
-            text = "Update login banner"
+            text = "banner"
         else:
             if "10.20.2.41" in self.config.syslog_hosts:
                 self.config.syslog_hosts.remove("10.20.2.41")
-                text = "Remove old syslog collector"
+                text = "syslog_remove"
             else:
                 self.config.syslog_hosts.append("10.20.2.41")
-                text = "Add second syslog collector"
-        self._commit(day, admin, self._comment(None, text), event)
+                text = "syslog_add"
+        self._commit(day, admin, self._comment(admin, text, None, None), event)
 
     # ------------------------------------------------------------------ run
 
