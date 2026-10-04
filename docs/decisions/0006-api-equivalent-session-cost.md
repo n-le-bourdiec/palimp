@@ -41,9 +41,19 @@ on the Claude API at list prices.
 - The figure is not an invoice amount and must not be read as one.
 - Calls made by Claude Code outside the transcript (for example the small model
   behind the web fetch tool) are not counted.
-- Model ids in `pricing.json` other than those observed in Claude Code are
-  inferred from the naming pattern and noted as unconfirmed.
+- Only model ids printed on Anthropic's official models page, with prices on
+  the official pricing page, are in `pricing.json` (amendment below).
 
 ## Challenged by Nathan
 
-No.
+Yes, in session 3: the first `pricing.json` contained model ids inferred from
+the naming pattern, not confirmed on the official page. Outcome: decision
+amended (below).
+
+## Amendment (2026-10-04)
+
+- `pricing.json` lists only models whose API id appears on the official models
+  overview page and whose prices appear on the official pricing page. Both URLs
+  and the retrieval date are in the file.
+- A model missing from `pricing.json` gives `est_cost_usd` `n/a` and a warning
+  on stderr. The script never guesses a price.

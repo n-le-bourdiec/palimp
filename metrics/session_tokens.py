@@ -146,6 +146,13 @@ def main() -> None:
     files = [transcript, *transcript.with_suffix("").glob("**/*.jsonl")]
     pricing = json.loads(PRICING.read_text(encoding="utf-8"))
     totals = summarize(collect_messages(files, args.since, args.until), pricing)
+    if "unknown_models" in totals:
+        print(
+            f"warning: no confirmed price for {totals['unknown_models']}, "
+            "est_cost_usd is n/a (add the model to metrics/pricing.json only "
+            "from the official pricing and models pages)",
+            file=sys.stderr,
+        )
     for key, value in totals.items():
         print(f"{key}: {value}")
 
