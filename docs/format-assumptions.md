@@ -66,64 +66,78 @@ This file only records what the documentation shows.
 ## Readers against the fixtures
 
 `uv run python eval/format_fixtures.py` runs the readers in
-`src/palimp/formats/` on the fixture bodies (header removed). Result on
-2026-10-04, no reader changed:
+`src/palimp/formats/` on the fixture bodies (header removed). A fixture
+PARSES when no line is unknown; terminal lines (prompts, `[edit]` banners,
+completion help, `...`) count as ignored.
 
-| Fixture | Reader | Result | Gap |
-|---------|--------|--------|-----|
-| `display_set_deactivate.txt` | junos_set | parses (interfaces lines ignored as out of scope) | G1 |
-| `display_set_pipe.txt` | junos_set | fails on relative lines | G1, G2 |
-| `show_system_commit.txt` | commits | 6 of 6 numbered entries | G1, G3 |
-| `show_system_commit_rollback_pending.txt` | commits | parses | G1 |
-| `show_system_commit_rollback_pending_12.3.txt` | commits | parses | - |
-| `show_system_commit_include_revision.txt` | commits | parses, revision id lands in `extra` | G1, G4 |
-| `show_system_commit_activate.txt` | commits | parses, `commit activate` lands in `extra`, comment empty | G1, G4 |
-| `rollback_completions_0_49.txt` | commits | 10 of 50 entries: indexes 10 to 49 are right-aligned, start with spaces and are glued to entry 9 as comment text | G5 |
-| `hitcount_logical_system.txt` | hitcount | parses | G1 |
-| `hitcount_detail.txt` | hitcount | 0 of 2 rows (extra Redirect column) | G1, G6 |
-| `hitcount_legacy.txt` | hitcount | 0 of 3 rows (no Action column, lowercase header, footer) | G1, G6 |
-| `rt_flow_structured_12.1x47.txt` | rt_flow | 3 of 5 messages; `_LS` message types rejected | G7 |
-| `rt_flow_structured_12.3_remote.txt` | rt_flow | 0 of 3 (collector prefix, no `<PRI>`) | G8 |
-| `rt_flow_structured_wrapped.txt` | rt_flow | 0 of 2 (text after `]`, plus line wrapping from the page) | G9 |
-| `rt_flow_standard_12.3_remote.txt` | rt_flow | 0 of 2 (standard format not supported, known) | G10 |
+| Fixture | Reader | Session 6 | Session 7 | Gaps |
+|---------|--------|-----------|-----------|------|
+| `display_set_deactivate.txt` | junos_set | prompt line unknown | parses (nothing in scope: interfaces only) | G1 fixed |
+| `display_set_pipe.txt` | junos_set | fails on relative lines | parses (nothing in scope) | G1, G2 fixed |
+| `show_system_commit.txt` | commits | 6 of 6 entries, 3 unknown | parses, `rescue` and `...` ignored | G1, G3 fixed |
+| `show-system-commit-vmx-2023.txt` | commits | (added in session 7) 11 of 11 with comments, prompt unknown | parses | G1 fixed |
+| `show_system_commit_rollback_pending.txt` | commits | parses apart from prompt | parses, `commit_type=confirmed`, 10 min | G1, G4 fixed |
+| `show_system_commit_rollback_pending_12.3.txt` | commits | parses | parses, `commit_type=confirmed`, 3 min | G4 fixed |
+| `show_system_commit_include_revision.txt` | commits | revision id in `extra` | parses, `revision` field | G1, G4 fixed |
+| `show_system_commit_activate.txt` | commits | `commit activate` in `extra` | entry parsed, `commit_type=activate`; 4 lines of `show system commit revision detail` stay unknown | G1, G4 fixed; open (other command) |
+| `rollback_completions_0_49.txt` | commits | 10 of 50 entries | parses, 50 of 50 | G1, G5 fixed |
+| `hitcount_logical_system.txt` | hitcount | parses apart from prompt | parses | G1 fixed |
+| `hitcount_detail.txt` | hitcount | 0 of 2 rows | parses, 2 of 2 | G6 fixed |
+| `hitcount_legacy.txt` | hitcount | 0 of 3 rows | parses, 3 of 3 (no action) | G6 fixed |
+| `rt_flow_structured_12.1x47.txt` | rt_flow | 3 of 5 messages | parses, 5 of 5 | G7 fixed |
+| `rt_flow_structured_12.3_remote.txt` | rt_flow | 0 of 3 | parses, 3 of 3 | G8 fixed |
+| `rt_flow_structured_wrapped.txt` | rt_flow | 0 of 2 | still 0 of 2 as published; 2 of 2 once the page's line wrapping is undone (test) | G9 fixed; wrapping open |
+| `rt_flow_standard_12.3_remote.txt` | rt_flow | 0 of 2 | parses, 2 of 2 (`last message repeated` ignored) | G8, G10 fixed |
 
-The `syslog_explorer_*` and `junos_defaults_applications_13.2.txt` fixtures are
-references, not reader input.
+Summary: 1 of 16 reader fixtures parsed with no unknown line before the
+session 7 fixes (6 of 15 apart from prompt lines in session 6, 7 of 16 with
+the vMX capture), 14 of 16 after. The `syslog_explorer_*` and
+`junos_defaults_applications_13.2.txt` fixtures are references, not reader
+input.
 
-## Gaps for the next sessions
+## Gaps
 
-Not fixed in this session. Analyzer gaps (G1 to G10) belong to an analyzer
-session; simulator corrections (S1 to S6) to a simulator session.
+Analyzer gaps G1 to G10 were fixed in session 7, each with a test in
+`tests/test_format_fixtures.py`:
 
-Analyzer (src/palimp/formats):
+- **G1** fixed: terminal lines are ignored by every reader
+  (`src/palimp/formats/terminal.py`).
+- **G2** fixed: after an `[edit X Y]` banner, set lines that do not start with
+  `X Y` get that prefix back.
+- **G3** fixed: `rescue` and `...` are ignored.
+- **G4** fixed: `commit confirmed, rollback in Nmins` (`commit_type`,
+  `rollback_minutes`), `commit activate` and revision ids (`revision`) are
+  fields; other text stays in `extra`. With VSRX-4d confirmed (next line),
+  `extra` is not read as a comment.
+- **G5** fixed: entries may start with spaces; continuation lines are the
+  indented lines that are not entries.
+- **G6** fixed: legacy, standard and `detail` layouts, lowercase header and
+  footer. `Index` is read and dropped; rows are keyed by zones and name, so
+  their order does not matter.
+- **G7** fixed: `_LS` types count as their base type; `logical-system-name` is
+  kept on the event.
+- **G8** fixed: structured and standard lines are found anywhere in the line,
+  so a syslog server prefix (BSD or ISO timestamp plus host, no `<PRI>`) is
+  accepted. The device timestamp is used, not the server's.
+- **G9** fixed: text after `]` is allowed.
+- **G10** fixed for CREATE, CLOSE and DENY, 12.x and current templates.
+  Fields are read by anchoring on the protocol number before the policy name.
+- `session-id-32` is read as the session id.
 
-- **G1** CLI prompt lines (`user@host> show ...`) and echo lines are counted as
-  unknown. Harmless (never fatal) but noisy; a saved terminal capture usually
-  contains them.
-- **G2** `display set relative` output (`set unit 0 ...`) is not supported.
-  Low priority: inherited exports are normally from the top level.
-- **G3** the trailing `rescue` line of `show system commit` is unknown; `...`
-  is unknown.
-- **G4** text after the method is stored in `extra` and never treated as a
-  comment. If VSRX-4d turns out to be "same line", every commit comment is
-  lost from T1. The reader should at least keep `extra` available to evidence
-  collection, and separate known suffixes (`commit confirmed, rollback in
-  Nmins`, revision ids) from free text.
-- **G5** a line that starts with whitespace is taken as a comment
-  continuation. Right-aligned indexes (`  10  2018-...`) break this. The entry
-  regex should allow leading spaces, and continuation lines should be those
-  that do not match an entry.
-- **G6** hit-count rows must accept the legacy layout (5 columns, no Action),
-  the `detail` layout (Redirect column), the lowercase header and the
-  `Number of policy:` footer.
-- **G7** `RT_FLOW_SESSION_CREATE_LS` / `RT_FLOW_SESSION_CLOSE_LS` (logical
-  systems) are rejected.
-- **G8** structured lines with a collector prefix and no `<PRI>` are rejected.
-  Logs handed to palimp will often come from a syslog server, not the device.
-- **G9** structured lines followed by the standard text after `]` are rejected
-  (the regex requires `]` at end of line).
-- **G10** standard (unstructured) RT_FLOW format not supported (known before
-  this session).
+Still open:
+
+- `show system commit revision detail` output (`Revision:`, `User  :` lines)
+  is another command; the commit reader leaves it unknown on purpose.
+- Line wrapping in `rt_flow_structured_wrapped.txt` comes from the web page,
+  not from a device; the reader does not join lines.
+- Standard RT_FLOW timestamps (BSD syslog) carry no year. `parse_rt_flow`
+  takes a `year` argument; `ingest` does not pass one yet, so first and last
+  seen times are unset for such logs (counts are kept). No year rollover
+  handling (December to January) yet.
+- Standard-format `_LS` messages: no sample, layout assumed to be the base
+  layout.
+- The DENY and current-release CREATE tests use lines built from the System
+  Log Explorer templates, not published log lines.
 
 Simulator (docs/simulator-spec.md and simulator/):
 
