@@ -63,6 +63,11 @@
 
 ## Measuring tokens and cost
 
+From session 6 on, each session starts in a fresh Claude Code conversation,
+so one session maps to one transcript and `--since`/`--until` are no longer
+needed. Sessions 1 to 5 shared one conversation, which explains their high
+cache-read counts: every call re-read the whole history of earlier sessions.
+
 Claude Code stores each conversation as JSONL in
 `~/.claude/projects/d--projet-code-Palimp/<session-id>.jsonl`. Sessions 1 to 5
 share transcript `3a8f81f6-6569-476c-acc9-fee746e79b0b`. Boundaries are the
