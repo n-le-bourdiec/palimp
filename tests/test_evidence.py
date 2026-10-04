@@ -122,4 +122,7 @@ def test_simulator_scenario_parses_cleanly(tmp_path: Path) -> None:
     dataset = ingest(tmp_path / "scenario-easy-000003")
     assert dataset.config.stats.unknown == 0
     assert all(s.unknown == 0 for s in dataset.rollback_stats)
+    assert dataset.commit_stats.unknown == 0
+    assert dataset.hit_count_stats.unknown == 0
+    assert dataset.log_stats.unknown == 0 and dataset.logs
     assert dataset.config.policies and dataset.commits and dataset.tickets

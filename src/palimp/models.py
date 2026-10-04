@@ -96,6 +96,11 @@ class Commit(BaseModel):
     user: str
     client: str
     comment: str = ""
+    # Known suffixes after the method (gap G4): "confirmed" or "activate".
+    commit_type: str = ""
+    rollback_minutes: int | None = None
+    revision: str = ""
+    # Any other text after the method, kept verbatim.
     extra: str = ""
 
 
@@ -104,7 +109,8 @@ class HitCount(BaseModel):
     to_zone: str
     name: str
     count: int
-    action: str
+    # Empty in the legacy layout, which has no Action column.
+    action: str = ""
 
 
 class LogSummary(BaseModel):

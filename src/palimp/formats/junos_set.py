@@ -7,10 +7,15 @@ counted as unknown and sampled in the stats; they never stop the parse.
 Format assumptions to confirm on a real vSRX: VSRX-1 (one statement per line,
 quoted descriptions), VSRX-2 (deactivate lines), VSRX-3 (order of appearance
 is evaluation order within a zone pair).
+
+A saved terminal capture is accepted (gap G1): prompt and banner lines are
+ignored. After an `[edit X Y]` banner, statements printed relative to that
+level (`show | display set relative`, gap G2) get the `X Y` prefix back.
 """
 
 import re
 
+from palimp.formats.terminal import edit_path, is_terminal_noise
 from palimp.models import AddressObject, Application, Config, ParseStats, Policy
 
 TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|(\S+)')
@@ -199,18 +204,28 @@ class _Builder:
 def parse_set(text: str, file: str = "config.set") -> Config:
     builder = _Builder(file)
     stats = builder.stats
+    level: list[str] = []
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         stats.total += 1
+        banner = edit_path(line)
+        if banner is not None:
+            level = tokenize(banner)
+        if is_terminal_noise(line):
+            stats.ignored += 1
+            continue
         tokens = tokenize(line)
         verb = tokens[0]
         if verb not in ("set", "deactivate"):
             stats.add_unknown(line)
             continue
+        path = tokens[1:]
+        if level and path[: len(level)] != level:
+            path = level + path
         try:
-            outcome = builder.statement(tokens[1:], deactivate=verb == "deactivate")
+            outcome = builder.statement(path, deactivate=verb == "deactivate")
         except (IndexError, ValueError):
             outcome = "unknown"
         if outcome == "parsed":

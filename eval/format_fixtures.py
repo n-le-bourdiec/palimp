@@ -3,7 +3,8 @@
 Each fixture in tests/fixtures/junos_docs/ starts with a `#` header ending with
 `# ---`; only the body after that line is given to the reader. The script
 prints, per fixture, what the reader understood and which lines it could not
-read. It never fails: gaps are listed in docs/format-assumptions.md and fixed
+read. A fixture PARSES when no line is unknown (terminal lines such as prompts
+count as ignored). It never fails: gaps are listed in docs/format-assumptions.md and fixed
 in later sessions.
 
     uv run python eval/format_fixtures.py
@@ -28,6 +29,9 @@ def run_commits(text: str, name: str):
     commits, stats = parse_commits(text, file=name)
     shown = "; ".join(
         f"{c.index} {c.timestamp:%Y-%m-%d %H:%M:%S} {c.time_zone} {c.user} via {c.client}"
+        + (f" type={c.commit_type}" if c.commit_type else "")
+        + (f" rollback_in={c.rollback_minutes}min" if c.rollback_minutes else "")
+        + (f" revision={c.revision}" if c.revision else "")
         + (f" extra={c.extra!r}" if c.extra else "")
         + (f" comment={c.comment!r}" if c.comment else "")
         for c in commits[:3]
@@ -72,7 +76,9 @@ def main() -> None:
             print(f"{path.name}: reference only (no reader)")
             continue
         summary, stats = reader(body(path), path.name)
-        verdict = "PARSES" if stats.unknown == 0 and stats.parsed else "GAPS"
+        verdict = "GAPS" if stats.unknown else "PARSES"
+        if not stats.unknown and not stats.parsed:
+            verdict += " (nothing in scope)"
         print(
             f"{path.name}: {verdict} total={stats.total} parsed={stats.parsed} "
             f"ignored={stats.ignored} unknown={stats.unknown} -> {summary}"

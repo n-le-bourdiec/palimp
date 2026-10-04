@@ -38,7 +38,8 @@ def test_commits() -> None:
     assert [c.index for c in commits] == [0, 1, 2]
     assert commits[0].comment == "CHG0012345 add CRM export"
     assert commits[1].client == "netconf" and commits[1].comment == ""
-    assert commits[2].extra == "commit confirmed, rollback in 10mins"
+    assert (commits[2].commit_type, commits[2].rollback_minutes) == ("confirmed", 10)
+    assert commits[2].extra == "" and commits[2].comment == ""
     assert stats.unknown == 1
 
 
