@@ -1,77 +1,83 @@
 # Handoff
 
-## Last session: 4 (2026-10-04), simulator corrections (Easy)
+## Last session: 5 (2026-10-04), analyzer milestone 1
 
 ### Done
 
-- Session 3 metrics row finalized.
-- Ground truth leakage fixed: descriptions, commit comments and ticket
-  summaries come from `simulator/src/palimp_sim/voice.py` (persona voice built
-  from facts: app code, tier abbreviation, port, ticket, requester initials).
-  `simulator/tests/test_leakage.py` checks seeds 0 to 99: no visible text
-  contains `intent.summary`, none shares more than 60% of its tokens with it
-  (worst observed 50%).
-- Log consistency: no violation found in the session 3 output. One quote in
-  the session 3 report was my extraction error (`grep -m1` printed the first
-  CREATE line again). I found and fixed a latent timing bug (a commit's config
-  applied from the start of its commit day). `simulator/tests/test_logs.py`
-  rebuilds the config in force from commits.txt and rollbacks and checks every
-  CREATE/CLOSE line against `session-init` / `session-close`.
-- Easy tuned: 20 app templates, 18 apps, 2 decommissions and 1 migration per
-  year, `cleanup_rate` 0.35. Seeds 0 to 99: 35 to 45 policies (mean 39.9),
-  dead rate mean 17.6% (p10 12.5%, p90 23.3%). Spec knob table updated.
-- Decommission and cleanup comments are neutral ("retire X", "X decom"),
-  because most rules of a retired app stay.
-- CLAUDE.md: amend for facts, supersede for decision changes. The 0006 pricing
-  change moved to decision 0010.
-- Spec grounding: BATCH-COMMIT (Herzig and Zeller 2013) and MISLEADING-COMMENT
-  (CodeFuse-CommitEval 2025) grounded by analogy; vague comments by analogy
-  (Tian et al. 2022). PREPROVISIONED stays UNGROUNDED (only indirect leads).
-- Golden hashes updated five times (see the session 4 report for the reasons).
+- Session 4 metrics row finalized.
+- Slow marker: `conftest.py` skips tests marked `slow` unless `--runslow` or
+  the `CI` variable is set. The leakage test runs seeds 0 to 9 locally and
+  0 to 99 in CI. Local suite: about 28 s.
+- Analyzer (src/palimp only, built from artifacts and the ground truth schema):
+  - `models.py`: pydantic models (Policy, AddressObject, Application, Commit,
+    Evidence, Finding, Dataset, ...).
+  - `formats/`: one reader per vendor format (junos_set, commits, rollbacks,
+    hitcount, rt_flow, tickets). Unknown lines are counted and sampled, never
+    fatal.
+  - `ingest.py`: reads a directory, finds the commit that created each policy
+    by diffing consecutive configurations. `palimp ingest DIR -o out.json`.
+  - `evidence.py`: T1 (description, creation commit comment, ticket references
+    matched against tickets.csv) and T3 (address objects, policies created in
+    the same commit). No scoring.
+  - `palimp explain FROM/TO/NAME --no-llm [--json] [--all] -a DIR`.
+- `eval/evidence_recall.py`: dev seeds only, subprocess black boxes, recall per
+  tier. Easy seeds 0 to 19: T1 100% (2033/2033), T3 100% (1416/1416), rules with
+  a T1 item found 97.6% (783/802, equal to what the ground truth expects),
+  20 T3 items found but not expected (address objects).
+- Decision 0011: recall matches on rule, tier and artifact (locators are not
+  compared).
 
 ### Next
 
-- Finalize session 4's metrics row first.
-- Simulator milestone 2: Medium with the 8 v1 traps (TRAP-PREPROVISIONED needs
-  a direct source first, or an explicit decision to build it anyway).
-- Or start palimp: pydantic models and the "set" parser.
+- Finalize session 5's metrics row first.
+- Analyzer: T2 collectors (hit counts, logs) and T4, then confidence scoring
+  and verdicts, then `report` and `questions`.
+- Eval: compare verdicts and confidence once palimp produces them; consider a
+  structured locator so recall can check the exact commit or ticket.
+- Simulator milestone 2 (Medium with v1 traps) to make the recall numbers
+  meaningful.
 
 ### Open questions
 
-- Dead rules: 621 of 708 get `best_achievable_verdict: verify`, because they
-  still have hits since the last counter reset (the app was retired less than
-  a year ago). Only 87 can be called removal candidates from the artifacts.
-  Is that the profile you want for Easy?
-- Test suite time went from 4 s to about 60 s (leakage test on 100 seeds).
-  Acceptable, or reduce to fewer seeds in CI?
-- Are analogy sources (software engineering commits) acceptable grounding for
-  firewall commit behavior, or should those traps count as UNGROUNDED too?
+- 100% recall on Easy says little: Easy evidence is complete and consistent by
+  design, and matching ignores locators (decision 0011). Should the next eval
+  step be Medium, or a stricter matcher?
+- The 20 extra T3 items: palimp reports address objects for some rules where
+  the ground truth lists none. My guess is generic objects (users-all, any
+  based rules). Which side should change?
+- Independence: I wrote the simulator in sessions 3 and 4, so I knew its
+  conventions while writing the analyzer, even without opening its files in
+  session 5. A truly blind check needs someone else (or a fresh agent without
+  that history) to write or review the analyzer.
 
 ### Known issues
 
-- Artifact formats are still VSRX assumptions (VSRX-1 to VSRX-12).
-- Session 4 metrics row is provisional.
-- Push 64e22d3 had a failing test (CI red). A shell chain hid the exit code;
-  fixed in abe8d5b. Commands now use `set -o pipefail`.
+- Artifact formats are still VSRX assumptions (VSRX-1 to VSRX-12); readers
+  are isolated in src/palimp/formats/ for that reason.
+- The standard (unstructured) RT_FLOW syslog format is not parsed yet.
+- `palimp explain` without `--no-llm` prints a note and the same output (no
+  LLM yet).
+- Session 5 metrics row is provisional.
 - Git identity is set in the repository config only (`n-le-bourdiec`).
 - Session 2 Part C checks (WSL, KVM, Docker) are still not done.
 
 ## Measuring tokens and cost
 
 Claude Code stores each conversation as JSONL in
-`~/.claude/projects/d--projet-code-Palimp/<session-id>.jsonl`. Sessions 1 to 4
+`~/.claude/projects/d--projet-code-Palimp/<session-id>.jsonl`. Sessions 1 to 5
 share transcript `3a8f81f6-6569-476c-acc9-fee746e79b0b`. Boundaries are the
 timestamps of the opening prompts:
 
 - session 1: until `2026-09-28T14:58:54.152Z`
 - session 2: `2026-09-28T14:58:54.152Z` to `2026-10-04T17:18:08.869Z`
 - session 3: `2026-10-04T17:18:08.869Z` to `2026-10-04T17:41:05.995Z`
-- session 4: since `2026-10-04T17:41:05.995Z`
+- session 4: `2026-10-04T17:41:05.995Z` to `2026-10-04T18:26:35.446Z`
+- session 5: since `2026-10-04T18:26:35.446Z`
 
-Finalize session 4 with:
+Finalize session 5 with:
 
-    uv run python metrics/session_tokens.py 3a8f81f6-6569-476c-acc9-fee746e79b0b --since 2026-10-04T17:41:05.995Z --until <session 5 prompt timestamp>
+    uv run python metrics/session_tokens.py 3a8f81f6-6569-476c-acc9-fee746e79b0b --since 2026-10-04T18:26:35.446Z --until <session 6 prompt timestamp>
 
-If session 5 runs in a new conversation, omit `--until`. Find a prompt
+If session 6 runs in a new conversation, omit `--until`. Find a prompt
 timestamp by searching the transcript for `This is session N`. Cost is
 API-equivalent (decision 0006), not a billed amount.
