@@ -637,7 +637,9 @@ and a conformance test on the simulator side.
 ## 12. Behavioral grounding
 
 Sources were retrieved on 2026-10-04. Each was read, and the quoted claim was
-checked in the source text (quotes shortened). A source supports the behavior
+checked in the source text (quotes shortened). Sources marked "analogy" come
+from software engineering research on version control: they describe the same
+behavior (how people write commits) in code repositories, not on firewalls. A source supports the behavior
 existing in real environments; the rates in section 7 are not taken from these
 sources and remain simulator choices.
 
@@ -657,6 +659,11 @@ sources and remain simulator choices.
 | S10 | FWChange, "ISO 27001 Firewall Audit: 12 Controls Checklist", https://fwchange.com/blog/iso-27001-firewall-audit-checklist/ | "Shared accounts or generic 'admin' credentials are an immediate finding." |
 | S11 | SRQL, "Firewall Rule Base Cleanup and High Availability Playbook", https://srql.com/knowledge/firewall-rule-cleanup-high-availability-playbook/ | Common mistake: "removing rarely used rules that serve infrequent but essential traffic". Collect 30 to 90 days of data "so infrequent but legitimate flows are visible". |
 | S12 | narrowin, "Untangling a legacy firewall rule base", https://narrowin.com/en/work-firewall-cleanup | "Many of those rules quietly carry a real operational need"; deleting without understanding them "is how you cause the outage". |
+| S13 | Herzig and Zeller, "The Impact of Tangled Code Changes", MSR 2013, https://www.microsoft.com/en-us/research/wp-content/uploads/2013/01/msr2013-untangling.pdf | Analogy. "Developers often commit unrelated or loosely related code changes in a single transaction"; "up to 15% of all bug fixes" consist of multiple tangled changes. |
+| S14 | Tian et al., "What Makes a Good Commit Message?", ICSE 2022, https://arxiv.org/abs/2202.02974 | Analogy. In open source projects "an average of circa 44% of messages could be improved" (missing why or what). |
+| S15 | CodeFuse-CommitEval, "Towards Benchmarking LLM's Power on Commit Message and Code Change Inconsistency Detection", 2025, https://arxiv.org/abs/2511.19875 | Analogy. Commit messages "are often low quality and, more critically, inconsistent with their diffs", known as message-code inconsistency. |
+| S16 | Emory University, Firewall Change Procedures, https://it.emory.edu/security/policies-procedures/firewall_change.html | Indirect lead only. "24 hour lead time for all firewall rule change requests"; requesters must plan for the delay. |
+| S17 | Tigera, "Why Does It Take Four Months to Get a Firewall Rule Change?", https://www.tigera.io/blog/why-does-it-take-four-months-to-get-a-firewall-rule-change/ | Indirect lead only. "It took over 4 months to get a firewall rule changed." |
 
 ### 12.2 Admin behaviors (section 3 and 4)
 
@@ -664,12 +671,12 @@ sources and remain simulator choices.
 |---|---|
 | Descriptive comments and descriptions (meticulous senior) | S1 |
 | Empty or missing comments and documentation | S3, S9 |
-| Vague one-word commit comments (`fix`, `update`) | UNGROUNDED |
-| Misleading comments (describe another change) | UNGROUNDED |
+| Vague one-word commit comments (`fix`, `update`) | S14 (analogy) |
+| Misleading comments (describe another change) | S15 (analogy) |
 | Ticket ids in comments or names | UNGROUNDED (S1 recommends logging changes, does not show the practice) |
 | Personal, inconsistent naming styles per admin | S8, S9 |
 | Duplicate objects for the same address under different names | S8 |
-| Batching unrelated changes in one commit | UNGROUNDED |
+| Batching unrelated changes in one commit | S13 (analogy) |
 | Logging left off on many rules | S6, S7 |
 | Contractor or vendor rules left after offboarding | S3 |
 | Broad rules (`any`, wide subnets) | S7 |
@@ -691,9 +698,9 @@ sources and remain simulator choices.
 |---|---|---|
 | `TRAP-LIVE-NOLOG` | v1 | S5, S6, S7 |
 | `TRAP-RARE-JOB` | v1 | S2, S11 |
-| `TRAP-PREPROVISIONED` | v1 | UNGROUNDED |
-| `TRAP-MISLEADING-COMMENT` | v1 | UNGROUNDED |
-| `TRAP-BATCH-COMMIT` | v1 | UNGROUNDED |
+| `TRAP-PREPROVISIONED` | v1 | UNGROUNDED (indirect leads S16, S17: rules must be requested days to months before they are needed; no source found that shows rules sitting unused before go-live) |
+| `TRAP-MISLEADING-COMMENT` | v1 | S15 (analogy) |
+| `TRAP-BATCH-COMMIT` | v1 | S13 (analogy) |
 | `TRAP-EMERGENCY-LOADBEARING` | v1 | S3, S7, S12 |
 | `TRAP-HISTORY-HORIZON` | v1 | S4 |
 | `TRAP-DEACTIVATED` | v1 | S2 |
@@ -706,6 +713,7 @@ sources and remain simulator choices.
 | `TRAP-SHARED-LOGIN` | v2 | S10 |
 | `TRAP-CLEANUP-FLAP` | v2 | S11, S12 (removal of a live rule; the re-add under a new name is UNGROUNDED) |
 
-Three v1 traps are UNGROUNDED (`TRAP-PREPROVISIONED`,
-`TRAP-MISLEADING-COMMENT`, `TRAP-BATCH-COMMIT`). They stay in v1 scope
-(decision 0008) but need a source before Medium is considered done.
+`TRAP-MISLEADING-COMMENT` and `TRAP-BATCH-COMMIT` are grounded by analogy
+only (session 4). `TRAP-PREPROVISIONED` is still UNGROUNDED: it stays in v1
+scope (decision 0008) but needs a direct source before Medium is considered
+done.
