@@ -1,0 +1,17 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/junos-configuration-commit.html
+# Page title: Commit the Configuration | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated (date 2018)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-4
+# Note: From the commit prepare / commit activate section; page text, not a <pre> block.
+# Note: The same commit's 'show system commit revision detail' shows 'Comment     : commit activate',
+# Note: so the text after 'via cli' on the history line is the commit comment, on the same line.
+# ---
+user@host> show system commit
+0   2018-07-12 22:54:46 PDT by user via cli commit activate
+user@host> show system commit revision detail
+Revision: re0-1499925285-2214
+User  : user
+Client      : cli
+Time  : 2018-07-12 22:54:46 PDT

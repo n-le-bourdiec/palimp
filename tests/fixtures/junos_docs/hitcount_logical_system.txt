@@ -1,0 +1,12 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/command/show-security-policies-hit-count.html
+# Page title: show security policies hit-count | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated (layout with Logical system header)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-7
+# Note: Second Sample Output 'show security policies hit-count'. Global policy (junos-global zones).
+# ---
+user@host> show security policies hit-count
+Logical system: root-logical-system
+Index  From zone        To zone          Name                  Policy count  Action
+1      junos-global    junos-global      policy1                5202         Permit    

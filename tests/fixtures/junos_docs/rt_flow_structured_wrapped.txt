@@ -1,0 +1,32 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/flow-packet-processing/topics/topic-map/security-flow-session-and-error-handling.html
+# Page title: Monitoring Security Flow Sessions | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated (sample dates 2010)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-9, VSRX-10
+# Note: Page text, line-wrapped by the page itself; each message spans several lines here.
+# Note: The page shows the structured part followed by the standard message text.
+# Note: The SD-ID 'junos@2626.192.0.2.1.40' and the curly quote are as published.
+# ---
+<14>1 2010-09-30T14:55:04.323+08:00 mrpp-srx550-dut01 RT_FLOW
+- RT_FLOW_SESSION_CREATE [junos@2626.192.0.2.1.40 source-address="192.0.2.1"
+source-port="1" destination-address="198.51.100.12" destination-port="46384"
+service-name="icmp" nat-source-address="192.0.2.1" nat-source-port="1"
+nat-destination-address="198.51.100.12" nat-destination-port="46384"
+src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="1"
+policy-name="policy1" source-zone-name="trustZone" destination-zone-name="untrustZone"
+session-id-32="41" packet-incoming-interface="ge-0/0/1.0"] session
+created 192.0.2.1/1-->198.51.100.12/46384 icmp 192.0.2.1/1-->198.51.100.12/46384
+None None 1 policy1 trustZone untrustZone 41 ge-0/0/1.0
+<14>1 2010-09-30T14:55:07.188+08:00 mrpp-srx550-dut01 RT_FLOW
+- RT_FLOW_SESSION_CLOSE [junos@2626.192.0.2.1.40 reason="response
+received" source-address="192.0.2.1" source-port="1" destination-address="198.51.100.12"
+destination-port="46384" service-name="icmp" nat-source-address="192.0.2.1"
+nat-source-port="1" nat-destination-address=”198.51.100.12"
+nat-destination-port="46384" src-nat-rule-name="None" dst-nat-rule-name="None"
+protocol-id="1" policy-name="policy1" source-zone-name="trustZone"
+destination-zone-name="untrustZone" session-id-32="41" packets-from-client="1"
+bytes-from-client="84" packets-from-server="1" bytes-from-server="84"
+elapsed-time="0" packet-incoming-interface="ge-0/0/1.0"] session closed
+response received: 192.0.2.1/1-->198.51.100.12/46384 icmp 192.0.2.1/1-->198.51.100.12/46384
+None None 1 policy1 trustZone untrustZone 41 1(84) 1(84) 0 ge-0/0/1.0

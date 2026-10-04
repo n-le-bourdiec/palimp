@@ -1,0 +1,13 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/junos-configuartion-viewing.html
+# Page title: View the Configuration | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-1, VSRX-2
+# Note: 'Example: Display set Commands from the Configuration' (page text).
+# Note: The page mixes ge-0/0/0 and xe-0/0/0 in one example; copied as published.
+# ---
+user@host# show | display set
+set interfaces ge-0/0/0 unit 0 family inet address 192.107.1.230/24
+set interfaces xe-0/0/0 unit 1 family inet address 10.0.0.1/8
+deactivate interfaces xe-0/0/0 unit 1

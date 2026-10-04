@@ -1,0 +1,64 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/junos-configuration-managing.html
+# Page title: Managing Configurations | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos 26.2
+# Junos release shown: not stated (dates 2018)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-6
+# Note: 'rollback ?' completions from 'Example of Displaying Previous Configurations'.
+# Note: Copied as published, including the non-breaking spaces the page uses as padding.
+# ---
+user@host# rollback ?
+Possible completions:
+<[Enter]> Execute this command
+<number> Numeric argument
+0                    2018-02-27 12:52:10 PST by abc via cli
+1                    2018-02-26 14:47:42 PST by def via cli
+2                    2018-02-14 21:55:45 PST by ghi via cli
+3                    2018-02-10 16:11:30 PST by jkl via cli
+4                    2018-02-10 16:02:35 PST by mno via cli
+5                    2018-03-16 15:10:41 PST by pqr via cli
+6                   2018-03-16 14:54:21 PST by stu via cli
+7                    2018-03-16 14:51:38 PST by vwx via cli
+8                     2018-03-16 14:43:29 PST by yzz via cli
+9                    2018-03-16 14:15:37 PST by abc via cli
+  10                   2018-03-16 14:13:57 PST by def via cli
+  11                    2018-03-16 12:57:19 PST by root via other
+  12                     2018-03-16 10:45:23 PST by root via other
+  13                    2018-03-16 10:08:13 PST by root via other
+  14                   2018-03-16 01:20:56 PST by root via other
+  15                   2018-03-16 00:40:37 PST by ghi via cli
+  16                    2018-03-16 00:39:29 PST by jkl via cli
+  17                    2018-03-16 00:32:36 PST by mno via cli
+  18                     2018-03-16 00:31:17 PST by pqr via cli
+  19                    2018-03-15 19:59:00 PST by stu via cli
+  20                    2018-03-15 19:53:39 PST by vwx via cli
+  21                    2018-03-15 18:07:19 PST by yzz via cli
+  22                      2018-03-15 17:59:03 PST by abc via cli
+  23                     2018-03-15 15:05:14 PST by def via cli
+  24                    2018-03-15 15:04:51 PST by ghi via cli
+  25                   2018-03-15 15:03:42 PST by jkl via cli
+  26                    2018-03-15 15:01:52 PST by mno via cli
+  27                   2018-03-15 14:58:34 PST by pqr via cli
+  28                   2018-03-15 13:09:37 PST by root via other
+  29                    2018-03-12 11:01:20 PST by stu via cli
+  30                     2018-03-12 10:57:35 PST by vwx via cli
+  31                    2018-03-11 10:25:07 PST by yzz via cli
+  32                    2018-03-10 23:40:58 PST by abc via cli
+  33                    2018-03-10 23:40:38 PST by def via cli
+  34                    2018-03-10 23:14:27 PST by ghi via cli
+  35                    2018-03-10 23:10:16 PST by jkl via cli
+  36                   2018-03-10 23:01:51 PST by mno via cli
+  37                   2018-03-10 22:49:57 PST by pqr via cli
+  38                    2018-03-10 22:24:07 PST by stu via cli
+  39                   2018-03-10 22:20:14 PST by vwx via cli
+  40                    2018-03-10 22:16:56 PST by yzz via cli
+  41                   2018-03-10 22:16:41 PST by abc via cli
+  42                   2018-03-10 20:44:00 PST by def via cli
+  43                   2018-03-10 20:43:29 PST by ghi via cli
+  44                    2018-03-10 20:39:14 PST by jkl via cli
+  45                   2018-03-10 20:31:30 PST by root via other
+  46                    2018-03-10 18:57:01 PST by mno via cli
+  47                    2018-03-10 18:56:18 PST by pqr via cli
+  48                    2018-03-10 18:47:49 PST by stu via cli
+  49                   2018-03-10 18:47:34 PST by vw via cli
+ | Pipe through a command

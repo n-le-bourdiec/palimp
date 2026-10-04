@@ -1,0 +1,22 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/command/show-pipe-display-set.html
+# Page title: show | display set | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-1
+# Note: Sample Output of 'show | display set'.
+# ---
+[edit interfaces ge-0/0/0]
+user@host# show | display set 
+set interfaces ge-0/0/0 unit 0 family inet address 10.0.1.254/24
+
+[edit interfaces ge-0/0/0]
+user@host# show | display set explicit
+set interfaces ge-0/0/0 unit 0 family inet address 10.0.1.254/24
+set interfaces ge-0/0/0 unit 0 family inet
+set interfaces ge-0/0/0 unit 0
+
+[edit interfaces ge-0/0/0]
+user@host# show | display set relative
+set unit 0 family inet address 10.0.1.254/24
+set unit 0 family inet

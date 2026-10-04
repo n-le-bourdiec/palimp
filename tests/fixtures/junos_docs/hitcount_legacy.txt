@@ -1,0 +1,15 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/command/show-security-policies-hit-count.html
+# Page title: show security policies hit-count | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated (older layout, no Action column)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-7
+# Note: First Sample Output 'show security policies hit-count'. Tabs kept as on the page.
+# ---
+user@host> show security policies hit-count
+index   from zone    to zone       name       policy count    
+ 1       untrust      vrtrust      policy1         40		         
+ 2       untrust      trust        policy2         20		         
+ 3       untrust      trust        policy3         80		         
+
+Number of policy: 3

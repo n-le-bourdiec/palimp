@@ -1,0 +1,129 @@
+# Source: https://apps.juniper.net/syslog-explorer/messageDetails?msg=RT_FLOW_SESSION_CLOSE (data behind https://apps.juniper.net/syslog-explorer/)
+# Page title: System Log Explorer
+# Documentation set (page metadata): Junos OS
+# Junos release shown: 22.2R1 and 26.2R1 (releases in the data: 26.2R1, 25.4R1, 25.2R2, 25.2R1, 24.4R1, 24.2R2, 22.4R3, 23.4R2, 23.4R1, 23.2R2, 23.2R1, 22.4R2, 22.4R1, 22.2R3, 22.2R2, 22.2R1)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-9, VSRX-10
+# Note: official message template and attribute list, not a captured log line.
+# Note: severity info, facility LOG_USER.
+# ---
+## release 22.2R1
+## message:
+session closed <variable>reason</variable>: <variable>source-address</variable>/<variable>source-port</variable>-><variable>destination-address</variable>/<variable>destination-port</variable> 0x<variable>connection-tag</variable> <variable>service-name</variable> <variable>nat-source-address</variable>/<variable>nat-source-port</variable>-><variable>nat-destination-address</variable>/<variable>nat-destination-port</variable> 0x<variable>nat-connection-tag</variable> <variable>src-nat-rule-type</variable> <variable>src-nat-rule-name</variable> <variable>dst-nat-rule-type</variable> <variable>dst-nat-rule-name</variable> <variable>protocol-id</variable> <variable>policy-name</variable> <variable>source-zone-name</variable> <variable>destination-zone-name</variable> <variable>session-id</variable> <variable>packets-from-client</variable>(<variable>bytes-from-client</variable>) <variable>packets-from-server</variable>(<variable>bytes-from-server</variable>) <variable>elapsed-time</variable> <variable>application</variable> <variable>nested-application</variable> <variable>username</variable>(<variable>roles</variable>) <variable>packet-incoming-interface</variable> <variable>encrypted</variable> <variable>application-category</variable> <variable>application-sub-category</variable> <variable>application-risk</variable> <variable>application-characteristics</variable> <variable>secure-web-proxy-session-type</variable> <variable>peer-session-id</variable> <variable>peer-source-address</variable>/<variable>peer-source-port</variable>-><variable>peer-destination-address</variable>/<variable>peer-destination-port</variable> <variable>hostname</variable> <variable>src-vrf-grp</variable> <variable>dst-vrf-grp</variable> <variable>tunnel-inspection</variable> <variable>tunnel-inspection-policy-set</variable> <variable>session-flag</variable> <variable>source-tenant</variable> <variable>destination-service</variable>
+## attributes:
+reason
+source-address
+source-port
+destination-address
+destination-port
+connection-tag
+service-name
+nat-source-address
+nat-source-port
+nat-destination-address
+nat-destination-port
+nat-connection-tag
+src-nat-rule-type
+src-nat-rule-name
+dst-nat-rule-type
+dst-nat-rule-name
+protocol-id
+policy-name
+source-zone-name
+destination-zone-name
+session-id
+packets-from-client
+bytes-from-client
+packets-from-server
+bytes-from-server
+elapsed-time
+application
+nested-application
+username
+roles
+packet-incoming-interface
+encrypted
+application-category
+application-sub-category
+application-risk
+application-characteristics
+secure-web-proxy-session-type
+peer-session-id
+peer-source-address
+peer-source-port
+peer-destination-address
+peer-destination-port
+hostname
+src-vrf-grp
+dst-vrf-grp
+tunnel-inspection
+tunnel-inspection-policy-set
+session-flag
+source-tenant
+destination-service
+
+## release 26.2R1
+## message:
+session closed <variable>reason</variable>: <variable>source-address</variable>/<variable>source-port</variable>-><variable>destination-address</variable>/<variable>destination-port</variable> 0x<variable>connection-tag</variable> <variable>service-name</variable> <variable>nat-source-address</variable>/<variable>nat-source-port</variable>-><variable>nat-destination-address</variable>/<variable>nat-destination-port</variable> 0x<variable>nat-connection-tag</variable> <variable>src-nat-rule-type</variable> <variable>src-nat-rule-name</variable> <variable>dst-nat-rule-type</variable> <variable>dst-nat-rule-name</variable> <variable>protocol-id</variable> <variable>policy-name</variable> <variable>source-zone-name</variable> <variable>destination-zone-name</variable> <variable>session-id</variable> <variable>packets-from-client</variable>(<variable>bytes-from-client</variable>) <variable>packets-from-server</variable>(<variable>bytes-from-server</variable>) <variable>elapsed-time</variable> <variable>application</variable> <variable>nested-application</variable> <variable>username</variable>(<variable>roles</variable>) <variable>packet-incoming-interface</variable> <variable>encrypted</variable> <variable>application-category</variable> <variable>application-sub-category</variable> <variable>application-risk</variable> <variable>application-characteristics</variable> <variable>secure-web-proxy-session-type</variable> <variable>peer-session-id</variable> <variable>peer-source-address</variable>/<variable>peer-source-port</variable>-><variable>peer-destination-address</variable>/<variable>peer-destination-port</variable> <variable>hostname</variable> <variable>src-vrf-grp</variable> <variable>dst-vrf-grp</variable> <variable>tunnel-inspection</variable> <variable>tunnel-inspection-policy-set</variable> <variable>session-flag</variable> <variable>source-tenant</variable> <variable>destination-service</variable> <variable>user-type</variable> <variable>dst-identity-context-name</variable> <variable>dst-identity-context-roles</variable> <variable>gbp-src-tag</variable> <variable>gbp-dst-tag</variable> <variable>forwarded-for</variable> <variable>url-host</variable> <variable>url-cat</variable> <variable>url-risk</variable> <variable>src-vrf</variable> <variable>dst-vrf</variable>
+## attributes:
+reason
+source-address
+source-port
+destination-address
+destination-port
+connection-tag
+service-name
+nat-source-address
+nat-source-port
+nat-destination-address
+nat-destination-port
+nat-connection-tag
+src-nat-rule-type
+src-nat-rule-name
+dst-nat-rule-type
+dst-nat-rule-name
+protocol-id
+policy-name
+source-zone-name
+destination-zone-name
+session-id
+packets-from-client
+bytes-from-client
+packets-from-server
+bytes-from-server
+elapsed-time
+application
+nested-application
+username
+roles
+packet-incoming-interface
+encrypted
+application-category
+application-sub-category
+application-risk
+application-characteristics
+secure-web-proxy-session-type
+peer-session-id
+peer-source-address
+peer-source-port
+peer-destination-address
+peer-destination-port
+hostname
+src-vrf-grp
+dst-vrf-grp
+tunnel-inspection
+tunnel-inspection-policy-set
+session-flag
+source-tenant
+destination-service
+user-type
+dst-identity-context-name
+dst-identity-context-roles
+gbp-src-tag
+gbp-dst-tag
+forwarded-for
+url-host
+url-cat
+url-risk
+src-vrf
+dst-vrf

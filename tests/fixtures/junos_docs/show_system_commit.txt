@@ -1,0 +1,17 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/command/show-system-commit.html
+# Page title: show system commit | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated (dates 2002-2003)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-4, VSRX-6
+# Note: Sample Output 'show system commit'. The '...' line is in the page (elided entries).
+# ---
+user@host> show system commit 
+0   2003-07-28 19:14:04 PDT by root via other
+1   2003-07-25 22:01:36 PDT by user via cli
+2   2003-07-25 22:01:32 PDT by user via cli
+3   2003-07-25 21:30:13 PDT by root via button
+4   2003-07-25 13:46:48 PDT by user via cli
+5   2003-07-25 05:33:21 PDT by root via autoinstall
+...
+rescue  2002-05-10 15:32:03 PDT by root via other

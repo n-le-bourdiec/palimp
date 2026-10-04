@@ -1,0 +1,13 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/command/show-system-commit.html
+# Page title: show system commit | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: 20.4R1 or later (option introduced in 20.4R1)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-4
+# Note: Sample Output 'show system commit include-configuration-revision'.
+# ---
+user@host> show system commit include-configuration-revision 
+0   2020-08-02 00:42:58 IST by user via cli re0-1596309177-4
+1   2020-08-02 00:42:53 IST by user via cli re0-1596309173-3
+2   2020-08-02 00:42:50 IST by user via cli re0-1596309170-2
+3   2020-08-02 00:42:40 IST by user via other re0-1596309160-1

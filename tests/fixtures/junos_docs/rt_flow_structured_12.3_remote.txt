@@ -1,0 +1,12 @@
+# Source: https://www.juniper.net/documentation/en_US/junos12.3/topics/task/operational/chassis-cluster-srx-log-message-configuring.html
+# Page title: Log Messages for SRX Series Chassis Clusters - Technical Documentation - Support - Juniper Networks
+# Documentation set (page metadata): junos 12.3
+# Junos release shown: Junos OS 12.3 documentation (sample dates 2010)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-9
+# Note: sd-syslog stream received on a remote syslog server: the server prepends its own
+# Note: 'Sep 06 16:54:22 10.204.225.164' and the <PRI> is not shown.
+# ---
+Sep 06 16:54:22 10.204.225.164 1 2010-09-06T04:24:22.094 nsm-vidar-a RT_FLOW - RT_FLOW_SESSION_CLOSE [junos@2636.1.1.1.2.39 reason="TCP FIN" source-address="1.1.1.2" source-port="62736" destination-address="2.1.1.1" destination-port="23" service-name="junos-telnet" nat-source-address="1.1.1.2" nat-source-port="62736" nat-destination-address="2.1.1.1" nat-destination-port="23" src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="6" policy-name="trust-untrust" source-zone-name="trust" destination-zone-name="untrust" session-id-32="206" packets-from-client="64" bytes-from-client="3525" packets-from-server="55" bytes-from-server="3146" elapsed-time="21"]
+Sep 06 16:54:26 10.204.225.164 1 2010-09-06T04:24:26.095 nsm-vidar-a RT_FLOW - RT_FLOW_SESSION_CREATE [junos@2636.1.1.1.2.39 source-address="1.1.1.2" source-port="49780" destination-address="2.1.1.1" destination-port="23" service-name="junos-telnet" nat-source-address="1.1.1.2" nat-source-port="49780" nat-destination-address="2.1.1.1" nat-destination-port="23" src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="6" policy-name="trust-untrust" source-zone-name="trust" destination-zone-name="untrust" session-id-32="208"]
+Sep 06 16:54:34 10.204.225.164 1 2010-09-06T04:24:34.098 nsm-vidar-a RT_FLOW - RT_FLOW_SESSION_CLOSE [junos@2636.1.1.1.2.39 reason="TCP FIN" source-address="1.1.1.2" source-port="49780" destination-address="2.1.1.1" destination-port="23" service-name="junos-telnet" nat-source-address="1.1.1.2" nat-source-port="49780" nat-destination-address="2.1.1.1" nat-destination-port="23" src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="6" policy-name="trust-untrust" source-zone-name="trust" destination-zone-name="untrust" session-id-32="208" packets-from-client="37" bytes-from-client="2094" packets-from-server="30" bytes-from-server="1822" elapsed-time="6"]

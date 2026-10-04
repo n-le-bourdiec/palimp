@@ -1,0 +1,10 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/command/show-system-commit.html
+# Page title: show system commit | Junos OS | Juniper Networks
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated (date 2022)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-4
+# Note: Sample Output 'show system commit (Rollback Pending)'.
+# ---
+user@host> show system commit 
+0   2022-05-06 06:33:42 PDT by root via cli commit confirmed, rollback in 10mins

@@ -1,0 +1,11 @@
+# Source: https://www.juniper.net/documentation/en_US/junos12.3/topics/task/operational/chassis-cluster-srx-log-message-configuring.html
+# Page title: Log Messages for SRX Series Chassis Clusters - Technical Documentation - Support - Juniper Networks
+# Documentation set (page metadata): junos 12.3
+# Junos release shown: Junos OS 12.3 documentation (sample dates 2010)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-10
+# Note: Standard (non structured) RT_FLOW messages as received on a remote syslog server.
+# ---
+Sep 06 15:22:29 10.204.225.164 Sep 6 02:52:30 RT_FLOW: RT_FLOW_SESSION_CREATE: session created 1.1.1.2/54164->2.1.1.1/23 junos-telnet 1.1.1.2/54164->2.1.1.1/23 None None 6 trust-untrust trust untrust 192
+Sep 06 15:22:43 10.204.225.220 Sep 6 02:52:30 last message repeated 10 times
+Sep 06 15:23:49 10.204.225.164 Sep 6 02:53:49 RT_FLOW: RT_FLOW_SESSION_CLOSE: session closed TCP FIN: 1.1.1.2/54164->2.1.1.1/23 junos-telnet 1.1.1.2/54164->2.1.1.1/23 None None 6 trust-untrust trust untrust 192 60(3307) 46(2784) 79

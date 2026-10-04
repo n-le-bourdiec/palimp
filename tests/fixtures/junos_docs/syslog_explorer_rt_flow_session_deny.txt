@@ -1,0 +1,85 @@
+# Source: https://apps.juniper.net/syslog-explorer/messageDetails?msg=RT_FLOW_SESSION_DENY (data behind https://apps.juniper.net/syslog-explorer/)
+# Page title: System Log Explorer
+# Documentation set (page metadata): Junos OS
+# Junos release shown: 22.2R1 and 26.2R1 (releases in the data: 26.2R1, 25.4R1, 25.2R2, 25.2R1, 24.4R2, 24.4R1, 24.2R2, 24.2R1, 22.4R3, 23.4R2, 23.4R1, 23.2R2, 23.2R1, 22.4R2, 22.4R1, 22.2R3, 22.2R2, 22.2R1)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-9, VSRX-10
+# Note: official message template and attribute list, not a captured log line.
+# Note: severity info, facility LOG_USER.
+# ---
+## release 22.2R1
+## message:
+session denied <variable>source-address</variable>/<variable>source-port</variable>-><variable>destination-address</variable>/<variable>destination-port</variable> 0x<variable>connection-tag</variable> <variable>service-name</variable> <variable>protocol-id</variable>(<variable>icmp-type</variable>) <variable>policy-name</variable> <variable>source-zone-name</variable> <variable>destination-zone-name</variable> <variable>application</variable> <variable>nested-application</variable> <variable>username</variable>(<variable>roles</variable>) <variable>packet-incoming-interface</variable> <variable>encrypted</variable> <variable>reason</variable> <variable>session-id</variable> <variable>application-category</variable> <variable>application-sub-category</variable> <variable>application-risk</variable> <variable>application-characteristics</variable> <variable>src-vrf-grp</variable> <variable>dst-vrf-grp</variable> <variable>source-tenant</variable> <variable>destination-service</variable>
+## attributes:
+source-address
+source-port
+destination-address
+destination-port
+connection-tag
+service-name
+protocol-id
+icmp-type
+policy-name
+source-zone-name
+destination-zone-name
+application
+nested-application
+username
+roles
+packet-incoming-interface
+encrypted
+reason
+session-id
+application-category
+application-sub-category
+application-risk
+application-characteristics
+src-vrf-grp
+dst-vrf-grp
+source-tenant
+destination-service
+
+## release 26.2R1
+## message:
+session denied <variable>source-address</variable>/<variable>source-port</variable>-><variable>destination-address</variable>/<variable>destination-port</variable> 0x<variable>connection-tag</variable> <variable>service-name</variable> <variable>protocol-id</variable>(<variable>icmp-type</variable>) <variable>policy-name</variable> <variable>source-zone-name</variable> <variable>destination-zone-name</variable> <variable>application</variable> <variable>nested-application</variable> <variable>username</variable>(<variable>roles</variable>) <variable>packet-incoming-interface</variable> <variable>encrypted</variable> <variable>reason</variable> <variable>session-id</variable> <variable>application-category</variable> <variable>application-sub-category</variable> <variable>application-risk</variable> <variable>application-characteristics</variable> <variable>src-vrf-grp</variable> <variable>dst-vrf-grp</variable> <variable>source-tenant</variable> <variable>destination-service</variable> <variable>user-type</variable> <variable>dst-identity-context-name</variable> <variable>dst-identity-context-roles</variable> <variable>source-country</variable> <variable>destination-country</variable> <variable>gbp-src-tag</variable> <variable>gbp-dst-tag</variable> <variable>forwarded-for</variable> <variable>url-host</variable> <variable>url-cat</variable> <variable>url-risk</variable> <variable>src-vrf</variable> <variable>dst-vrf</variable>
+## attributes:
+source-address
+source-port
+destination-address
+destination-port
+connection-tag
+service-name
+protocol-id
+icmp-type
+policy-name
+source-zone-name
+destination-zone-name
+application
+nested-application
+username
+roles
+packet-incoming-interface
+encrypted
+reason
+session-id
+application-category
+application-sub-category
+application-risk
+application-characteristics
+src-vrf-grp
+dst-vrf-grp
+source-tenant
+destination-service
+user-type
+dst-identity-context-name
+dst-identity-context-roles
+source-country
+destination-country
+gbp-src-tag
+gbp-dst-tag
+forwarded-for
+url-host
+url-cat
+url-risk
+src-vrf
+dst-vrf

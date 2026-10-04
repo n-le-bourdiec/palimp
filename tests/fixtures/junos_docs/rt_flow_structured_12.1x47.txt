@@ -1,0 +1,23 @@
+# Source: https://www.juniper.net/documentation/en_US/junos12.1x47/topics/reference/command-summary/show-security-log-file.html
+# Page title: show security log file - Technical Documentation - Support - Juniper Networks
+# Documentation set (page metadata): junos 12.1x47
+# Junos release shown: Junos OS 12.1X47 documentation (sample dates 2011)
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-9
+# Note: Sample Output of 'show security log file'. The '...' lines are in the page.
+# Note: No time zone offset in the timestamps.
+# ---
+<14>1 2011-08-28T21:14:43 topstar RT_FLOW - RT_FLOW_SESSION_CREATE [junos@2636.1.1.1.2.34 source-address="7.7.7.2" source-port="1" destination-address="8.8.8.2" destination-port="5636" service-name="icmp" nat-source-address="7.7.7.2" nat-source-port="1" nat-destination-address="8.8.8.2" nat-destination-port="5636" src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="1" policy-name="client-to-server" source-zone-name="client" destination-zone-name="server" session-id-32="60000442" username="N/A" roles="N/A" packet-incoming-interface="ge-0/0/0.0"]
+
+<14>1 2011-08-28T21:14:45 topstar RT_FLOW - RT_FLOW_SESSION_CLOSE [junos@2636.1.1.1.2.34 reason="response received" source-address="7.7.7.2" source-port="0" destination-address="8.8.8.2" destination-port="5636" service-name="icmp" nat-source-address="7.7.7.2" nat-source-port="0" nat-destination-address="8.8.8.2" nat-destination-port="5636" src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="1" policy-name="client-to-server" source-zone-name="client" destination-zone-name="server" session-id-32="60000441" packets-from-client="1" bytes-from-client="84" packets-from-server="1" bytes-from-server="84" elapsed-time="3" application="UNKNOWN" nested-application="UNKNOWN" username="N/A" roles="N/A" packet-incoming-interface="ge-0/0/0.0"]
+
+...
+<14>1 2011-11-17T23:41:46 topstar RT_FLOW - RT_FLOW_SESSION_CREATE_LS [junos@2636.1.1.1.2.34 logical-system-name="LSYS1" source-address="3001::2" source-port="0" destination-address="5001::2" destination-port="17420" service-name="icmpv6" nat-source-address="3001::2" nat-source-port="0" nat-destination-address="5001::2" nat-destination-port="17420" src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="58" policy-name="lsys1trust-to-lsys1trust" source-zone-name="lsys1-trust" destination-zone-name="lsys1-trust" session-id-32="60000218" username="N/A" roles="N/A" packet-incoming-interface="ge-0/0/2.0"]
+
+
+<14>1 2011-11-17T23:41:48 topstar RT_FLOW - RT_FLOW_SESSION_CLOSE [junos@2636.1.1.1.2.34 reason="response received" source-address="3001::2" source-port="0" destination-address="5001::2" destination-port="17420" service-name="icmpv6" nat-source-address="3001::2" nat-source-port="0" nat-destination-address="5001::2" nat-destination-port="17420" src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="58" policy-name="lsys1trust-to-lsys1trust" source-zone-name="lsys1-trust" destination-zone-name="lsys1-trust" session-id-32="60000218" packets-from-client="1" bytes-from-client="104" packets-from-server="1" bytes-from-server="104" elapsed-time="3" application="UNKNOWN" nested-application="UNKNOWN" username="N/A" roles="N/A" packet-incoming-interface="ge-0/0/2.0" encrypted="No "]
+
+
+<14>1 2011-11-17T23:41:48 topstar RT_FLOW - RT_FLOW_SESSION_CLOSE_LS [junos@2636.1.1.1.2.34 logical-system-name="LSYS1" reason="response received" source-address="3001::2" source-port="0" destination-address="5001::2" destination-port="17420" service-name="icmpv6" nat-source-address="3001::2" nat-source-port="0" nat-destination-address="5001::2" nat-destination-port="17420" src-nat-rule-name="None" dst-nat-rule-name="None" protocol-id="58" policy-name="lsys1trust-to-lsys1trust" source-zone-name="lsys1-trust" destination-zone-name="lsys1-trust" session-id-32="60000218" packets-from-client="1" bytes-from-client="104" packets-from-server="1" bytes-from-server="104" elapsed-time="3" application="UNKNOWN" nested-application="UNKNOWN" username="N/A" roles="N/A" packet-incoming-interface="ge-0/0/2.0" encrypted="No "]
+
+ ...

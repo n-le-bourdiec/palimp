@@ -1,0 +1,30 @@
+# Source: https://www.juniper.net/documentation/en_US/junos13.2/topics/concept/junos-groups-default.html
+# Page title: Junos Default Groups - Technical Documentation - Support - Juniper Networks
+# Documentation set (page metadata): junos 13.2
+# Junos release shown: Junos OS 13.2 documentation
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-12
+# Note: Excerpt of 'show groups junos-defaults' (partial list in the page).
+# Note: The page renders each line as a styled span; indentation is not reproduced, text is unchanged.
+# Note: Only the five applications the simulator uses are kept; junos-ntp is not in the page.
+# ---
+application junos-ssh {
+protocol tcp;
+destination-port 22;
+}
+application junos-smtp {
+protocol tcp;
+destination-port 25;
+}
+application junos-dns-udp {
+protocol udp;
+destination-port 53;
+}
+application junos-http {
+protocol tcp;
+destination-port 80;
+}
+application junos-https {
+protocol tcp;
+destination-port 443;
+}
