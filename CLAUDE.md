@@ -76,6 +76,13 @@ context, decision, alternatives considered, consequences, and whether it was
 challenged by Nathan (and the outcome). Never contradict a recorded decision
 silently: propose a new decision file that supersedes it.
 
+Amend or supersede:
+- Amend the existing file (with a dated "Amendment" section) only to correct
+  facts: a wrong date, a missing alternative, a renamed path, a factual error.
+- Supersede it with a new file when the decision itself changes. The new file
+  says which decision (or which part) it supersedes, and the old file's
+  `Status` line points to the new one.
+
 ## Working rules for every session
 
 1. One mission per session, stated in the prompt. Do not start other work.

@@ -1,6 +1,6 @@
 # 0006 Session cost is recorded as an API-equivalent cost
 
-- Status: Accepted
+- Status: Accepted, partly superseded by 0010 (which models may be priced)
 - Date: 2026-09-28
 
 ## Context
@@ -41,19 +41,12 @@ on the Claude API at list prices.
 - The figure is not an invoice amount and must not be read as one.
 - Calls made by Claude Code outside the transcript (for example the small model
   behind the web fetch tool) are not counted.
-- Only model ids printed on Anthropic's official models page, with prices on
-  the official pricing page, are in `pricing.json` (amendment below).
+- Which models `pricing.json` may contain is now set by decision 0010.
 
 ## Challenged by Nathan
 
 Yes, in session 3: the first `pricing.json` contained model ids inferred from
 the naming pattern, not confirmed on the official page. Outcome: decision
-amended (below).
-
-## Amendment (2026-10-04)
-
-- `pricing.json` lists only models whose API id appears on the official models
-  overview page and whose prices appear on the official pricing page. Both URLs
-  and the retrieval date are in the file.
-- A model missing from `pricing.json` gives `est_cost_usd` `n/a` and a warning
-  on stderr. The script never guesses a price.
+changed. The change was first written here as an amendment, then moved to
+decision 0010 in session 4, because it changes the decision rather than
+correcting a fact.
