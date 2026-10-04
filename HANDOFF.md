@@ -1,68 +1,80 @@
 # Handoff
 
-## Last session: 2 (2026-09-28), metrics housekeeping and simulator spec
+## Last session: 3 (2026-10-04), decisions 0007 to 0009 and simulator milestone 1
 
 ### Done
 
-- Session 1 row in `metrics/sessions.csv` finalized with final token counts and
-  cost.
-- `tokens_cache` split into `tokens_cache_read` and `tokens_cache_write`
-  (CLAUDE.md, CSV, script).
-- `metrics/pricing.json` (official Anthropic prices, source URL, retrieved
-  2026-09-28); `metrics/session_tokens.py` computes the API-equivalent cost and
-  accepts `--since` / `--until`. Decision 0006.
-- Decision 0001 updated with the real alternatives and the "limp" challenge.
-- The GitHub repository was renamed to `n-le-bourdiec/palimp` (GitHub reported
-  the move on push). The local `origin` now points to the new URL and 0001 uses
-  the new name.
-- `docs/simulator-spec.md`: company model, personas, events, artifact formats
-  with `[VSRX-n]` assumptions, ground truth schema, difficulty knobs, traps,
-  determinism, dev / held-out split, independence rules.
-- containerlab / vSRX feasibility: the machine checks could not be run (see
-  Known issues). The session report gives the steps and the commands to run.
+- Session 2 metrics row finalized.
+- Decision 0007: held-out evaluation only in GitHub Actions (`HOLDOUT_SALT`
+  repository secret, `workflow_dispatch`, aggregate output only). Spec 8.2
+  updated. Workflow not written yet.
+- Decision 0008: v1 simulator scope is Easy and Medium with 8 traps; other
+  traps, Hard and Adversarial are marked v2 in the spec. Medium knobs that only
+  feed v2 traps are set to 0 for v1.
+- Decision 0009: the simulator is the uv workspace member `palimp-sim`
+  (`simulator/src/palimp_sim`), not in the palimp wheel (checked). Ruff TID251
+  bans imports in both directions; `tests/test_independence.py` checks it with
+  `ast`. CI runs `uv sync --locked --all-packages`.
+- `metrics/pricing.json` lists only models whose id is on the official models
+  page and whose prices are on the official pricing page (Fable 5.1, Opus 5.5,
+  Sonnet 5.5, Haiku 4.5; retrieved 2026-10-04). Unknown models give `n/a` plus a
+  warning. Decision 0006 amended.
+- Spec: grounding rule plus section 12 "Behavioral grounding" with 12 verified
+  sources. Unsourced behaviors and traps are marked UNGROUNDED.
+- Simulator milestone 1 (Easy, no traps):
+  `uv run palimp-sim generate --level easy --seed N --out scenarios`.
+  It writes `artifacts/` (config.set, commits.txt, rollbacks/, logs/rt_flow.log,
+  hitcount.txt, tickets.csv), `ground_truth.json` (validated against
+  `simulator/src/palimp_sim/schema/ground_truth.schema.json`) and
+  `manifest.json`. Determinism golden hashes pass on Windows and in CI (Linux).
 
 ### Next
 
-- First step of every session: finalize the previous session's metrics row
-  (session 2's row is provisional, see below).
-- Candidate missions: review of the simulator spec by the project lead; vSRX lab
-  setup once feasibility is confirmed; pydantic models and the "set" parser;
-  simulator skeleton (company model and seeded RNG only).
+- Finalize session 3's metrics row first (see "Measuring tokens" below).
+- Simulator milestone 2: Medium level with the 8 v1 traps.
+- Or start palimp itself: pydantic models and the "set" parser, tested on
+  simulator output until vSRX fixtures exist.
+- Held-out workflow (decision 0007) once palimp can produce a report.
 
 ### Open questions
 
-- Simulator spec: are the difficulty knob values and the trap list acceptable?
-  Is the held-out salt mechanism (secret salt kept by the project lead) the
-  split you want?
-- Should `simulator` become a separate uv workspace member now, or later?
-- Model ids in `pricing.json` other than opus-5-5, fable-5-1, sonnet-5 and
-  haiku-4-5 follow the naming pattern but are unconfirmed.
+- Easy produces about 19 policies (min 16, max 23 over seeds 0 to 99). The
+  spec table says about 40. Should Easy get more apps, or should the spec
+  number change?
+- Easy has few dead rules (5 removal candidates over 100 seeds, because
+  `cleanup_rate` is 0.9). Is that the intended Easy profile?
+- Ground truth rule: a dead rule with hits since the last counter reset gets
+  `best_achievable_verdict: verify`, not `removal_candidate` (58 cases over 100
+  seeds). Confirm this is the scoring you want.
+- Three v1 traps are UNGROUNDED (`TRAP-PREPROVISIONED`,
+  `TRAP-MISLEADING-COMMENT`, `TRAP-BATCH-COMMIT`). Do you know public sources
+  for them?
+- CMDB export (spec 5.7) is not generated in milestone 1 (it was not in the
+  session 3 list).
 
 ### Known issues
 
-- In session 2, the Claude Code permission classifier blocked the local
-  hardware and WSL checks (WSL version, CPU virtualization, RAM, Docker). They
-  were not retried by other means. The project lead needs to run them or allow
-  them.
-- Session 2's metrics row was measured before its final commit, so it misses
-  the last few API calls. Finalize it at the start of session 3.
+- Format details of every artifact are still VSRX assumptions (VSRX-1 to
+  VSRX-12 in the spec), including the RT_FLOW SD-ID and attribute order.
+- Session 3 metrics row is provisional (measured before the final commit).
 - Git identity is set in the repository config only (`n-le-bourdiec`).
+- Part C checks of session 2 (WSL, KVM, Docker) are still not done.
 
 ## Measuring tokens and cost
 
 Claude Code stores each conversation as JSONL in
-`~/.claude/projects/<project-slug>/<session-id>.jsonl` (slug here:
-`d--projet-code-Palimp`). Sessions 1 and 2 share transcript
-`3a8f81f6-6569-476c-acc9-fee746e79b0b`, because the conversation was continued.
-Each palimp session starts at the timestamp of its opening prompt:
+`~/.claude/projects/d--projet-code-Palimp/<session-id>.jsonl`. Sessions 1 to 3
+share transcript `3a8f81f6-6569-476c-acc9-fee746e79b0b`. Boundaries are the
+timestamps of the opening prompts:
 
 - session 1: until `2026-09-28T14:58:54.152Z`
-- session 2: since `2026-09-28T14:58:54.152Z`
+- session 2: `2026-09-28T14:58:54.152Z` to `2026-10-04T17:18:08.869Z`
+- session 3: since `2026-10-04T17:18:08.869Z`
 
-To finalize session 2, run:
+Finalize session 3 with:
 
-    uv run python metrics/session_tokens.py 3a8f81f6-6569-476c-acc9-fee746e79b0b --since 2026-09-28T14:58:54.152Z --until <session 3 prompt timestamp>
+    uv run python metrics/session_tokens.py 3a8f81f6-6569-476c-acc9-fee746e79b0b --since 2026-10-04T17:18:08.869Z --until <session 4 prompt timestamp>
 
-If session 3 runs in a new conversation, `--until` is not needed. To find a
-prompt timestamp, search the transcript for the prompt text (`This is session N`).
-Cost is API-equivalent (decision 0006), not a billed amount.
+If session 4 runs in a new conversation, omit `--until`. Find a prompt
+timestamp by searching the transcript for `This is session N`. Cost is
+API-equivalent (decision 0006), not a billed amount.
