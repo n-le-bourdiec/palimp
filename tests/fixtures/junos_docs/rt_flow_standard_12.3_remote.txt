@@ -1,5 +1,6 @@
 # Source: https://www.juniper.net/documentation/en_US/junos12.3/topics/task/operational/chassis-cluster-srx-log-message-configuring.html
 # Page title: Log Messages for SRX Series Chassis Clusters - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
 # Documentation set (page metadata): junos 12.3
 # Junos release shown: Junos OS 12.3 documentation (sample dates 2010)
 # Retrieved: 2026-10-04

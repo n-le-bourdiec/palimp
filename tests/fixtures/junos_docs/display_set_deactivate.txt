@@ -1,5 +1,6 @@
 # Source: https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/junos-configuartion-viewing.html
 # Page title: View the Configuration | Junos OS | Juniper Networks
+# Source type: documentation
 # Documentation set (page metadata): junos current
 # Junos release shown: not stated
 # Retrieved: 2026-10-04

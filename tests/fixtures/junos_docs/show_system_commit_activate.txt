@@ -1,5 +1,6 @@
 # Source: https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/junos-configuration-commit.html
 # Page title: Commit the Configuration | Junos OS | Juniper Networks
+# Source type: documentation
 # Documentation set (page metadata): junos current
 # Junos release shown: not stated (date 2018)
 # Retrieved: 2026-10-04

@@ -1,5 +1,6 @@
 # Source: https://www.juniper.net/documentation/us/en/software/junos/flow-packet-processing/topics/topic-map/security-flow-session-and-error-handling.html
 # Page title: Monitoring Security Flow Sessions | Junos OS | Juniper Networks
+# Source type: documentation
 # Documentation set (page metadata): junos current
 # Junos release shown: not stated (sample dates 2010)
 # Retrieved: 2026-10-04

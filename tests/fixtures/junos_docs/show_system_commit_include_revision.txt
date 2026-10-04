@@ -1,5 +1,6 @@
 # Source: https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/command/show-system-commit.html
 # Page title: show system commit | Junos OS | Juniper Networks
+# Source type: documentation
 # Documentation set (page metadata): junos current
 # Junos release shown: 20.4R1 or later (option introduced in 20.4R1)
 # Retrieved: 2026-10-04

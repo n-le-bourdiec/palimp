@@ -1,0 +1,35 @@
+# Source: https://www.networkcuriosity.com/junos-comparing-configuration-files/
+# Page title: Junos Comparing Configuration Files - Network Curiosity
+# Source type: practitioner capture (real device output published by a third party, decision 0015)
+# Device: vMX (hostname vMX-3), Junos 20.4R3-S2.6 (from 'show system rollback 5' on the same page)
+# Capture date: 2023-12-29 (commit timestamps); page published 2023-12-30
+# Retrieved: 2026-10-04
+# Assumptions: VSRX-4
+# Note: first output block of the page, copied unchanged. Each commit was made with
+# a comment ("Commit N / Rollback M"); the page text says each commit set the lo0
+# description and a commit comment with the same text. The comment is printed on
+# the next line, indented 4 spaces.
+# ---
+lab@vMX-3> show system commit 
+0   2023-12-29 04:13:22 UTC by lab via cli
+    Commit 11 / Rollback 0
+1   2023-12-29 04:13:04 UTC by lab via cli
+    Commit 10 / Rollback 1
+2   2023-12-29 04:12:43 UTC by lab via cli
+    Commit 9 / Rollback 2
+3   2023-12-29 04:12:24 UTC by lab via cli
+    Commit 8 / Rollback 3
+4   2023-12-29 04:12:07 UTC by lab via cli
+    Commit 7 / Rollback 4
+5   2023-12-29 04:11:48 UTC by lab via cli
+    Commit 6 / Rollback 5
+6   2023-12-29 04:11:29 UTC by lab via cli
+    Commit 5 / Rollback 6
+7   2023-12-29 04:11:09 UTC by lab via cli
+    Commit 4 / Rollback 7
+8   2023-12-29 04:10:52 UTC by lab via cli
+    Commit 3 / Rollback 8
+9   2023-12-29 04:10:35 UTC by lab via cli
+    Commit 2 / Rollback 9
+10  2023-12-29 04:10:11 UTC by lab via cli
+    Commit 1 / Rollback 10

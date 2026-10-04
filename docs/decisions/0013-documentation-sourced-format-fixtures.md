@@ -1,6 +1,6 @@
 # 0013 Documentation-sourced fixtures replace the vSRX lab for now
 
-- Status: Accepted
+- Status: Accepted, superseded in part by decision 0015 (practitioner captures accepted)
 - Date: 2026-10-04
 - Supersedes: the vSRX lab line of decision 0005 ("Real Junos output formats
   come from a vSRX lab (containerlab) and are stored as parser fixtures") and

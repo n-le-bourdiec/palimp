@@ -1,5 +1,6 @@
 # Source: https://apps.juniper.net/syslog-explorer/messageDetails?msg=RT_FLOW_SESSION_DENY (data behind https://apps.juniper.net/syslog-explorer/)
 # Page title: System Log Explorer
+# Source type: documentation
 # Documentation set (page metadata): Junos OS
 # Junos release shown: 22.2R1 and 26.2R1 (releases in the data: 26.2R1, 25.4R1, 25.2R2, 25.2R1, 24.4R2, 24.4R1, 24.2R2, 24.2R1, 22.4R3, 23.4R2, 23.4R1, 23.2R2, 23.2R1, 22.4R2, 22.4R1, 22.2R3, 22.2R2, 22.2R1)
 # Retrieved: 2026-10-04

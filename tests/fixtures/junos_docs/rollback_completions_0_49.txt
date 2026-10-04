@@ -1,5 +1,6 @@
 # Source: https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/junos-configuration-managing.html
 # Page title: Managing Configurations | Junos OS | Juniper Networks
+# Source type: documentation
 # Documentation set (page metadata): junos 26.2
 # Junos release shown: not stated (dates 2018)
 # Retrieved: 2026-10-04

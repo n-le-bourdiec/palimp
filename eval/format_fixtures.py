@@ -1,4 +1,4 @@
-"""Run palimp's format readers on the documentation fixtures (decision 0013).
+"""Run palimp's format readers on the format fixtures (decisions 0013 and 0015).
 
 Each fixture in tests/fixtures/junos_docs/ starts with a `#` header ending with
 `# ---`; only the body after that line is given to the reader. The script
@@ -57,6 +57,7 @@ def run_rt_flow(text: str, name: str):
 
 READERS = {
     "show_system_commit": run_commits,
+    "show-system-commit": run_commits,
     "rollback_completions": run_commits,
     "display_set": run_set,
     "hitcount": run_hitcount,

@@ -1,5 +1,6 @@
 # Source: https://www.juniper.net/documentation/en_US/junos12.1x47/topics/reference/command-summary/show-security-log-file.html
 # Page title: show security log file - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
 # Documentation set (page metadata): junos 12.1x47
 # Junos release shown: Junos OS 12.1X47 documentation (sample dates 2011)
 # Retrieved: 2026-10-04

@@ -1,5 +1,6 @@
 # Source: https://www.juniper.net/documentation/en_US/junos13.2/topics/concept/junos-groups-default.html
 # Page title: Junos Default Groups - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
 # Documentation set (page metadata): junos 13.2
 # Junos release shown: Junos OS 13.2 documentation
 # Retrieved: 2026-10-04
