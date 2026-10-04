@@ -1,6 +1,6 @@
 # 0011 Evidence recall matches on rule, tier and artifact
 
-- Status: Accepted
+- Status: Accepted, superseded in part by decision 0014 (scoring of "found but not expected" items)
 - Date: 2026-10-04
 
 ## Context
@@ -38,15 +38,3 @@ palimp reports without a ground truth counterpart are counted separately as
 ## Challenged by Nathan
 
 No.
-
-## Amendment (2026-10-04, session 6)
-
-Clarification requested by Nathan (challenge: extra items are not errors).
-Evidence items palimp finds that the ground truth does not list ("found but
-not expected") are not counted as errors, unless they are misleading. An extra
-item is misleading when its claim points toward an intent or a verdict that
-the ground truth contradicts (for example an extra T3 item that makes a live
-rule look like a removal candidate). Extra items that are true but not listed
-(for example a generic address object) are neutral. The harness does not yet
-classify extra items as misleading or neutral; until it does, they are
-reported but never scored as errors.
