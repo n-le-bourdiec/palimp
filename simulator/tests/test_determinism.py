@@ -10,8 +10,8 @@ from palimp_sim.generate import generate
 # Computed on Windows; CI checks the same values on Linux. Update only with a
 # simulator version bump.
 GOLDEN = {
-    1: "4dc522cbbf677bee0791ea3170e13f24c050e642f8f51ef06cd52f3bc1b92b31",
-    7: "55cf42ca24c543164948a091eb6af67eb1890981b3f4b16270ffc1f03f05dd48",
+    1: "8da51ad7b79eca19815d777fc51e47a4697cf120d9769a27e35ee79ffb0c3c9e",
+    7: "986c1062710f6b1d367e9d4eb8a056790ad446532cc73bc15da96f6100fdb807",
 }
 
 

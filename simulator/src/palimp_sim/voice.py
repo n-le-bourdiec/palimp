@@ -16,8 +16,8 @@ APP_CODES = {
     "hr": "HRP",
     "files": "FILESRV",
     "billing": "BILL",
-    "webshop": "SHOP",
-    "mail": "MAIL",
+    "webshop": "ESHOP",
+    "mail": "MX",
     "wiki": "WIKI",
     "servicedesk": "SDESK",
     "payroll": "PAYR",
@@ -42,7 +42,7 @@ TIER_WORDS = {
     "app": ("AS", "app srv", "backend"),
     "db": ("DB", "dbsrv", "SQL"),
     "file": ("FS", "filer", "share"),
-    "relay": ("MTA", "smtp gw", "relay"),
+    "relay": ("MTA", "smtp gw", "edge mta"),
     "mbx": ("MBX", "mailstore", "imap srv"),
     "dns": ("NS", "resolvers", "ns cluster"),
     "bkp": ("bkp srv", "media agent", "BKP"),
@@ -52,7 +52,7 @@ TIER_WORDS = {
 
 SOURCE_WORDS = {
     "users": ("LAN", "office LAN", "user VLANs", "all sites", "staff"),
-    "internet": ("inet", "any ext", "public"),
+    "internet": ("inet", "any ext", "ext clients"),
     "servers-net": ("srv range", "DC range", "all srv"),
 }
 
