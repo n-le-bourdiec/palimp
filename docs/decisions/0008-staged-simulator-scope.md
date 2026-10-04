@@ -1,6 +1,6 @@
 # 0008 Staged simulator scope: v1 is Easy and Medium with 8 traps
 
-- Status: Accepted
+- Status: Accepted, trap list partly superseded by 0012 (TRAP-PREPROVISIONED moves to v2)
 - Date: 2026-10-04
 
 ## Context

@@ -1,6 +1,6 @@
 # 0003 v1 scope: Juniper SRX, "set" format only
 
-- Status: Accepted
+- Status: Accepted, vSRX lab fixtures superseded by 0013 (documentation-sourced fixtures for now)
 - Date: 2026-09-28
 
 ## Context

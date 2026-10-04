@@ -51,10 +51,15 @@ A rule backed only by T4 can never exceed LOW confidence.
 palimp is evaluated against a synthetic company simulator that generates a
 realistic firewall history plus a ground-truth file (true intent of every rule).
 - The simulator and the analyzer never share code.
+- Independence rule: analyzer sessions read neither `simulator/` code nor
+  `docs/simulator-spec.md`, only the ground truth JSON Schema
+  (`simulator/src/palimp_sim/schema/ground_truth.schema.json`). Simulator
+  sessions do not read `src/palimp`.
 - Scenarios are split into a dev set and a held-out test set. Never look at
   held-out results while tuning the analyzer.
-- Real Junos output formats come from a vSRX lab (containerlab) and are stored
-  as parser fixtures.
+- Real Junos output formats come from samples copied from Juniper's official
+  documentation, stored under `tests/fixtures/junos_docs/` (decision 0013).
+  A vSRX lab stays a later upgrade.
 - Key metrics: intent accuracy, confidence calibration (HIGH must be right
   90%+ of the time), zero unsourced claims, and "removal candidate on a live
   rule" counted as the most severe error.

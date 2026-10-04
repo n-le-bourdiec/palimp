@@ -1,6 +1,6 @@
 # 0005 Evaluation through a synthetic simulator with ground truth
 
-- Status: Accepted
+- Status: Accepted, vSRX lab line superseded by 0013 (documentation-sourced fixtures for now)
 - Date: 2026-09-28
 
 ## Context
