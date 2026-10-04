@@ -27,7 +27,7 @@
 - Spec grounding: BATCH-COMMIT (Herzig and Zeller 2013) and MISLEADING-COMMENT
   (CodeFuse-CommitEval 2025) grounded by analogy; vague comments by analogy
   (Tian et al. 2022). PREPROVISIONED stays UNGROUNDED (only indirect leads).
-- Golden hashes updated four times (see the session 4 report for the reasons).
+- Golden hashes updated five times (see the session 4 report for the reasons).
 
 ### Next
 
