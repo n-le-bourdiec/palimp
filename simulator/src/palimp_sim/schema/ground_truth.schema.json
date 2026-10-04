@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/n-le-bourdiec/palimp/simulator/ground_truth.schema.json",
+  "title": "palimp simulator ground truth",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "simulator_version", "scenario_id", "level", "snapshot",
+               "hit_count_reset", "log_window_start", "rules", "objects", "apps", "flows",
+               "people", "admins", "events"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "simulator_version": {"type": "string"},
+    "scenario_id": {"type": "string", "pattern": "^[a-z]+-[0-9]{6}$"},
+    "level": {"enum": ["easy", "medium", "hard", "adversarial"]},
+    "snapshot": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$"},
+    "hit_count_reset": {"$ref": "#/$defs/date_or_null"},
+    "log_window_start": {"$ref": "#/$defs/date"},
+    "rules": {"type": "array", "items": {"$ref": "#/$defs/rule"}},
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "kind", "value"],
+        "properties": {
+          "name": {"type": "string"},
+          "kind": {"enum": ["address", "address_set"]},
+          "value": {"type": "string"}
+        }
+      }
+    },
+    "apps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["app_id", "name", "owner_id", "shared", "go_live", "retired"],
+        "properties": {
+          "app_id": {"type": "string"},
+          "name": {"type": "string"},
+          "owner_id": {"type": "string"},
+          "shared": {"type": "boolean"},
+          "go_live": {"$ref": "#/$defs/date_or_null"},
+          "retired": {"$ref": "#/$defs/date_or_null"}
+        }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["flow_id", "app_id", "kind", "summary", "source", "destination",
+                     "services", "schedule", "start", "end"],
+        "properties": {
+          "flow_id": {"type": "string", "pattern": "^F-[0-9]{4}$"},
+          "app_id": {"type": "string"},
+          "kind": {"$ref": "#/$defs/intent_kind"},
+          "summary": {"type": "string"},
+          "source": {"type": "string"},
+          "destination": {"type": "string"},
+          "services": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "schedule": {"enum": ["business", "always", "nightly", "weekly", "monthly",
+                                "quarterly", "yearly"]},
+          "start": {"$ref": "#/$defs/date"},
+          "end": {"$ref": "#/$defs/date_or_null"}
+        }
+      }
+    },
+    "people": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["person_id", "name", "team"],
+        "properties": {
+          "person_id": {"type": "string"},
+          "name": {"type": "string"},
+          "team": {"type": "string"}
+        }
+      }
+    },
+    "admins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["admin_id", "login", "name", "persona", "joined", "left"],
+        "properties": {
+          "admin_id": {"type": "string"},
+          "login": {"type": "string"},
+          "name": {"type": "string"},
+          "persona": {"enum": ["meticulous_senior", "hurried_operator", "contractor",
+                               "automation", "on_call", "cleaner"]},
+          "joined": {"$ref": "#/$defs/date"},
+          "left": {"$ref": "#/$defs/date_or_null"}
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["event_id", "kind", "date", "admin_id", "app_id", "ticket_id",
+                     "commit_indexes", "note"],
+        "properties": {
+          "event_id": {"type": "string", "pattern": "^EV-[0-9]{4}$"},
+          "kind": {"enum": ["bootstrap", "new_app", "migration", "migration_cleanup",
+                            "decommission", "emergency_rule", "partial_cleanup",
+                            "object_rename", "contractor_period", "upgrade", "admin_join",
+                            "admin_leave", "routine"]},
+          "date": {"$ref": "#/$defs/date"},
+          "admin_id": {"type": "string"},
+          "app_id": {"type": ["string", "null"]},
+          "ticket_id": {"type": ["string", "null"]},
+          "commit_indexes": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+          "note": {"type": "string"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "date_or_null": {"anyOf": [{"$ref": "#/$defs/date"}, {"type": "null"}]},
+    "intent_kind": {
+      "enum": ["app_access", "app_dependency", "shared_service", "management", "monitoring",
+               "backup", "partner_access", "internet_access", "emergency_temporary",
+               "migration_bridge", "test", "unknown_origin"]
+    },
+    "trap": {
+      "enum": ["TRAP-LIVE-NOLOG", "TRAP-RARE-JOB", "TRAP-PREPROVISIONED",
+               "TRAP-MISLEADING-COMMENT", "TRAP-BATCH-COMMIT", "TRAP-STALE-NAME",
+               "TRAP-IP-REUSE", "TRAP-SCANNER-HITS", "TRAP-EMERGENCY-LOADBEARING",
+               "TRAP-SHADOWED-DUPLICATE", "TRAP-RENAME-CHAIN", "TRAP-DEACTIVATED",
+               "TRAP-TICKET-REJECTED", "TRAP-HISTORY-HORIZON", "TRAP-SHARED-LOGIN",
+               "TRAP-CLEANUP-FLAP"]
+    },
+    "verdict": {"enum": ["keep", "verify", "removal_candidate"]},
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_uid", "key", "name_history", "deactivated", "created", "intent",
+                   "status", "expected", "evidence", "traps"],
+      "properties": {
+        "rule_uid": {"type": "string", "pattern": "^R-[0-9]{4}$"},
+        "key": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from_zone", "to_zone", "name"],
+          "properties": {
+            "from_zone": {"type": "string"},
+            "to_zone": {"type": "string"},
+            "name": {"type": "string"}
+          }
+        },
+        "name_history": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "deactivated": {"type": "boolean"},
+        "created": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event_id", "date", "admin_id", "persona", "commit_index",
+                       "in_retained_history"],
+          "properties": {
+            "event_id": {"type": "string"},
+            "date": {"$ref": "#/$defs/date"},
+            "admin_id": {"type": "string"},
+            "persona": {"type": "string"},
+            "commit_index": {"type": "integer", "minimum": 0},
+            "in_retained_history": {"type": "boolean"}
+          }
+        },
+        "intent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "app_id", "flows", "summary"],
+          "properties": {
+            "kind": {"$ref": "#/$defs/intent_kind"},
+            "app_id": {"type": "string"},
+            "flows": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+            "summary": {"type": "string"}
+          }
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["live", "still_needed", "carried_flows", "last_real_use",
+                       "hits_in_window", "hits_total", "log_lines", "hits_reason"],
+          "properties": {
+            "live": {"type": "boolean"},
+            "still_needed": {"type": "boolean"},
+            "carried_flows": {"type": "array", "items": {"type": "string"}},
+            "last_real_use": {"$ref": "#/$defs/date_or_null"},
+            "hits_in_window": {"type": "integer", "minimum": 0},
+            "hits_total": {"type": "integer", "minimum": 0},
+            "log_lines": {"type": "integer", "minimum": 0},
+            "hits_reason": {"enum": ["business", "scanner", "monitoring", "ip_reuse",
+                                     "shadowing_other_rule", "none"]}
+          }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "best_achievable_verdict", "max_justified_confidence",
+                       "owner_to_ask"],
+          "properties": {
+            "verdict": {"$ref": "#/$defs/verdict"},
+            "best_achievable_verdict": {"$ref": "#/$defs/verdict"},
+            "max_justified_confidence": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+            "owner_to_ask": {"type": "string"}
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "tier", "artifact", "locator", "supports", "misleading"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^G[0-9]+$"},
+              "tier": {"enum": ["T1", "T2", "T3", "T4"]},
+              "artifact": {"enum": ["config.set", "commits.txt", "rollbacks",
+                                    "logs/rt_flow.log", "hitcount.txt", "tickets.csv"]},
+              "locator": {"type": "string"},
+              "supports": {"enum": ["intent", "live", "not_live", "owner"]},
+              "misleading": {"type": "boolean"}
+            }
+          }
+        },
+        "traps": {"type": "array", "items": {"$ref": "#/$defs/trap"}}
+      }
+    }
+  }
+}

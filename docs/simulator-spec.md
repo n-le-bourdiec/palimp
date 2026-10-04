@@ -622,6 +622,7 @@ Rules:
 | VSRX-9 | structured syslog field names and order for RT_FLOW_SESSION_CREATE, CLOSE and DENY on the lab's Junos release, and the `junos@2636...` SD-ID | enable `security log format sd-syslog`, generate traffic |
 | VSRX-10 | standard syslog RT_FLOW line layout | same with default format |
 | VSRX-11 | whether logs of deactivated or deleted policies keep the old policy name | delete a logged policy during live sessions |
+| VSRX-12 | predefined application names used by the simulator (`junos-http`, `junos-https`, `junos-ssh`, `junos-smtp`, `junos-dns-udp`, `junos-ntp`) exist with those ports, and RT_FLOW close reasons for UDP read `idle Timeout` | `show configuration groups junos-defaults applications`, generate UDP sessions |
 
 Each confirmed assumption becomes a parser fixture under `tests/fixtures/vsrx/`
 and a conformance test on the simulator side.
