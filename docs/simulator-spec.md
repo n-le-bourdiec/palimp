@@ -543,19 +543,23 @@ reported per trap.
 
 ### 8.2 Split
 
+Decision 0007 defines where held-out evaluation runs.
+
 - Dev set: scenario seeds `0` to `N`, public, used freely while developing.
-- Held-out set: seeds derived from a secret salt held by the project lead,
-  `SHA-256("<salt>:<level>:<index>")`, stored outside the repository (for
-  example in an environment variable on the evaluation machine). Without the
-  salt the held-out scenarios cannot be regenerated.
-- Held-out scenarios are generated and scored only by an evaluation run started
-  by the project lead. The run prints aggregate metrics only (per level and per
-  trap), never per rule details, and appends them to `metrics/`.
-- Tuning the analyzer on held-out results is forbidden (CLAUDE.md). Any
-  held-out run is logged with date and analyzer commit, so repeated peeking is
-  visible.
-- The held-out split is regenerated with a new salt when the simulator version
-  changes in a way that affects difficulty.
+- Held-out set: seeds derived from a secret salt,
+  `SHA-256("<salt>:<level>:<index>")`. The salt is the GitHub repository secret
+  `HOLDOUT_SALT`. It never exists on the development machine, because the coding
+  agent has full access to that machine.
+- Held-out scenarios are generated and scored only in a GitHub Actions workflow
+  with a `workflow_dispatch` trigger, started by the project lead. The workflow
+  prints aggregate metrics only (per level and per trap). It never prints seeds,
+  scenario content, per rule results or ground truth, and uploads no artifacts.
+- Tuning the analyzer on held-out results is forbidden (CLAUDE.md). The Actions
+  run history records every held-out run with its date and commit, so repeated
+  peeking is visible.
+- The project lead rotates the salt when the simulator version changes in a way
+  that affects difficulty.
+- The workflow is written once the simulator can generate scenarios.
 
 ## 9. Evaluation interface (for reference)
 
