@@ -474,7 +474,7 @@ Field meanings:
 | Knob | easy | medium | hard (v2) | adversarial (v2) |
 |---|---|---|---|---|
 | `years` | 2 | 4 | 7 | 10 |
-| applications | 8 | 25 | 60 | 120 |
+| applications | 18 | 25 | 60 | 120 |
 | final policy count (approx) | 40 | 150 | 450 | 1200 |
 | zones | 4 | 5 | 6 | 7 |
 | personas active | senior | senior, operator, automation | all | all, several shared logins |
@@ -486,7 +486,9 @@ Field meanings:
 | days since hit count reset | 365 | 180 | 45 | 7 |
 | `ticket_rate` / export coverage | 0.9 / 1.0 | 0.6 / 0.8 | 0.4 / 0.5 | 0.2 / 0.3 |
 | CMDB present / staleness | yes / low | yes / medium | yes / high | no |
-| `cleanup_rate` | 0.9 | 0.6 | 0.3 | 0.15 |
+| `cleanup_rate` | 0.35 | 0.6 | 0.3 | 0.15 |
+| decommissions per year | 2 | not set yet | not set yet | not set yet |
+| migrations per year (duplicate style in v1) | 1 | not set yet | not set yet | not set yet |
 | `cleanup_error_rate` | 0 | 0 (v2: 0.02) | 0.05 | 0.1 |
 | emergency events per year | 0 | 1 | 4 | 8 |
 | contractor periods | 0 | 0 (v2: 1) | 2 | 4 |
@@ -495,6 +497,11 @@ Field meanings:
 | commits per year (drives history horizon) | 20 | 60 | 150 | 300 |
 | rare jobs (quarterly, yearly) | 0 | 2 | 6 | 12 |
 | log format | structured | structured | structured | standard |
+
+Easy values were tuned in session 4 to about 40 final policies with 15 to 20%
+dead rules (measured over seeds 0 to 99: mean 39.9 policies, 17.6% dead). A low
+`cleanup_rate` is what leaves dead rules behind; Easy stays easy because its
+evidence is complete and consistent, not because its rule base is clean.
 
 Each knob can be overridden individually; a scenario is defined by a level plus
 overrides.

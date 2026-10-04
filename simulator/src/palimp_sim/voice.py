@@ -22,6 +22,14 @@ APP_CODES = {
     "servicedesk": "SDESK",
     "payroll": "PAYR",
     "reporting": "RPT",
+    "lms": "LMS",
+    "dms": "DMS",
+    "pos": "POS",
+    "wms": "WMS",
+    "tms": "TMS",
+    "gitlab": "GIT",
+    "ci": "CI",
+    "edi": "EDI",
     "shared-dns": "DNS",
     "shared-ntp": "NTP",
     "shared-internet": "INET",
@@ -39,6 +47,7 @@ TIER_WORDS = {
     "dns": ("NS", "resolvers", "ns cluster"),
     "bkp": ("bkp srv", "media agent", "BKP"),
     "mon": ("NMS", "poller", "mon srv"),
+    "gw": ("GW", "b2b gw", "sftp gw"),
 }
 
 SOURCE_WORDS = {
@@ -51,6 +60,9 @@ PARTNER_WORDS = {
     "bank-sftp": ("ext bank", "bank gw", "BNK"),
     "payroll-provider": ("ext payprov", "provider", "PPV"),
     "ntp-pool": ("ext NTP", "pool.ntp", "time src"),
+    "carrier-api": ("carrier", "ext api", "CARR"),
+    "package-mirror": ("pkg mirror", "repo ext", "artifactory ext"),
+    "edi-partner": ("EDI cust", "b2b peer", "PARTNER01"),
 }
 
 STOP_WORDS = {"a", "an", "the", "to", "of", "for", "from", "and", "with", "its", "on", "in", "by"}

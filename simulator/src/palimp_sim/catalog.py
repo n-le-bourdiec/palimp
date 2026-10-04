@@ -349,6 +349,191 @@ APPS = (
     ),
 )
 
+APPS = APPS + (
+    AppTemplate(
+        "lms",
+        "Learning portal",
+        (_t("web"),),
+        (
+            _f(
+                "users",
+                "web",
+                ["junos-https"],
+                "business",
+                90,
+                "app_access",
+                "Employees follow mandatory training courses online",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "dms",
+        "Document management",
+        (_t("web"), _t("db")),
+        (
+            _f(
+                "users",
+                "web",
+                ["junos-https"],
+                "business",
+                350,
+                "app_access",
+                "Staff store and search signed contracts",
+            ),
+            _f(
+                "web",
+                "db",
+                ["tcp-1433"],
+                "business",
+                700,
+                "app_dependency",
+                "Contract archive keeps its index in SQL Server",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "pos",
+        "Store point of sale backend",
+        (_t("app"), _t("db")),
+        (
+            _f(
+                "users",
+                "app",
+                ["tcp-8443"],
+                "always",
+                900,
+                "app_access",
+                "Shop tills send sales to the central backend",
+            ),
+            _f(
+                "app",
+                "db",
+                ["tcp-5432"],
+                "always",
+                1100,
+                "app_dependency",
+                "Sales backend records transactions in PostgreSQL",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "wms",
+        "Warehouse management",
+        (_t("app", 2), _t("db")),
+        (
+            _f(
+                "users",
+                "app",
+                ["junos-https"],
+                "business",
+                500,
+                "app_access",
+                "Warehouse staff scan pallets and pick orders",
+            ),
+            _f(
+                "app",
+                "db",
+                ["tcp-1521"],
+                "always",
+                1300,
+                "app_dependency",
+                "Stock levels are kept in an Oracle schema",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "tms",
+        "Transport management",
+        (_t("app"),),
+        (
+            _f(
+                "users",
+                "app",
+                ["junos-https"],
+                "business",
+                180,
+                "app_access",
+                "Dispatchers plan truck routes",
+            ),
+            _f(
+                "app",
+                "partner:carrier-api",
+                ["junos-https"],
+                "business",
+                120,
+                "partner_access",
+                "Shipment bookings are pushed to the carrier API",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "gitlab",
+        "Source control",
+        (_t("web"),),
+        (
+            _f(
+                "users",
+                "web",
+                ["junos-https", "junos-ssh"],
+                "business",
+                400,
+                "app_access",
+                "Developers push code and review merge requests",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "ci",
+        "Build servers",
+        (_t("app", 2),),
+        (
+            _f(
+                "users",
+                "app",
+                ["junos-https"],
+                "business",
+                150,
+                "app_access",
+                "Developers trigger pipelines and read build results",
+            ),
+            _f(
+                "app",
+                "partner:package-mirror",
+                ["junos-https"],
+                "always",
+                600,
+                "internet_access",
+                "Build agents download libraries from a package mirror",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "edi",
+        "EDI gateway",
+        (_t("gw", 1, "dmz"), _t("db")),
+        (
+            _f(
+                "partner:edi-partner",
+                "gw",
+                ["junos-ssh"],
+                "nightly",
+                4,
+                "partner_access",
+                "A retail customer drops purchase orders every night",
+            ),
+            _f(
+                "gw",
+                "db",
+                ["tcp-5432"],
+                "always",
+                200,
+                "app_dependency",
+                "Received orders are queued in a PostgreSQL table",
+            ),
+        ),
+    ),
+)
+
 SHARED = (
     AppTemplate(
         "shared-dns",
@@ -463,6 +648,9 @@ PARTNERS = {
     "bank-sftp": "203.0.113.25",
     "payroll-provider": "203.0.113.80",
     "ntp-pool": "198.51.100.123",
+    "carrier-api": "203.0.113.140",
+    "package-mirror": "198.51.100.200",
+    "edi-partner": "203.0.113.60",
 }
 
 FIRST_NAMES = (
