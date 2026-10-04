@@ -1,70 +1,71 @@
 # Handoff
 
-## Last session: 6 (2026-10-04), format assumptions vs Juniper documentation
+## Last session: 7 (2026-10-04), analyzer: format readers G1 to G10
 
 ### Done
 
-- Session 5 metrics row finalized (29 calls, 3.74 USD API-equivalent).
-- Noted below: one Claude Code conversation per session from session 6.
-- Decision 0012: `TRAP-PREPROVISIONED` moves to v2; v1 has 7 traps
-  (supersedes the trap list of 0008).
-- Decision 0013: documentation-sourced fixtures replace the vSRX lab for now
-  (supersedes the vSRX lab line of 0005 and the matching consequence of 0003).
-- Decision 0011 amended: extra evidence items are not errors unless misleading.
-- CLAUDE.md: independence rule (analyzer sessions read neither `simulator/`
-  nor `docs/simulator-spec.md`, only the ground truth JSON Schema; simulator
-  sessions do not read `src/palimp`), and the fixture source line.
-- 19 fixtures in `tests/fixtures/junos_docs/`, each copied from a Juniper
-  documentation page or the System Log Explorer data, with source URL, page
-  title, release and retrieval date.
-- `docs/format-assumptions.md`: VSRX-1 to VSRX-12 split into 26 claims;
-  CONFIRMED 12 (2 only in part), CORRECTED 7, UNVERIFIED 7. Reader results on
-  the fixtures and gaps G1 to G10 (analyzer) and S1 to S6 (simulator).
-- `eval/format_fixtures.py`: runs the readers on the fixtures. Today: 6 of 15
-  reader fixtures parse apart from prompt lines (2 of them leave text in
-  `extra`), 9 show real gaps.
+- Session 6 metrics row finalized (85 calls, 5.22 USD API-equivalent).
+- Decision 0014: extra evidence items are not errors unless misleading. It
+  supersedes the session 6 amendment of 0011, which is removed; 0011 is back
+  to its original text with a status line pointing to 0014.
+- Decision 0015: "practitioner capture" (real device output published by a
+  third party) is a second fixture source type; supersedes in part 0013.
+  Every fixture header now has a `Source type:` line.
+- Fixture `show-system-commit-vmx-2023.txt` (networkcuriosity.com, real vMX,
+  Junos 20.4R3-S2.6, December 2023): commit comments on the next line,
+  indented 4 spaces. VSRX-4d is now CONFIRMED-OUTPUT.
+- `docs/format-assumptions.md`: CONFIRMED split into CONFIRMED-OUTPUT and
+  CONFIRMED-TEXT; reader results before and after; gaps section rewritten.
+- Readers fixed for G1 to G10 (`src/palimp/formats/`, new `terminal.py`),
+  plus syslog-server RT_FLOW (both formats), `session-id-32`, hit-count rows
+  in any order. `Commit` gains `commit_type`, `rollback_minutes`, `revision`;
+  `HitCount.action` may be empty (legacy layout). `rt_flow.parse_event`
+  returns one normalized event (kind, policy, zones, session id, logical
+  system, time).
+- `tests/test_format_fixtures.py`: one test per gap on the fixtures (18
+  tests). The black-box simulator test now also requires zero unknown lines
+  in commits, hit counts and logs; simulator output parses identically
+  (logs, hit counts, commits compared before and after on easy seed 3).
+- `eval/format_fixtures.py`: 1 of 16 reader fixtures parsed before, 14 of 16
+  after.
 
 ### Next
 
-- Analyzer session: fix G4 to G9 in `src/palimp/formats/` (commit `extra`
-  text, right-aligned indexes, hit-count layouts, `_LS` messages, collector
-  prefix, text after `]`), then G10 (standard RT_FLOW) and G1 (prompt lines).
-  Turn `eval/format_fixtures.py` results into tests once they pass.
-- Simulator session: S1 to S6, and mark `TRAP-PREPROVISIONED` as v2 in
-  `docs/simulator-spec.md` (decision 0012; not done here because analyzer
-  sessions must not read the spec).
 - Then the analyzer plan from session 5: T2 collectors (hit counts, logs) and
   T4, confidence scoring and verdicts, `report` and `questions`.
+- Pass a year to `parse_rt_flow` from `ingest` for standard-format logs (CLI
+  option or inference), and handle December to January rollover.
+- Simulator session: S1 to S6, and mark `TRAP-PREPROVISIONED` as v2 in
+  `docs/simulator-spec.md` (decision 0012). Consider emitting syslog-server
+  shapes and the standard RT_FLOW format as knobs, now that the analyzer reads
+  them.
 
 ### Open questions
 
-- VSRX-4d, where the commit comment is printed, is the riskiest open point:
-  the spec puts it on the next indented line, the only documentation hint puts
-  it on the same line after the method. Commit comments are palimp's main T1
-  source. Can the project lead check on any real SRX (a single
-  `show system commit` with one commented commit is enough)?
-- Is text evidence (documentation prose, no sample) acceptable to CONFIRM a
-  behavioral assumption (VSRX-3, VSRX-5, VSRX-6, VSRX-7c)? The table marks it
-  as `text` so it can be downgraded.
-- Should palimp accept syslog-server copies of RT_FLOW (collector prefix, no
-  `<PRI>`)? Probably yes: inherited logs often come from a collector.
+- Decision count: the session 7 prompt says one decision changed; this
+  session recorded two (0014, and 0015 because 0013 explicitly rejected blog
+  sources). Confirm 0015 is wanted as a separate decision.
+- `commit activate` is read as a commit type, not a comment, although
+  `show system commit revision detail` printed `Comment : commit activate`.
+  Fine for T1 (it carries no intent), but not proven.
+- Is text evidence (documentation prose) acceptable to CONFIRM a behavioral
+  assumption? Now explicit as CONFIRMED-TEXT, can be downgraded.
 - Carried over: 100% recall on Easy says little (Medium or a stricter matcher
-  next?); the 20 extra T3 items (decision 0011 amendment now says they are
-  neutral unless misleading, but the harness does not classify them yet).
+  next?); the harness does not yet classify extra items as misleading or
+  neutral (decision 0014).
 
 ### Known issues
 
-- Readers fail on several documented layouts (G1 to G10 in
-  `docs/format-assumptions.md`); nothing was fixed in this session by design.
+- Open format gaps (see `docs/format-assumptions.md`): `show system commit
+  revision detail` lines stay unknown (other command); the wrapped RT_FLOW
+  page sample needs its line wrapping undone; standard RT_FLOW lines have no
+  year, so `ingest` leaves their first and last seen times unset; DENY and
+  current-release standard lines are tested on lines built from the
+  templates, not on published lines.
 - Most documentation samples are old (12.x, 13.x) or state no release.
-- The standard (unstructured) RT_FLOW syslog format is not parsed yet (G10).
 - `palimp explain` without `--no-llm` prints a note and the same output (no
   LLM yet).
-- This session read both `src/palimp/formats/` and the spec's format section
-  (it is neither an analyzer nor a simulator session); the next analyzer
-  session should not reuse its knowledge of the spec beyond
-  `docs/format-assumptions.md`.
-- Session 6 metrics row is provisional (measured before the final commit).
+- Session 7 metrics row is provisional (measured before the final commit).
 - Git identity is set in the repository config only (`n-le-bourdiec`).
 - Session 2 Part C checks (WSL, KVM, Docker) are still not done.
 
@@ -86,9 +87,11 @@ timestamps of the opening prompts:
 - session 4: `2026-10-04T17:41:05.995Z` to `2026-10-04T18:26:35.446Z`
 - session 5: since `2026-10-04T18:26:35.446Z` (finalized in session 6)
 
-Session 6 has its own transcript `72beb9ef-54f4-42f0-8f55-6f97aafd613c`.
-Finalize it at the start of session 7 with:
+Session 6 has its own transcript `72beb9ef-54f4-42f0-8f55-6f97aafd613c`
+(finalized in session 7). Session 7 has transcript
+`cd397e63-3f27-4583-ab2d-1855580dff63`. Finalize it at the start of session 8
+with:
 
-    uv run python metrics/session_tokens.py 72beb9ef-54f4-42f0-8f55-6f97aafd613c
+    uv run python metrics/session_tokens.py cd397e63-3f27-4583-ab2d-1855580dff63
 
 Cost is API-equivalent (decision 0006), not a billed amount.
