@@ -465,7 +465,7 @@ Field meanings:
 
 ### 7.1 Knobs
 
-| Knob | easy | medium | hard | adversarial |
+| Knob | easy | medium | hard (v2) | adversarial (v2) |
 |---|---|---|---|---|
 | `years` | 2 | 4 | 7 | 10 |
 | applications | 8 | 25 | 60 | 120 |
@@ -481,11 +481,11 @@ Field meanings:
 | `ticket_rate` / export coverage | 0.9 / 1.0 | 0.6 / 0.8 | 0.4 / 0.5 | 0.2 / 0.3 |
 | CMDB present / staleness | yes / low | yes / medium | yes / high | no |
 | `cleanup_rate` | 0.9 | 0.6 | 0.3 | 0.15 |
-| `cleanup_error_rate` | 0 | 0.02 | 0.05 | 0.1 |
+| `cleanup_error_rate` | 0 | 0 (v2: 0.02) | 0.05 | 0.1 |
 | emergency events per year | 0 | 1 | 4 | 8 |
-| contractor periods | 0 | 1 | 2 | 4 |
-| `ip_reuse_rate` | 0 | 0.1 | 0.3 | 0.5 |
-| renames per year | 0 | 1 | 4 | 10 |
+| contractor periods | 0 | 0 (v2: 1) | 2 | 4 |
+| `ip_reuse_rate` | 0 | 0 (v2: 0.1) | 0.3 | 0.5 |
+| renames per year | 0 | 0 (v2: 1) | 4 | 10 |
 | commits per year (drives history horizon) | 20 | 60 | 150 | 300 |
 | rare jobs (quarterly, yearly) | 0 | 2 | 6 | 12 |
 | log format | structured | structured | structured | standard |
@@ -493,32 +493,38 @@ Field meanings:
 Each knob can be overridden individually; a scenario is defined by a level plus
 overrides.
 
+Scope (decision 0008): v1 implements Easy and Medium only. Hard and Adversarial
+are v2. In v1, Medium uses the values shown first; the values marked "v2" apply
+once the matching traps exist. Migrations in v1 use the duplicate and bridge
+styles only (repoint produces `TRAP-STALE-NAME`, a v2 trap).
+
 ### 7.2 Trap coverage rule
 
-Every trap below appears at least once in every hard and adversarial scenario,
-and each trap id is recorded on the rules it affects, so metrics can be
-reported per trap.
+v1: every v1 trap appears at least once in every Medium scenario. Easy
+scenarios contain no deliberate traps. v2: every trap appears at least once in
+every Hard and Adversarial scenario. Each trap id is recorded on the rules it
+affects, so metrics can be reported per trap.
 
 ### 7.3 Deliberate traps
 
-| Id | Situation | Naive conclusion | Truth |
-|---|---|---|---|
-| `TRAP-LIVE-NOLOG` | live rule without logging, hit counts recently reset | dead, remove | live; best verdict is verify |
-| `TRAP-RARE-JOB` | quarterly or yearly flow, no hits in window | dead, remove | live; removing it is the most severe error |
-| `TRAP-PREPROVISIONED` | rule created before go-live, zero hits | dead | live soon |
-| `TRAP-MISLEADING-COMMENT` | comment or ticket describes another change | trusts the comment | intent from other evidence |
-| `TRAP-BATCH-COMMIT` | one commit, one comment, many unrelated changes | one intent for all | per rule intents |
-| `TRAP-STALE-NAME` | rule name refers to an old app, objects repointed | intent from the name | intent of the current destination |
-| `TRAP-IP-REUSE` | dead rule matches traffic to a reused IP | live, keep | intent dead, traffic belongs elsewhere; verify |
-| `TRAP-SCANNER-HITS` | hits only from scanners or monitoring | live | dead for business use |
-| `TRAP-EMERGENCY-LOADBEARING` | "temporary" broad rule now the only one carrying a flow | remove the temp rule | needed, verify and replace |
-| `TRAP-SHADOWED-DUPLICATE` | valid intent, rule never matched because an earlier rule covers it | dead, unknown intent | intent known, rule redundant |
-| `TRAP-RENAME-CHAIN` | object or policy renamed, old rollbacks use old names | two unrelated rules | same rule |
-| `TRAP-DEACTIVATED` | deactivated policy still in config | active rule | inactive; intent historical |
-| `TRAP-TICKET-REJECTED` | ticket rejected or cancelled but rule exists | intent from ticket | intent unconfirmed |
-| `TRAP-HISTORY-HORIZON` | rule older than retained history | no T1 evidence means no intent | intent only from T2/T3/T4, confidence capped |
-| `TRAP-SHARED-LOGIN` | commits by `admin` or `root` | one author | several personas |
-| `TRAP-CLEANUP-FLAP` | live rule removed by mistake, re-added under another name | new unrelated rule | same intent as the removed one |
+| Id | Scope | Situation | Naive conclusion | Truth |
+|---|---|---|---|---|
+| `TRAP-LIVE-NOLOG` | v1 | live rule without logging, hit counts recently reset | dead, remove | live; best verdict is verify |
+| `TRAP-RARE-JOB` | v1 | quarterly or yearly flow, no hits in window | dead, remove | live; removing it is the most severe error |
+| `TRAP-PREPROVISIONED` | v1 | rule created before go-live, zero hits | dead | live soon |
+| `TRAP-MISLEADING-COMMENT` | v1 | comment or ticket describes another change | trusts the comment | intent from other evidence |
+| `TRAP-BATCH-COMMIT` | v1 | one commit, one comment, many unrelated changes | one intent for all | per rule intents |
+| `TRAP-STALE-NAME` | v2 | rule name refers to an old app, objects repointed | intent from the name | intent of the current destination |
+| `TRAP-IP-REUSE` | v2 | dead rule matches traffic to a reused IP | live, keep | intent dead, traffic belongs elsewhere; verify |
+| `TRAP-SCANNER-HITS` | v2 | hits only from scanners or monitoring | live | dead for business use |
+| `TRAP-EMERGENCY-LOADBEARING` | v1 | "temporary" broad rule now the only one carrying a flow | remove the temp rule | needed, verify and replace |
+| `TRAP-SHADOWED-DUPLICATE` | v2 | valid intent, rule never matched because an earlier rule covers it | dead, unknown intent | intent known, rule redundant |
+| `TRAP-RENAME-CHAIN` | v2 | object or policy renamed, old rollbacks use old names | two unrelated rules | same rule |
+| `TRAP-DEACTIVATED` | v1 | deactivated policy still in config | active rule | inactive; intent historical |
+| `TRAP-TICKET-REJECTED` | v2 | ticket rejected or cancelled but rule exists | intent from ticket | intent unconfirmed |
+| `TRAP-HISTORY-HORIZON` | v1 | rule older than retained history | no T1 evidence means no intent | intent only from T2/T3/T4, confidence capped |
+| `TRAP-SHARED-LOGIN` | v2 | commits by `admin` or `root` | one author | several personas |
+| `TRAP-CLEANUP-FLAP` | v2 | live rule removed by mistake, re-added under another name | new unrelated rule | same intent as the removed one |
 
 ## 8. Determinism and the dev / held-out split
 
