@@ -28,6 +28,12 @@ Non-goals:
 - Covering other vendors, or Junos features outside the v1 scope (decision 0003).
 - Sharing any code with palimp (section 10).
 
+Grounding rule: every simulated admin behavior and every trap must cite at
+least one public source describing it in real environments (audit guides,
+vendor documentation, practitioner write-ups, forum threads). Sources are
+listed in section 12. A behavior or trap without a source is marked
+UNGROUNDED there, and stays marked until a source is found.
+
 ## 2. Company model
 
 The simulator first builds a fictional company, then plays a timeline of events
@@ -619,3 +625,79 @@ Rules:
 
 Each confirmed assumption becomes a parser fixture under `tests/fixtures/vsrx/`
 and a conformance test on the simulator side.
+
+## 12. Behavioral grounding
+
+Sources were retrieved on 2026-10-04. Each was read, and the quoted claim was
+checked in the source text (quotes shortened). A source supports the behavior
+existing in real environments; the rates in section 7 are not taken from these
+sources and remain simulator choices.
+
+### 12.1 Sources
+
+| Id | Source | Claim used |
+|---|---|---|
+| S1 | NIST SP 800-41 Rev. 1, Guidelines on Firewalls and Firewall Policy, section 5, p. 5-4, https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-41r1.pdf | "Filling in such a comment is important for others to determine why a rule was made." Rule changes and comments should go to a configuration management log. |
+| S2 | Oklahoma OMES, Unused Firewall Rule Standard (effective 2022-10-05), https://aem-prod.oklahoma.gov/content/dam/ok/en/omes/documents/unused-firewall-rule-standard-UA.pdf | Rules unused for 90 days are identified, then disabled. "Some rules are necessary despite being used less frequently than every 90 days", reviewed yearly. |
+| S3 | Verus, "Firewall Rule Changes That Quietly Become Security Risks", https://veruscorp.com/firewall-rule-changes-security-mess/ | "Rules added for vendor access during a project remain active after the vendor has been offboarded." Expiration dates "almost never implemented". Rules with "no documentation, no requestor, no business justification". Urgent fixes made by adding a rule. |
+| S4 | InfraRunBook, "Junos Commit and Rollback Explained", https://infrarunbook.com/article/junos-commit-and-rollback-explained | Up to 50 rollback configurations (0 to 49); with frequent commits "this history may only span days or weeks". Commit comments appear in the rollback history. |
+| S5 | Juniper, `show security policies hit-count` reference, https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/ref/command/show-security-policies-hit-count.html | "The device clears the count if a node reboots and the PFE in the node also reboots." ISSU clears all counters. |
+| S6 | Juniper, Monitoring and Troubleshooting Security Policies, https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/monitoring-troubleshooting-security-policy.html | Logging is enabled per security policy, at session-init or session-close. |
+| S7 | Sherlock Forensics, "Top 10 Firewall Misconfigurations We Find in Every Pentest", https://www.sherlockforensics.com/blog/top-10-firewall-misconfigurations-we-find.html | "Firewall logging is frequently disabled on high-volume rules." Temporary troubleshooting rules "never tightened afterward". After decommissioning, rules remain; if the IP is reassigned the stale rule creates exposure. Any/any rules. |
+| S8 | Tufin, "Firewall Rule Base Cleanup" (expert tip 6), https://www.tufin.com/blog/how-to-clean-up-a-firewall-rulebase-tufin-firewall-expert-tip-6 | "Multiple administrators may add new rules, duplicate configurations, or leave unused rules and objects in place." Same subnet defined twice under different names. "Shadowed rules are never used because another rule above them already covers the same traffic." |
+| S9 | scip AG, "Firewalls - Rules to Rule the Rules", https://www.scip.ch/en/?labs.20140403 | "Inconsistent naming convention for objects" as a common problem; "different people will have different method of doing things"; maintenance checks for "rules with empty comment". |
+| S10 | FWChange, "ISO 27001 Firewall Audit: 12 Controls Checklist", https://fwchange.com/blog/iso-27001-firewall-audit-checklist/ | "Shared accounts or generic 'admin' credentials are an immediate finding." |
+| S11 | SRQL, "Firewall Rule Base Cleanup and High Availability Playbook", https://srql.com/knowledge/firewall-rule-cleanup-high-availability-playbook/ | Common mistake: "removing rarely used rules that serve infrequent but essential traffic". Collect 30 to 90 days of data "so infrequent but legitimate flows are visible". |
+| S12 | narrowin, "Untangling a legacy firewall rule base", https://narrowin.com/en/work-firewall-cleanup | "Many of those rules quietly carry a real operational need"; deleting without understanding them "is how you cause the outage". |
+
+### 12.2 Admin behaviors (section 3 and 4)
+
+| Behavior | Sources |
+|---|---|
+| Descriptive comments and descriptions (meticulous senior) | S1 |
+| Empty or missing comments and documentation | S3, S9 |
+| Vague one-word commit comments (`fix`, `update`) | UNGROUNDED |
+| Misleading comments (describe another change) | UNGROUNDED |
+| Ticket ids in comments or names | UNGROUNDED (S1 recommends logging changes, does not show the practice) |
+| Personal, inconsistent naming styles per admin | S8, S9 |
+| Duplicate objects for the same address under different names | S8 |
+| Batching unrelated changes in one commit | UNGROUNDED |
+| Logging left off on many rules | S6, S7 |
+| Contractor or vendor rules left after offboarding | S3 |
+| Broad rules (`any`, wide subnets) | S7 |
+| Emergency rules added as the fast fix, never removed | S3, S7 |
+| Commits at night or week-ends by on-call admins | UNGROUNDED |
+| Automation account with templated names and comments over netconf | UNGROUNDED |
+| Shared `admin` / `root` logins | S10 |
+| Cleanup disables rules before (or instead of) deleting them | S2 |
+| Cleanup by hit count over a 90 day window | S2, S11 |
+| Cleaner renames rules to a new convention | UNGROUNDED |
+| Rules left in place after decommission | S7, S8 |
+| IP address reused after decommission | S7 |
+| Hit counts reset by reboot or upgrade | S5 |
+| Commit history limited to recent commits | S4 |
+
+### 12.3 Traps (section 7.3)
+
+| Trap | Scope | Sources |
+|---|---|---|
+| `TRAP-LIVE-NOLOG` | v1 | S5, S6, S7 |
+| `TRAP-RARE-JOB` | v1 | S2, S11 |
+| `TRAP-PREPROVISIONED` | v1 | UNGROUNDED |
+| `TRAP-MISLEADING-COMMENT` | v1 | UNGROUNDED |
+| `TRAP-BATCH-COMMIT` | v1 | UNGROUNDED |
+| `TRAP-EMERGENCY-LOADBEARING` | v1 | S3, S7, S12 |
+| `TRAP-HISTORY-HORIZON` | v1 | S4 |
+| `TRAP-DEACTIVATED` | v1 | S2 |
+| `TRAP-STALE-NAME` | v2 | UNGROUNDED |
+| `TRAP-IP-REUSE` | v2 | S7 |
+| `TRAP-SCANNER-HITS` | v2 | UNGROUNDED |
+| `TRAP-SHADOWED-DUPLICATE` | v2 | S8 |
+| `TRAP-RENAME-CHAIN` | v2 | UNGROUNDED |
+| `TRAP-TICKET-REJECTED` | v2 | UNGROUNDED |
+| `TRAP-SHARED-LOGIN` | v2 | S10 |
+| `TRAP-CLEANUP-FLAP` | v2 | S11, S12 (removal of a live rule; the re-add under a new name is UNGROUNDED) |
+
+Three v1 traps are UNGROUNDED (`TRAP-PREPROVISIONED`,
+`TRAP-MISLEADING-COMMENT`, `TRAP-BATCH-COMMIT`). They stay in v1 scope
+(decision 0008) but need a source before Medium is considered done.
