@@ -1,0 +1,25 @@
+[project]
+name = "palimp-sim"
+version = "0.1.0"
+description = "Synthetic firewall history generator used to evaluate palimp. Not part of palimp."
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "jsonschema>=4.20",
+]
+
+[project.scripts]
+palimp-sim = "palimp_sim.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/palimp_sim"]
+
+[tool.ruff]
+extend = "../pyproject.toml"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"palimp".msg = "The simulator never imports the analyzer (decision 0009)."

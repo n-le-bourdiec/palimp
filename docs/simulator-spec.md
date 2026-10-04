@@ -582,10 +582,12 @@ the generator and the analyzer, so scores look good for the wrong reason.
 
 Rules:
 
-- The simulator lives in the top level `simulator/` package. It never imports
-  `palimp`, and `src/palimp` never imports `simulator`. Enforced in CI with
-  ruff's banned import rule (`TID251`, `flake8-tidy-imports.banned-api`) per
-  directory, plus a test that scans imports.
+- The simulator is a separate uv workspace member in `simulator/` (decision
+  0009): distribution `palimp-sim`, import package `palimp_sim`, command
+  `palimp-sim`, never shipped in the palimp wheel. It never imports `palimp`,
+  and `src/palimp` never imports `palimp_sim`. Enforced in CI with ruff's
+  banned import rule (`TID251`) configured per project, plus a test that scans
+  imports.
 - No shared helper module, not even for Junos formatting. The simulator writes
   Junos text with its own templates; palimp parses it with its own parser. The
   only shared contract is the ground truth JSON Schema, consumed by the
@@ -598,8 +600,6 @@ Rules:
 - Sessions are single-mission (CLAUDE.md): a session working on the analyzer
   does not modify the simulator, and the reverse. Changes to trap definitions
   are reviewed as simulator changes, never made to fix an analyzer score.
-- The simulator can later become its own uv workspace member with its own
-  dependencies, to make the boundary physical.
 
 ## 11. Format assumptions to confirm on a real vSRX
 
