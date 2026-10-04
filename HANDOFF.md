@@ -1,63 +1,70 @@
 # Handoff
 
-## Last session: 5 (2026-10-04), analyzer milestone 1
+## Last session: 6 (2026-10-04), format assumptions vs Juniper documentation
 
 ### Done
 
-- Session 4 metrics row finalized.
-- Slow marker: `conftest.py` skips tests marked `slow` unless `--runslow` or
-  the `CI` variable is set. The leakage test runs seeds 0 to 9 locally and
-  0 to 99 in CI. Local suite: about 28 s.
-- Analyzer (src/palimp only, built from artifacts and the ground truth schema):
-  - `models.py`: pydantic models (Policy, AddressObject, Application, Commit,
-    Evidence, Finding, Dataset, ...).
-  - `formats/`: one reader per vendor format (junos_set, commits, rollbacks,
-    hitcount, rt_flow, tickets). Unknown lines are counted and sampled, never
-    fatal.
-  - `ingest.py`: reads a directory, finds the commit that created each policy
-    by diffing consecutive configurations. `palimp ingest DIR -o out.json`.
-  - `evidence.py`: T1 (description, creation commit comment, ticket references
-    matched against tickets.csv) and T3 (address objects, policies created in
-    the same commit). No scoring.
-  - `palimp explain FROM/TO/NAME --no-llm [--json] [--all] -a DIR`.
-- `eval/evidence_recall.py`: dev seeds only, subprocess black boxes, recall per
-  tier. Easy seeds 0 to 19: T1 100% (2033/2033), T3 100% (1416/1416), rules with
-  a T1 item found 97.6% (783/802, equal to what the ground truth expects),
-  20 T3 items found but not expected (address objects).
-- Decision 0011: recall matches on rule, tier and artifact (locators are not
-  compared).
+- Session 5 metrics row finalized (29 calls, 3.74 USD API-equivalent).
+- Noted below: one Claude Code conversation per session from session 6.
+- Decision 0012: `TRAP-PREPROVISIONED` moves to v2; v1 has 7 traps
+  (supersedes the trap list of 0008).
+- Decision 0013: documentation-sourced fixtures replace the vSRX lab for now
+  (supersedes the vSRX lab line of 0005 and the matching consequence of 0003).
+- Decision 0011 amended: extra evidence items are not errors unless misleading.
+- CLAUDE.md: independence rule (analyzer sessions read neither `simulator/`
+  nor `docs/simulator-spec.md`, only the ground truth JSON Schema; simulator
+  sessions do not read `src/palimp`), and the fixture source line.
+- 19 fixtures in `tests/fixtures/junos_docs/`, each copied from a Juniper
+  documentation page or the System Log Explorer data, with source URL, page
+  title, release and retrieval date.
+- `docs/format-assumptions.md`: VSRX-1 to VSRX-12 split into 26 claims;
+  CONFIRMED 12 (2 only in part), CORRECTED 7, UNVERIFIED 7. Reader results on
+  the fixtures and gaps G1 to G10 (analyzer) and S1 to S6 (simulator).
+- `eval/format_fixtures.py`: runs the readers on the fixtures. Today: 6 of 15
+  reader fixtures parse apart from prompt lines (2 of them leave text in
+  `extra`), 9 show real gaps.
 
 ### Next
 
-- Finalize session 5's metrics row first.
-- Analyzer: T2 collectors (hit counts, logs) and T4, then confidence scoring
-  and verdicts, then `report` and `questions`.
-- Eval: compare verdicts and confidence once palimp produces them; consider a
-  structured locator so recall can check the exact commit or ticket.
-- Simulator milestone 2 (Medium with v1 traps) to make the recall numbers
-  meaningful.
+- Analyzer session: fix G4 to G9 in `src/palimp/formats/` (commit `extra`
+  text, right-aligned indexes, hit-count layouts, `_LS` messages, collector
+  prefix, text after `]`), then G10 (standard RT_FLOW) and G1 (prompt lines).
+  Turn `eval/format_fixtures.py` results into tests once they pass.
+- Simulator session: S1 to S6, and mark `TRAP-PREPROVISIONED` as v2 in
+  `docs/simulator-spec.md` (decision 0012; not done here because analyzer
+  sessions must not read the spec).
+- Then the analyzer plan from session 5: T2 collectors (hit counts, logs) and
+  T4, confidence scoring and verdicts, `report` and `questions`.
 
 ### Open questions
 
-- 100% recall on Easy says little: Easy evidence is complete and consistent by
-  design, and matching ignores locators (decision 0011). Should the next eval
-  step be Medium, or a stricter matcher?
-- The 20 extra T3 items: palimp reports address objects for some rules where
-  the ground truth lists none. My guess is generic objects (users-all, any
-  based rules). Which side should change?
-- Independence: I wrote the simulator in sessions 3 and 4, so I knew its
-  conventions while writing the analyzer, even without opening its files in
-  session 5. A truly blind check needs someone else (or a fresh agent without
-  that history) to write or review the analyzer.
+- VSRX-4d, where the commit comment is printed, is the riskiest open point:
+  the spec puts it on the next indented line, the only documentation hint puts
+  it on the same line after the method. Commit comments are palimp's main T1
+  source. Can the project lead check on any real SRX (a single
+  `show system commit` with one commented commit is enough)?
+- Is text evidence (documentation prose, no sample) acceptable to CONFIRM a
+  behavioral assumption (VSRX-3, VSRX-5, VSRX-6, VSRX-7c)? The table marks it
+  as `text` so it can be downgraded.
+- Should palimp accept syslog-server copies of RT_FLOW (collector prefix, no
+  `<PRI>`)? Probably yes: inherited logs often come from a collector.
+- Carried over: 100% recall on Easy says little (Medium or a stricter matcher
+  next?); the 20 extra T3 items (decision 0011 amendment now says they are
+  neutral unless misleading, but the harness does not classify them yet).
 
 ### Known issues
 
-- Artifact formats are still VSRX assumptions (VSRX-1 to VSRX-12); readers
-  are isolated in src/palimp/formats/ for that reason.
-- The standard (unstructured) RT_FLOW syslog format is not parsed yet.
+- Readers fail on several documented layouts (G1 to G10 in
+  `docs/format-assumptions.md`); nothing was fixed in this session by design.
+- Most documentation samples are old (12.x, 13.x) or state no release.
+- The standard (unstructured) RT_FLOW syslog format is not parsed yet (G10).
 - `palimp explain` without `--no-llm` prints a note and the same output (no
   LLM yet).
-- Session 5 metrics row is provisional.
+- This session read both `src/palimp/formats/` and the spec's format section
+  (it is neither an analyzer nor a simulator session); the next analyzer
+  session should not reuse its knowledge of the spec beyond
+  `docs/format-assumptions.md`.
+- Session 6 metrics row is provisional (measured before the final commit).
 - Git identity is set in the repository config only (`n-le-bourdiec`).
 - Session 2 Part C checks (WSL, KVM, Docker) are still not done.
 
@@ -77,12 +84,11 @@ timestamps of the opening prompts:
 - session 2: `2026-09-28T14:58:54.152Z` to `2026-10-04T17:18:08.869Z`
 - session 3: `2026-10-04T17:18:08.869Z` to `2026-10-04T17:41:05.995Z`
 - session 4: `2026-10-04T17:41:05.995Z` to `2026-10-04T18:26:35.446Z`
-- session 5: since `2026-10-04T18:26:35.446Z`
+- session 5: since `2026-10-04T18:26:35.446Z` (finalized in session 6)
 
-Finalize session 5 with:
+Session 6 has its own transcript `72beb9ef-54f4-42f0-8f55-6f97aafd613c`.
+Finalize it at the start of session 7 with:
 
-    uv run python metrics/session_tokens.py 3a8f81f6-6569-476c-acc9-fee746e79b0b --since 2026-10-04T18:26:35.446Z --until <session 6 prompt timestamp>
+    uv run python metrics/session_tokens.py 72beb9ef-54f4-42f0-8f55-6f97aafd613c
 
-If session 6 runs in a new conversation, omit `--until`. Find a prompt
-timestamp by searching the transcript for `This is session N`. Cost is
-API-equivalent (decision 0006), not a billed amount.
+Cost is API-equivalent (decision 0006), not a billed amount.
