@@ -52,7 +52,9 @@ def visible_texts(files: dict[str, str], truth: dict, rule: dict) -> list[str]:
     return [text for text in texts if text]
 
 
-@pytest.mark.parametrize("seed", range(100))
+@pytest.mark.parametrize(
+    "seed", [s if s < 10 else pytest.param(s, marks=pytest.mark.slow) for s in range(100)]
+)
 def test_no_ground_truth_text_in_visible_texts(seed: int) -> None:
     files = {path: data.decode("utf-8") for path, data in generate("easy", seed).items()}
     truth = json.loads(files["ground_truth.json"])
