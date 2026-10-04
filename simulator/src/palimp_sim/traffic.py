@@ -135,7 +135,9 @@ def simulate(sim, rng: Rng) -> TrafficResult:
     rng_log = rng.derive("logs")
 
     for day in range(total):
-        while pointer + 1 < len(commits) and commits[pointer + 1].day <= day:
+        # A commit applies from the day after it, so no session on the commit
+        # day can be attributed to a policy committed later that day.
+        while pointer + 1 < len(commits) and commits[pointer + 1].day < day:
             pointer += 1
             matcher = Matcher(commits[pointer].config, zone_of_role)
         if matcher is None:
