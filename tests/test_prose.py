@@ -5,18 +5,21 @@ Black box on Easy seed 0: the simulator writes a scenario, palimp reads only
 its artifacts.
 """
 
+import json
 import logging
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
+from palimp.cli import app
 from palimp.ingest import ingest
 from palimp.llm import FakeBackend, Request
 from palimp.models import Dataset
 from palimp.prose import Names, add_prose, check, evidence_text, write_rule
-from palimp.report import CITE, LLMRun, Report, RuleEntry, build
+from palimp.report import CITE, LLMRun, Report, RuleEntry, build, markdown
 
 
 @pytest.fixture(scope="module")
@@ -209,3 +212,34 @@ def test_prose_never_changes_a_judgment(report: Report, dataset: Dataset) -> Non
         assert set(CITE.findall(entry.prose)) <= ids, entry.ref
     facts = {f.id for f in report.summary_facts}
     assert set(CITE.findall(report.executive_summary)) <= facts
+    text = markdown(report)
+    assert "## Executive summary" in text and "*In words:*" in text
+
+
+def test_cli_defaults_to_no_llm(artifacts: Path, report: Report, tmp_path: Path) -> None:
+    key = report.rules[0].key
+    runner = CliRunner()
+    result = runner.invoke(app, ["explain", key, "-a", str(artifacts)])
+    assert result.exit_code == 0, result.output
+    assert "In words:" not in result.output
+    result = runner.invoke(
+        app, ["explain", key, "-a", str(artifacts), "--llm", "--llm-backend", "fake"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "In words:" in result.output
+    result = runner.invoke(
+        app, ["explain", key, "-a", str(artifacts), "--llm", "--llm-url", "http://10.1.1.1"]
+    )
+    assert result.exit_code == 2
+    out = tmp_path / "r"
+    result = runner.invoke(app, ["report", "-a", str(artifacts), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "## Executive summary" not in (out / "report.md").read_text(encoding="utf-8")
+    assert not (out / "llm-rejections.json").exists()
+    result = runner.invoke(
+        app, ["report", "-a", str(artifacts), "-o", str(out), "--llm", "--llm-backend", "fake"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "## Executive summary" in (out / "report.md").read_text(encoding="utf-8")
+    run = json.loads((out / "llm-rejections.json").read_text(encoding="utf-8"))
+    assert run["backend"] == "fake"

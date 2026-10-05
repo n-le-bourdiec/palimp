@@ -8,11 +8,13 @@ import typer
 from palimp import __version__
 from palimp.evidence import collect, collect_all
 from palimp.ingest import ingest as ingest_directory
+from palimp.llm import DEFAULT_OLLAMA_URL, Backend, FakeBackend, NonLocalURLError, OllamaBackend
 from palimp.models import Dataset, Finding, ParseStats, PolicyKey
+from palimp.prose import Names, add_prose, write_rule
 from palimp.questions import answers_csv
 from palimp.questions import build as build_questions
+from palimp.report import LLMRun, Report, json_report, markdown
 from palimp.report import build as build_report
-from palimp.report import json_report, markdown
 
 app = typer.Typer(
     help="Reconstruct the lost intent behind inherited firewall rules.",
@@ -44,6 +46,38 @@ LOG_YEAR_HELP = (
     "Year of the first log line whose timestamp has no year (standard syslog format). "
     "By default it is inferred from the latest commit date, with a warning."
 )
+
+
+LLM_HELP = (
+    "Add a prose paragraph written by a local LLM (Ollama). Off by default: verdicts, "
+    "confidence and owners never depend on it, and every sentence is checked against the "
+    "evidence it cites."
+)
+LLM_URL_HELP = "Ollama URL. Only localhost or a loopback address is accepted."
+
+
+def _backend(name: str, model: str, url: str) -> Backend:
+    if name == "fake":
+        return FakeBackend()
+    if name != "ollama":
+        typer.echo(f"error: unknown LLM backend {name!r} (ollama)", err=True)
+        raise typer.Exit(2)
+    try:
+        backend = OllamaBackend(model, url)
+    except NonLocalURLError as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(2) from error
+    if not model:
+        typer.echo("error: --llm-model is required with the ollama backend", err=True)
+        raise typer.Exit(2)
+    return backend
+
+
+def _llm_line(run: LLMRun) -> str:
+    return (
+        f"llm ({run.backend}): {run.sentences_kept} sentences kept, "
+        f"{run.sentences_rejected} rejected, {run.fallbacks} paragraphs with deterministic text"
+    )
 
 
 def _load(source: Path, log_year: int | None = None) -> Dataset:
@@ -178,14 +212,16 @@ def explain(
     source: Path = typer.Option(
         Path("."), "--artifacts", "-a", help="Artifact directory or `palimp ingest` JSON."
     ),
-    no_llm: bool = typer.Option(False, "--no-llm", help="Facts and evidence only, no prose."),
+    llm: bool = typer.Option(False, "--llm/--no-llm", help=LLM_HELP),
+    llm_backend: str = typer.Option("ollama", "--llm-backend", hidden=True),
+    llm_model: str = typer.Option("", "--llm-model", help="Ollama model name."),
+    llm_url: str = typer.Option(DEFAULT_OLLAMA_URL, "--llm-url", help=LLM_URL_HELP),
     as_json: bool = typer.Option(False, "--json", help="Print JSON instead of text."),
     all_policies: bool = typer.Option(False, "--all", help="Explain every policy."),
     log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
 ) -> None:
     """Show a policy and the evidence found for it."""
-    if not no_llm:
-        typer.echo("note: LLM prose is not implemented yet; showing --no-llm output", err=True)
+    backend = _backend(llm_backend, llm_model, llm_url) if llm else None
     dataset = _load(source, log_year)
     if dataset.log_window.year_source in ("inferred", "none"):
         typer.echo(f"warning: {dataset.log_window.year_note}", err=True)
@@ -200,12 +236,31 @@ def explain(
         except (KeyError, ValueError) as error:
             typer.echo(f"error: {error}", err=True)
             raise typer.Exit(1) from error
+    prose: dict[str, str] = {}
+    if backend is not None:
+        built = build_report(dataset, collect_all(dataset))
+        names = Names.of(dataset, [r.finding for r in built.rules])
+        run = LLMRun(backend=backend.name, model=llm_model)
+        wanted = {str(f.key) for f in findings}
+        for entry in built.rules:
+            if entry.key in wanted:
+                prose[entry.key] = write_rule(entry, backend, names, run)
+        typer.echo(_llm_line(run), err=True)
     if as_json:
         payload = [f.model_dump(mode="json") for f in findings]
+        for finding, item in zip(findings, payload, strict=True):
+            if str(finding.key) in prose:
+                item["prose"] = prose[str(finding.key)]
         typer.echo(json.dumps(payload if all_policies else payload[0], indent=2))
     else:
         notes: dict[str, int] | None = {} if all_policies else None
-        typer.echo("\n\n".join(_render(f, dataset, notes) for f in findings))
+        texts = []
+        for finding in findings:
+            text = _render(finding, dataset, notes)
+            if str(finding.key) in prose:
+                text += f"\nIn words:\n  {prose[str(finding.key)]}"
+            texts.append(text)
+        typer.echo("\n\n".join(texts))
         if notes:
             typer.echo("\n" + _notes(notes, findings))
 
@@ -226,11 +281,22 @@ def report(
         Path("palimp-report"), "--out", "-o", help="Output directory (report.md, report.json)."
     ),
     log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
+    llm: bool = typer.Option(False, "--llm/--no-llm", help=LLM_HELP),
+    llm_backend: str = typer.Option("ollama", "--llm-backend", hidden=True),
+    llm_model: str = typer.Option("", "--llm-model", help="Ollama model name."),
+    llm_url: str = typer.Option(DEFAULT_OLLAMA_URL, "--llm-url", help=LLM_URL_HELP),
 ) -> None:
     """Write a Markdown and a JSON report of every policy."""
+    backend = _backend(llm_backend, llm_model, llm_url) if llm else None
     dataset, findings = _findings(source, log_year)
-    built = build_report(dataset, findings)
+    built: Report = build_report(dataset, findings)
     out.mkdir(parents=True, exist_ok=True)
+    if backend is not None:
+        run = add_prose(built, dataset, backend, llm_model)
+        (out / "llm-rejections.json").write_text(
+            run.model_dump_json(indent=2) + "\n", encoding="utf-8"
+        )
+        typer.echo(_llm_line(run), err=True)
     (out / "report.md").write_text(markdown(built), encoding="utf-8")
     (out / "report.json").write_text(json_report(built), encoding="utf-8")
     s = built.summary

@@ -596,6 +596,8 @@ def _rule_md(entry: RuleEntry, level: str) -> list[str]:
         lines.append(f"- **Who to ask:** {entry.owner}")
     if entry.question:
         lines.append(f"- **Question:** {entry.question} (yes / no)")
+    if entry.prose:
+        lines.append(f"- *In words:* {entry.prose}")
     lines.append("")
     return lines
 
@@ -617,12 +619,27 @@ def plural(count: int, word: str) -> str:
 
 def markdown(report: Report) -> str:
     s = report.summary
+    if report.llm is None:
+        how = "deterministic, no LLM"
+    else:
+        model = f" {report.llm.model}" if report.llm.model else ""
+        how = (
+            f"deterministic verdicts; prose written by a local LLM ({report.llm.backend}{model}), "
+            "every sentence checked against the evidence it cites "
+            f"({report.llm.sentences_rejected} sentences rejected and replaced)"
+        )
     out = [
         "# palimp report",
         "",
-        f"Source: `{report.source}`. palimp {report.palimp_version}, deterministic, no LLM. "
+        f"Source: `{report.source}`. palimp {report.palimp_version}, {how}. "
         "Read-only: nothing here is a command to push.",
         "",
+    ]
+    if report.executive_summary:
+        out += ["## Executive summary", "", report.executive_summary, "", "Facts cited:", ""]
+        out += [f"- [{f.id}] {f.text}" for f in report.summary_facts if f.id.startswith("S")]
+        out += ["- G items: see Facts about the whole artifact set.", ""]
+    out += [
         "## Summary",
         "",
         "| verdict | rules |",
