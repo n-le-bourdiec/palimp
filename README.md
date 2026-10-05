@@ -8,6 +8,10 @@ exists, the ranked evidence behind that guess, a confidence level, a verdict (ke
 verify, removal candidate) and the question to ask the rule owner. Nothing leaves your
 machine: no network egress, no telemetry, and the optional LLM runs locally.
 
-**Status: work in progress.** Nothing usable yet beyond `palimp --version`.
+**Status: work in progress.** Deterministic analysis works without an LLM:
+
+    palimp explain --all --no-llm -a ARTIFACTS   # every policy, its evidence and verdict
+    palimp report -a ARTIFACTS -o OUT            # OUT/report.md and OUT/report.json
+    palimp questions -a ARTIFACTS -o OUT         # one questionnaire per owner, OUT/answers.csv
 
 Licensed under the Apache License 2.0.

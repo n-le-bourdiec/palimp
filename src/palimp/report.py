@@ -391,6 +391,12 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
     owned = sum(1 for e in entries if e.section != "keep" and e.finding.assessment.owner)  # type: ignore[union-attr]
     asked = count["verify"] + count["removal_candidate"]
     window = [g.id for g in found if g.locator == "first and last log line"]
+    counters_only = sum(
+        1
+        for e in entries
+        if e.section == "keep"
+        and not any(i.kind == "session_log" and i.signal == "present" for i in e.finding.evidence)
+    )
     sure = [
         Cited(
             text=(
@@ -402,9 +408,10 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
         ),
         Cited(
             text=(
-                f"{count['keep']} rules carry traffic in the session log or the hit counters: "
-                "they are in use. That does not prove their intent is right or that they are "
-                "not too broad."
+                f"{count['keep']} rules carry traffic in the session log or the hit counters. "
+                f"For {counters_only} of them only the counters show it: hits since the last "
+                "counter clear, whose date is unknown, so that use may be old. Traffic does "
+                "not prove the intent is right or that the rule is not too broad."
             ),
             evidence=window,
         ),
