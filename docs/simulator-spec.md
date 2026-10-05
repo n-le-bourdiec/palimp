@@ -715,6 +715,16 @@ Decision 0007 defines where held-out evaluation runs.
   `SHA-256("<salt>:<level>:<index>")`. The salt is the GitHub repository secret
   `HOLDOUT_SALT`. It never exists on the development machine, because the coding
   agent has full access to that machine.
+- Held-out seed space (decision 0021): the seed is `2**63` plus the first 8
+  bytes of the digest (big endian). Dev seeds must be below `2**63`
+  (`generate` rejects anything else), so the two sets never collide.
+- `palimp-sim generate --level <level> --holdout <index>` reads the salt from
+  the `HOLDOUT_SALT` environment variable and fails with a clear message when
+  it is missing or empty. The output directory is
+  `scenario-holdout-<level>-<index>`. No file contains the salt or the derived
+  seed: `scenario_id` is `<level>-<index>` (same pattern as dev ids, so the
+  ground truth schema is unchanged), and the manifest has `split: held-out`
+  and `holdout_index` instead of `seed`.
 - Held-out scenarios are generated and scored only in a GitHub Actions workflow
   with a `workflow_dispatch` trigger, started by the project lead. The workflow
   prints aggregate metrics only (per level and per trap). It never prints seeds,
@@ -724,7 +734,7 @@ Decision 0007 defines where held-out evaluation runs.
   peeking is visible.
 - The project lead rotates the salt when the simulator version changes in a way
   that affects difficulty.
-- The workflow is written once the simulator can generate scenarios.
+- The workflow is `.github/workflows/holdout.yml` (session 13).
 
 ## 9. Evaluation interface (for reference)
 

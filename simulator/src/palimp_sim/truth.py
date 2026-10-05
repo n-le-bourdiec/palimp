@@ -214,13 +214,16 @@ def _name_of(sim, uid: str) -> str:
     raise KeyError(uid)
 
 
-def ground_truth(sim, traffic: TrafficResult, live: dict, log_lines: dict) -> dict:
+def ground_truth(
+    sim, traffic: TrafficResult, live: dict, log_lines: dict, scenario_id: str | None = None
+) -> dict:
+    """`scenario_id` defaults to level and seed; held-out scenarios pass their index instead."""
     config = sim.config
     snapshot = sim.date(sim.total_days)
     document = {
         "schema_version": 1,
         "simulator_version": __version__,
-        "scenario_id": f"{sim.level.name}-{sim.seed:06d}",
+        "scenario_id": scenario_id or f"{sim.level.name}-{sim.seed:06d}",
         "level": sim.level.name,
         "snapshot": f"{snapshot.isoformat()}T09:00:00Z",
         "hit_count_reset": _iso(sim, sim.hit_reset_day),

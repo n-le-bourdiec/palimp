@@ -14,9 +14,19 @@ from palimp_sim.traffic import live_policies, simulate
 from palimp_sim.truth import ground_truth
 from palimp_sim.world import Simulation
 
+# Dev seeds stay below this floor, held-out seeds are at or above it, so the
+# two sets never collide (spec section 8.2, decision 0021).
+HOLDOUT_SEED_FLOOR = 2**63
+
 
 def scenario_id(level: str, seed: int) -> str:
     return f"{level}-{seed:06d}"
+
+
+def holdout_seed(salt: str, level: str, index: int) -> int:
+    """Seed of held-out scenario `index`: SHA-256("<salt>:<level>:<index>") above the floor."""
+    digest = hashlib.sha256(f"{salt}:{level}:{index}".encode()).digest()
+    return HOLDOUT_SEED_FLOOR + int.from_bytes(digest[:8], "big")
 
 
 def _json(document: dict) -> str:
@@ -44,14 +54,36 @@ def clock_skew(rng: Rng) -> int:
 
 
 def generate(level: str, seed: int, overrides: dict | None = None) -> dict[str, bytes]:
-    """Return every file of the scenario as {relative path: content}.
+    """Return every file of the dev scenario as {relative path: content}.
 
     `overrides` replaces individual knobs of the level (spec section 7.1).
     """
+    if not 0 <= seed < HOLDOUT_SEED_FLOOR:
+        raise ValueError(f"dev seed must be between 0 and {HOLDOUT_SEED_FLOOR - 1}")
+    return _generate(level, seed, overrides, {"seed": seed, "split": "dev"})
+
+
+def generate_holdout(
+    level: str, salt: str, index: int, overrides: dict | None = None
+) -> dict[str, bytes]:
+    """Return every file of held-out scenario `index` (decision 0007, spec section 8.2).
+
+    The derived seed appears in no file: the scenario id and the manifest carry
+    the index instead.
+    """
+    if not salt:
+        raise ValueError("held-out generation needs a non-empty salt")
+    if index < 0:
+        raise ValueError("held-out index must be zero or positive")
+    seed = holdout_seed(salt, level, index)
+    return _generate(level, seed, overrides, {"holdout_index": index, "split": "held-out"}, index)
+
+
+def _generate(
+    level: str, seed: int, overrides: dict | None, split: dict, label: int | None = None
+) -> dict[str, bytes]:
     if level not in LEVELS:
         raise ValueError(f"level {level!r} is not implemented (available: {sorted(LEVELS)})")
-    if seed < 0:
-        raise ValueError("seed must be zero or positive")
     overrides = dict(overrides or {})
     rng = Rng(f"palimp-sim:{level}:{seed}")
     knobs = LEVELS[level].with_overrides(overrides)
@@ -72,14 +104,15 @@ def generate(level: str, seed: int, overrides: dict | None = None) -> dict[str, 
         "artifacts/tickets.csv": tickets_csv(sim),
     }
     texts.update({f"artifacts/{path}": text for path, text in rollback_files(sim).items()})
-    texts["ground_truth.json"] = _json(ground_truth(sim, traffic, live_policies(sim), log_lines))
+    sid = scenario_id(level, seed if label is None else label)
+    truth = ground_truth(sim, traffic, live_policies(sim), log_lines, sid)
+    texts["ground_truth.json"] = _json(truth)
     files = {path: text.encode("utf-8") for path, text in sorted(texts.items())}
     manifest = {
         "simulator_version": __version__,
-        "scenario_id": scenario_id(level, seed),
+        "scenario_id": sid,
         "level": level,
-        "seed": seed,
-        "split": "dev",
+        **split,
         "snapshot": sim.date(sim.total_days).isoformat(),
         "knobs": sim.level.knobs(),
     }
