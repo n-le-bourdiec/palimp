@@ -91,7 +91,12 @@ def ingest(
     typer.echo(f"{len(dataset.config.policies)} policies written to {out}")
 
 
-def _render(finding: Finding, dataset: Dataset) -> str:
+def _cite(ids: list[str]) -> str:
+    return " ".join(f"[{i}]" for i in ids)
+
+
+def _render(finding: Finding, dataset: Dataset, notes: dict[str, int] | None = None) -> str:
+    """Text view of one finding. With `notes`, blind T2 items point to a global note."""
     policy = finding.policy
     state = "deactivated" if policy.deactivated else "active"
     logging = [
@@ -120,8 +125,45 @@ def _render(finding: Finding, dataset: Dataset) -> str:
     if not finding.evidence:
         lines.append("  none found")
     for item in finding.evidence:
+        if notes is not None and item.signal == "blind":
+            note = notes.setdefault(item.claim, len(notes) + 1)
+            lines.append(
+                f"  [{item.id}] {item.tier} {item.artifact} :: no traffic visible, see note N{note}"
+            )
+            continue
         lines.append(f"  [{item.id}] {item.tier} {item.artifact} :: {item.locator}")
         lines.append(f"       {item.claim}")
+    if assessment := finding.assessment:
+        lines.append("Assessment:")
+        lines.append(
+            f"  verdict:      {assessment.verdict} ({assessment.verdict_rule}: "
+            f"{assessment.verdict_reason}) {_cite(assessment.verdict_evidence)}".rstrip()
+        )
+        apps = assessment.intent_apps
+        named = f"; intent names {', '.join(apps)}" if apps else ""
+        lines.append(
+            f"  confidence:   {assessment.confidence} ({assessment.confidence_rule}: "
+            f"{assessment.confidence_reason}{named}) "
+            f"{_cite(assessment.confidence_evidence)}".rstrip()
+        )
+        for conflict in assessment.conflicts:
+            lines.append(f"  conflict:     {conflict.text} {_cite(conflict.evidence)}")
+        if assessment.question:
+            lines.append(f"  question:     {assessment.question}")
+            lines.append(f"  ask:          {assessment.ask}")
+    return "\n".join(lines)
+
+
+def _notes(notes: dict[str, int], findings: list[Finding]) -> str:
+    """One line per distinct blind claim, with how many items it stands for."""
+    counts: dict[str, int] = {}
+    for finding in findings:
+        for item in finding.evidence:
+            if item.signal == "blind":
+                counts[item.claim] = counts.get(item.claim, 0) + 1
+    lines = ["Notes (no traffic visible; the JSON output keeps every item):"]
+    for claim, number in notes.items():
+        lines.append(f"  N{number} ({counts[claim]} items): {claim}")
     return "\n".join(lines)
 
 
@@ -157,4 +199,7 @@ def explain(
         payload = [f.model_dump(mode="json") for f in findings]
         typer.echo(json.dumps(payload if all_policies else payload[0], indent=2))
     else:
-        typer.echo("\n\n".join(_render(f, dataset) for f in findings))
+        notes: dict[str, int] | None = {} if all_policies else None
+        typer.echo("\n\n".join(_render(f, dataset, notes) for f in findings))
+        if notes:
+            typer.echo("\n" + _notes(notes, findings))
