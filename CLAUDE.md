@@ -101,7 +101,9 @@ Amend or supersede:
 4. Before ending, always:
    - update `HANDOFF.md` (what was done, what is next, open questions, known issues);
    - append one row to `metrics/sessions.csv`;
-   - print the session report below.
+   - push every commit of the session (`git push`) and check the CI run of the
+     last push (`gh run list`, `gh run watch`);
+   - print the session report below, with the CI status of the last push.
 
 ## Metrics row (metrics/sessions.csv)
 
@@ -141,4 +143,5 @@ Problems or doubts:
 Questions for the project lead:
 - ...
 Metrics: tokens in/out/cache, commits, tests passing/total, eval scores if any
+CI: <green | red | pending> for commit <short sha>, all commits pushed: yes | no
 ```
