@@ -96,11 +96,15 @@ Amend or supersede:
 ## Working rules for every session
 
 1. One mission per session, stated in the prompt. Do not start other work.
-2. Commit after each meaningful step, so an interruption loses little.
-3. Token budget: if you estimate you are close to the usage limit, or you
+2. Initiative outside the stated mission is allowed only if it moves verdicts
+   in the safe direction (toward `keep` or `verify`), and it must be flagged in
+   the session report. Anything that moves a rule toward `removal_candidate`
+   needs the project lead's approval first.
+3. Commit after each meaningful step, so an interruption loses little.
+4. Token budget: if you estimate you are close to the usage limit, or you
    receive any usage warning, stop immediately, commit, update `HANDOFF.md`
    and produce the session report. A clean stop beats an unfinished change.
-4. Before ending, always:
+5. Before ending, always:
    - update `HANDOFF.md` (what was done, what is next, open questions, known issues);
    - append one row to `metrics/sessions.csv`;
    - push every commit of the session (`git push`) and check the CI run of the

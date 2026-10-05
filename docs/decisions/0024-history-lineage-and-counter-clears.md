@@ -1,6 +1,6 @@
 # 0024 History lineage, migration leftovers and counter clears
 
-- Status: Accepted
+- Status: Accepted (amended 2026-10-05)
 - Date: 2026-10-05
 
 ## Context
@@ -93,6 +93,28 @@ Old hits and stopped flows (verify, never `removal_candidate`):
 
 ## Challenged by Nathan
 
-Not challenged. The mission asked for each signal that can move a rule
-toward `removal_candidate` to be validated at zero dangerous errors on seeds
-0 to 99 (migration leftover: 0).
+Before session 16: not challenged. The mission asked for each signal that can
+move a rule toward `removal_candidate` to be validated at zero dangerous
+errors on seeds 0 to 99 (migration leftover: 0).
+
+Session 16 (2026-10-05), challenged: "old destination silent in every log" is
+not a removal signal on its own. Outcome: accepted, see the amendment below.
+
+## Amendment (2026-10-05, session 16)
+
+Records two outcomes of the project lead's review. The decision itself is
+unchanged; this states its limits explicitly.
+
+- `V-TRAFFIC-STOPPED` was an initiative outside the session 15 mission. It is
+  recorded as an approved extension. It only moves rules from `keep` to
+  `verify` (the safe direction), which is the kind of initiative CLAUDE.md
+  now allows without prior approval, if flagged in the session report.
+- An old destination silent in every log is not a removal signal on its own.
+  A job that runs rarely (TRAP-RARE-JOB: yearly, quarterly, disaster recovery)
+  is silent for a whole log window and still live. Silence counts toward
+  `removal_candidate` only combined with an observed migration (the
+  migration leftover above: a later commit copied the policies to a new
+  host). The decision 0020 example "destination never seen in any log while
+  other logging rules to neighboring hosts are seen" stays not implemented,
+  and implementing it alone would need a new decision approved by the
+  project lead.
