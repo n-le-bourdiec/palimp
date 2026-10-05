@@ -313,18 +313,36 @@ As printed by `show system commit` **[VSRX-4]**:
 3   2026-09-10 16:24:48 CEST by admin via cli
 ```
 
-Entry 0 is the active configuration. Comments are on the following indented
-line and absent when empty. The number of entries is limited by retention
-**[VSRX-6]**, so older history is lost. Time zone of the device is a knob.
+Entry 0 is the active configuration. The index is padded to four columns.
+Comments are on the following line, indented 4 spaces, and absent when empty
+(confirmed by a practitioner capture of a real vMX, decision 0015, fixture
+`show-system-commit-vmx-2023.txt`). The number of entries is limited by
+retention **[VSRX-6]**, so older history is lost. Time zone of the device is a
+knob.
+
+Methods seen in published samples are `cli`, `other` (system commits without
+a login, `by root via other`), `button` and `autoinstall`. `via netconf` is
+not shown in any sample and stays unverified **[VSRX-4]**; only personas that
+commit over NETCONF (automation, Medium and up) use it. Knob `rescue_line`
+appends `rescue  <date> <tz> by root via other` as the last line, as in the
+documentation sample (rescue saved ten minutes after the first commit of the
+history). The simulator models no other system commit (autoinstall, button).
 
 ### 5.3 Rollback files (`rollbacks/rollback-NN.set`)
 
 One file per retained previous commit, as printed by
 `show system rollback NN | display set` **[VSRX-1]** **[VSRX-6]**. Rollback NN
 matches commit history entry NN. palimp reconstructs history by diffing
-consecutive rollbacks. A knob can instead emit the stored hierarchical files
-(`juniper.conf.NN.gz` content, with the `## Last changed:` header), for later
-format support **[VSRX-8]**.
+consecutive rollbacks. Whether `display set` works on `show system rollback`
+is not shown in the documentation (VSRX-1c, unverified).
+
+A later knob may instead emit the stored hierarchical files, for later format
+support **[VSRX-8]**. The documentation places them in `/config` for the
+active configuration (`juniper.conf.gz`) and rollbacks 1 to 3, and in
+`/var/db/config` for rollbacks 4 to 49 (named `juniper.conf.N.gz`). The header
+printed at the top of `show configuration` is `## Last commit: <date> <tz> by
+<user>`, not `## Last changed:`; the header of the stored files themselves is
+not shown (unverified). Not implemented in v1.
 
 ### 5.4 Session logs (`logs/rt_flow.log`)
 
@@ -338,22 +356,54 @@ RT_FLOW messages for policies with logging enabled, over the last
 Message types: `RT_FLOW_SESSION_CREATE` (log session-init),
 `RT_FLOW_SESSION_CLOSE` (log session-close), `RT_FLOW_SESSION_DENY` (deny
 policies with logging). A knob switches to the standard (unstructured) syslog
-format **[VSRX-10]**. The exact attribute list per message type depends on the
-Junos release **[VSRX-9]**.
+format **[VSRX-10]** (not implemented yet). The exact attribute list per
+message type depends on the Junos release **[VSRX-9]**.
+
+Format knobs (each checked against the fixtures by
+`simulator/tests/test_formats.py`):
+
+- `log_release`: `12.x` (attribute list of the 12.1X47 sample: `session-id-32`,
+  no `connection-tag`, no NAT rule types, rule names `None`), `pre-22.2` (the
+  22.2R1 template list up to `encrypted`, default) or `22.2` (full 22.2R1
+  template list; the values of the attributes after `encrypted` are not shown
+  in any published line and are written `N/A`, an assumption). CREATE lists
+  `username roles packet-incoming-interface` before `application
+  nested-application encrypted`; CLOSE lists `application nested-application`
+  before `username roles packet-incoming-interface encrypted`, as in the
+  templates.
+- `log_collection`: `device` (lines as `show security log file` prints them,
+  starting with `<14>1`) or `syslog-server` (lines as a remote syslog server
+  stores them: server timestamp `Sep 06 16:54:22`, the device address, then
+  the message without `<PRI>`, as in `rt_flow_structured_12.3_remote.txt`).
+  The device address is its interface toward the collector; the server clock
+  equals the device clock. Default: `device` for Easy, `syslog-server` for
+  Medium.
+
+The SD-ID `junos@2636.1.1.1.2.129` is unverified: the published samples come
+from other platforms (`.34`, `.39`).
 
 Volume control: sessions are sampled so a scenario stays small (knob
 `log_sample_rate`); the ground truth records the real counts.
 
 ### 5.5 Hit counts (`hitcount.txt`)
 
-As printed by `show security policies hit-count` **[VSRX-7]**:
+As printed by `show security policies hit-count` **[VSRX-7]**, with the
+column positions of the documentation sample (`hitcount_logical_system.txt`;
+the Name column widens for long names):
 
 ```
 Logical system: root-logical-system
- Index   From zone        To zone           Name                    Policy count  Action
- 1       users            servers           users-to-crm-web        184223        Permit
- 2       users            servers           rule-47                 0             Permit
+Index  From zone        To zone          Name                  Policy count  Action
+1      users            servers          rule-47               0             Permit
+2      users            servers          users-to-crm-web      184223        Permit
 ```
+
+Without options the device lists rows in random order and `Index` is a line
+number, not the evaluation order (VSRX-7b): rows are shuffled with the
+scenario seed and numbered from 1. Knob `hitcount_layout` = `legacy` writes the
+older layout instead (`hitcount_legacy.txt`): lowercase header
+`index   from zone    to zone       name       policy count`, no Action
+column, a blank line and `Number of policy: N` at the end.
 
 Counts are cumulative since the last reset (reboot, upgrade, or
 `clear security policies hit-count`). The reset date is not in the file; it can
@@ -497,6 +547,10 @@ Field meanings:
 | commits per year (drives history horizon) | 20 | 60 | 150 | 300 |
 | rare jobs (quarterly, yearly) | 0 | 2 | 6 | 12 |
 | log format | structured | structured | structured | standard |
+| `log_collection` | device | syslog-server | not set yet | not set yet |
+| `log_release` | pre-22.2 | pre-22.2 | not set yet | not set yet |
+| `hitcount_layout` | standard | standard | not set yet | not set yet |
+| `rescue_line` | no | yes | not set yet | not set yet |
 
 Easy values were tuned in session 4 to about 40 final policies with 15 to 20%
 dead rules (measured over seeds 0 to 99: mean 39.9 policies, 17.6% dead). A low
@@ -513,7 +567,8 @@ styles only (repoint produces `TRAP-STALE-NAME`, a v2 trap).
 
 ### 7.2 Trap coverage rule
 
-v1: every v1 trap appears at least once in every Medium scenario. Easy
+v1: every v1 trap (seven, decision 0012) appears at least once in every
+Medium scenario. Easy
 scenarios contain no deliberate traps. v2: every trap appears at least once in
 every Hard and Adversarial scenario. Each trap id is recorded on the rules it
 affects, so metrics can be reported per trap.
@@ -524,7 +579,7 @@ affects, so metrics can be reported per trap.
 |---|---|---|---|---|
 | `TRAP-LIVE-NOLOG` | v1 | live rule without logging, hit counts recently reset | dead, remove | live; best verdict is verify |
 | `TRAP-RARE-JOB` | v1 | quarterly or yearly flow, no hits in window | dead, remove | live; removing it is the most severe error |
-| `TRAP-PREPROVISIONED` | v1 | rule created before go-live, zero hits | dead | live soon |
+| `TRAP-PREPROVISIONED` | v2 (decision 0012) | rule created before go-live, zero hits | dead | live soon |
 | `TRAP-MISLEADING-COMMENT` | v1 | comment or ticket describes another change | trusts the comment | intent from other evidence |
 | `TRAP-BATCH-COMMIT` | v1 | one commit, one comment, many unrelated changes | one intent for all | per rule intents |
 | `TRAP-STALE-NAME` | v2 | rule name refers to an old app, objects repointed | intent from the name | intent of the current destination |
@@ -631,8 +686,15 @@ Rules:
 | VSRX-11 | whether logs of deactivated or deleted policies keep the old policy name | delete a logged policy during live sessions |
 | VSRX-12 | predefined application names used by the simulator (`junos-http`, `junos-https`, `junos-ssh`, `junos-smtp`, `junos-dns-udp`, `junos-ntp`) exist with those ports, and RT_FLOW close reasons for UDP read `idle Timeout` | `show configuration groups junos-defaults applications`, generate UDP sessions |
 
-Each confirmed assumption becomes a parser fixture under `tests/fixtures/vsrx/`
-and a conformance test on the simulator side.
+Until a vSRX lab exists, assumptions are checked against published samples
+stored under `tests/fixtures/junos_docs/` (decisions 0013 and 0015); the status
+of each one is in `docs/format-assumptions.md`. The simulator conformance test
+is `simulator/tests/test_formats.py`: every shape it checks must match the
+fixture lines first, then every simulator line. Captures from a vSRX will be
+added as fixtures the same way.
+
+VSRX-12: `junos-ntp` is not in the published `junos-defaults` excerpt
+(VSRX-12b, unverified). The simulator keeps it, flagged in `catalog.py`.
 
 ## 12. Behavioral grounding
 
@@ -698,7 +760,7 @@ sources and remain simulator choices.
 |---|---|---|
 | `TRAP-LIVE-NOLOG` | v1 | S5, S6, S7 |
 | `TRAP-RARE-JOB` | v1 | S2, S11 |
-| `TRAP-PREPROVISIONED` | v1 | UNGROUNDED (indirect leads S16, S17: rules must be requested days to months before they are needed; no source found that shows rules sitting unused before go-live) |
+| `TRAP-PREPROVISIONED` | v2 (decision 0012) | UNGROUNDED (indirect leads S16, S17: rules must be requested days to months before they are needed; no source found that shows rules sitting unused before go-live) |
 | `TRAP-MISLEADING-COMMENT` | v1 | S15 (analogy) |
 | `TRAP-BATCH-COMMIT` | v1 | S13 (analogy) |
 | `TRAP-EMERGENCY-LOADBEARING` | v1 | S3, S7, S12 |
@@ -714,6 +776,6 @@ sources and remain simulator choices.
 | `TRAP-CLEANUP-FLAP` | v2 | S11, S12 (removal of a live rule; the re-add under a new name is UNGROUNDED) |
 
 `TRAP-MISLEADING-COMMENT` and `TRAP-BATCH-COMMIT` are grounded by analogy
-only (session 4). `TRAP-PREPROVISIONED` is still UNGROUNDED: it stays in v1
-scope (decision 0008) but needs a direct source before Medium is considered
-done.
+only (session 4). `TRAP-PREPROVISIONED` is still UNGROUNDED and moved to v2
+(decision 0012, superseding that part of decision 0008): v1 has seven traps.
+It needs a direct source or a field observation before it is implemented.

@@ -632,6 +632,9 @@ PREDEFINED_APPLICATIONS = {
     "junos-ssh": ("tcp", 22),
     "junos-smtp": ("tcp", 25),
     "junos-dns-udp": ("udp", 53),
+    # Unverified (VSRX-12b): the junos-defaults sample does not list it and the
+    # documentation gives NTP port 123 without the `junos-` name. Kept until a
+    # capture settles it.
     "junos-ntp": ("udp", 123),
 }
 
