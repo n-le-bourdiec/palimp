@@ -10,6 +10,11 @@ questionnaires and the answer CSV point to the same rule.
 
 Blind T2 items ("no traffic visible": no logging, deactivated, artifact
 missing) are never repeated per rule: they become one global note each.
+
+Decision 0026: deactivated rules are asked of the firewall team (cleanup
+list), never of application owners, whose answer would not change the
+action. Keep rules with LOW confidence or traffic on the counters only are
+listed under "Worth a look", in the report only.
 """
 
 import re
@@ -92,6 +97,13 @@ class Report(BaseModel):
     def rule(self, ref: str) -> RuleEntry:
         return next(r for r in self.rules if r.ref == ref)
 
+
+FIREWALL_TEAM = "firewall team"
+CLEANUP_QUESTION = "Is this deactivated rule kept on purpose, as a rollback switch?"
+CLEANUP_ASK = (
+    "firewall team: the rule is deactivated, so the application owner's answer would not "
+    "change the action (decision 0026)"
+)
 
 # Yes/no questions: "yes" always means the access is still needed.
 YES_NO = {
@@ -188,6 +200,43 @@ def owner_group(finding: Finding) -> str:
     if assessment.intent_apps:
         return "no name found: owner of " + ", ".join(assessment.intent_apps)
     return "no name found"
+
+
+def is_cleanup(finding: Finding) -> bool:
+    """A deactivated rule not kept: a question for the firewall team only (decision 0026)."""
+    assessment = finding.assessment
+    assert assessment is not None
+    return finding.policy.deactivated and assessment.verdict != "keep"
+
+
+def counters_only(finding: Finding) -> bool:
+    """Traffic shown by the hit counters only, never by the session log."""
+    return not any(i.kind == "session_log" and i.signal == "present" for i in finding.evidence)
+
+
+def worth_a_look(entry: "RuleEntry") -> list[Cited]:
+    """Why a keep rule deserves a look: LOW confidence, traffic on the counters only."""
+    assessment = entry.finding.assessment
+    assert assessment is not None
+    if entry.section != "keep":
+        return []
+    reasons = []
+    if assessment.confidence == "LOW":
+        reasons.append(
+            Cited(
+                text=f"LOW confidence in the intent: {assessment.confidence_reason}",
+                evidence=list(assessment.confidence_evidence),
+            )
+        )
+    if counters_only(entry.finding):
+        reasons.append(
+            Cited(
+                text="traffic on the hit counters only, since a clear of unknown date, so that "
+                "use may be old",
+                evidence=list(assessment.verdict_evidence),
+            )
+        )
+    return reasons
 
 
 def why(finding: Finding, notes: dict[str, Note], ref: str) -> list[Cited]:
@@ -391,12 +440,9 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
     owned = sum(1 for e in entries if e.section != "keep" and e.finding.assessment.owner)  # type: ignore[union-attr]
     asked = count["verify"] + count["removal_candidate"]
     window = [g.id for g in found if g.locator == "first and last log line"]
-    counters_only = sum(
-        1
-        for e in entries
-        if e.section == "keep"
-        and not any(i.kind == "session_log" and i.signal == "present" for i in e.finding.evidence)
-    )
+    counters = sum(1 for e in entries if e.section == "keep" and counters_only(e.finding))
+    look = sum(1 for e in entries if worth_a_look(e))
+    cleanup = sum(1 for e in entries if is_cleanup(e.finding))
     sure = [
         Cited(
             text=(
@@ -409,7 +455,7 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
         Cited(
             text=(
                 f"{count['keep']} rules carry traffic in the session log or the hit counters. "
-                f"For {counters_only} of them only the counters show it: hits since the last "
+                f"For {counters} of them only the counters show it: hits since the last "
                 "counter clear, whose date is unknown, so that use may be old. Traffic does "
                 "not prove the intent is right or that the rule is not too broad."
             ),
@@ -422,6 +468,18 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
                 f"{count['verify']} rules need a human answer: palimp cannot tell from the "
                 "artifacts whether they are still needed. Their owner (or owner candidates) "
                 "is listed with each."
+            )
+        ),
+        Cited(
+            text=(
+                f"{cleanup} of the rules to verify or remove are deactivated: they are asked "
+                "of the firewall team only (cleanup list), not of application owners."
+            )
+        ),
+        Cited(
+            text=(
+                f"{look} keep rules are worth a look (LOW confidence or traffic on the "
+                "counters only). They are listed in the report, no owner is asked."
             )
         ),
         Cited(
@@ -465,17 +523,19 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
             e.kind in NOT_LIVE_KINDS for e in finding.evidence
         ):
             raise ValueError(f"{finding.key}: removal_candidate without a not-live item")
+        cleanup = is_cleanup(finding)
+        question = YES_NO[assessment.verdict_rule] if assessment.verdict != "keep" else ""
         entries.append(
             RuleEntry(
                 ref=ref,
                 key=str(finding.key),
                 section=assessment.verdict,
-                group=owner_group(finding),
+                group=FIREWALL_TEAM if cleanup else owner_group(finding),
                 allows=allows(finding, dataset),
                 why=why(finding, notes, ref),
                 intent=intent(finding),
-                owner=assessment.ask or "",
-                question=YES_NO[assessment.verdict_rule] if assessment.verdict != "keep" else "",
+                owner=CLEANUP_ASK if cleanup else assessment.ask or "",
+                question=CLEANUP_QUESTION if cleanup else question,
                 finding=finding,
             )
         )
@@ -515,7 +575,9 @@ def _refs(refs: list[str]) -> str:
 
 
 def group_order(group: str) -> tuple[int, str]:
-    """Named owners first, then candidate groups, then rules with no name."""
+    """Named owners, then candidate groups, then rules with no name, then the firewall team."""
+    if group == FIREWALL_TEAM:
+        return (3, group)
     return (2 if group.startswith("no name") else 1 if group.startswith("not sure") else 0, group)
 
 
@@ -588,6 +650,34 @@ def markdown(report: Report) -> str:
         out += [f"### {group} ({plural(len(groups[group]), 'rule')})", ""]
         for entry in groups[group]:
             out += _rule_md(entry, "####")
+
+    cleanup = [r for r in report.rules if is_cleanup(r.finding)]
+    out += [f"## Firewall team cleanup list ({len(cleanup)})", ""]
+    out.append(
+        "Deactivated rules match no traffic today, so an application owner's answer would not "
+        "change the action: only the firewall team is asked. Their full sections are above."
+    )
+    out.append("")
+    for entry in cleanup:
+        item = next(e for e in entry.finding.evidence if e.kind == "deactivated")
+        out.append(
+            f"- {entry.ref} `{entry.key}`: {item.claim} [{entry.ref}.{item.id}]. "
+            f"{CLEANUP_QUESTION} (yes / no)"
+        )
+    out.append("")
+
+    look = [(r, worth_a_look(r)) for r in report.rules]
+    look = [(r, reasons) for r, reasons in look if reasons]
+    out += [f"## Worth a look ({len(look)})", ""]
+    out.append(
+        "Keep rules with LOW confidence in the intent, or with traffic on the hit counters "
+        "only. Nothing to ask an owner: worth a look by the firewall team when time allows."
+    )
+    out.append("")
+    for entry, reasons in look:
+        text = "; ".join(_line(c, f"{entry.ref}.") for c in reasons)
+        out.append(f"- {entry.ref} `{entry.key}`: {text}")
+    out.append("")
 
     keep = [r for r in report.rules if r.section == "keep"]
     out += [

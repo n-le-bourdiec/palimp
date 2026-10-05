@@ -12,6 +12,6 @@ machine: no network egress, no telemetry, and the optional LLM runs locally.
 
     palimp explain --all --no-llm -a ARTIFACTS   # every policy, its evidence and verdict
     palimp report -a ARTIFACTS -o OUT            # OUT/report.md and OUT/report.json
-    palimp questions -a ARTIFACTS -o OUT         # one questionnaire per owner, OUT/answers.csv
+    palimp questions -a ARTIFACTS -o OUT         # one email per person, cleanup list, OUT/answers.csv
 
 Licensed under the Apache License 2.0.

@@ -1,12 +1,14 @@
 """Questionnaires for rule owners, ready to send by email, and a CSV to track answers.
 
-One questionnaire per owner, or per group of candidates when palimp is not
-sure who owns a rule (decision 0023: candidates in alphabetical order), or per
-application when no name is found. Only rules that need an answer are asked
-about (removal candidates first, then verify). Each rule is described in
-plain words: what it allows, why palimp asks, and a yes/no question where
-"yes" always means the access is still needed. References (R12, E3) point to
-the report, for the person who tracks the answers.
+Decision 0026 (supersedes the grouping part of decision 0025): one email per
+person, with a section "Rules for your applications" (rules the person owns)
+and a section "Rules you may own (please forward if not)" (rules the person is
+a candidate owner of, decision 0023). Rules with no name go to one email per
+application. A question is sent only if its answer can change the action:
+deactivated rules go to the firewall team cleanup list instead, and keep
+rules are never asked about. Removal candidates come first in each section.
+Each question is yes/no and "yes" always means the access is still needed.
+References (R12, E3) point to the report, for the person who tracks the answers.
 """
 
 import csv
@@ -16,7 +18,7 @@ import re
 from pydantic import BaseModel
 
 from palimp.models import Finding
-from palimp.report import Report, RuleEntry, group_order
+from palimp.report import FIREWALL_TEAM, Report, RuleEntry, is_cleanup
 
 ANSWER_COLUMNS = [
     "questionnaire",
@@ -32,13 +34,20 @@ ANSWER_COLUMNS = [
     "comment",
 ]
 
+CLEANUP_NAME = "00-firewall-team-cleanup"
+
 
 class Questionnaire(BaseModel):
     name: str  # file stem
-    group: str
+    group: str  # a person, "no name found: ...", or the firewall team
     recipients: list[str]
-    rules: list[str]  # R12 references
+    owned: list[str] = []  # R12 references: rules for the person's applications
+    may_own: list[str] = []  # rules the person may own (owner candidate)
     text: str
+
+    @property
+    def rules(self) -> list[str]:
+        return self.owned + self.may_own
 
 
 def _plain_reason(entry: RuleEntry) -> str:
@@ -103,119 +112,193 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60] or "unassigned"
 
 
-def _recipients(entry: RuleEntry) -> list[str]:
-    assessment = entry.finding.assessment
-    assert assessment is not None
-    if assessment.owner:
-        return [assessment.owner]
-    return sorted(assessment.owner_candidates)
-
-
-def _letter(group: str, recipients: list[str], entries: list[RuleEntry]) -> str:
+def _subject(entries: list[RuleEntry]) -> str:
     count = len(entries)
     apps = sorted({a for e in entries for a in e.finding.assessment.intent_apps})  # type: ignore[union-attr]
     about = f" ({', '.join(apps)})" if apps else ""
-    subject = f"Firewall review: {count} rule{'s' if count > 1 else ''}{about} need your answer"
-    if recipients and not group.startswith("not sure"):
-        greeting = f"Hello {recipients[0]},"
-        intro = (
-            "We are reviewing the firewall rules we inherited. The rules below seem to belong "
-            "to applications you requested changes for. For each one, please answer yes or no."
-        )
-    elif len(recipients) == 1:
-        greeting = f"Hello {recipients[0]},"
-        intro = (
-            "We are reviewing the firewall rules we inherited. We are not sure you own the "
-            "rules below, but you requested changes for an application they involve. For "
-            "each one, please answer yes or no, or tell us who should."
-        )
-    elif recipients:
-        greeting = f"Hello {', '.join(recipients)},"
-        intro = (
-            "We are reviewing the firewall rules we inherited. We are not sure which of you "
-            "owns the rules below: each connects applications that some of you requested "
-            "changes for. For each one, please answer yes or no, or tell us who should."
-        )
-    else:
-        target = group.removeprefix("no name found").removeprefix(": ") or "the team concerned"
-        greeting = f"Hello ({target}),"
-        intro = (
-            "We are reviewing the firewall rules we inherited. We found no owner name for the "
-            "rules below. If they concern you, please answer yes or no for each one; "
-            "otherwise, tell us who to ask."
-        )
-    lines = [
-        f"Subject: {subject}",
-        "",
-        greeting,
-        "",
-        intro,
-        "",
-        "A 'no' does not remove anything by itself: we confirm before any change.",
-        "",
-    ]
-    for number, entry in enumerate(entries, start=1):
+    rules = f"{count} rule{'s' if count > 1 else ''}"
+    return f"Subject: Firewall review: {rules}{about} need your answer"
+
+
+def _items(entries: list[RuleEntry], start: int, person: str = "") -> list[str]:
+    lines = []
+    for number, entry in enumerate(entries, start=start):
+        assessment = entry.finding.assessment
+        assert assessment is not None
         lines += [
             f"{number}. Rule {entry.ref} ({entry.finding.policy.name})",
             f"   What it allows: {entry.allows.text}",
             f"   What it is for: {_purpose(entry)}",
             f"   Why we ask: {_plain_reason(entry)}",
+        ]
+        others = [c for c in sorted(assessment.owner_candidates) if c != person]
+        if person and not assessment.owner and others:
+            lines.append(f"   Also asked: {', '.join(others)}")
+        lines += [
             f"   Question: {entry.question}",
             "   Answer: [ ] yes   [ ] no   Comment:",
             "",
         ]
-    lines += [
-        "Thank you.",
+    return lines
+
+
+INTRO = (
+    "We are reviewing the firewall rules we inherited. For each rule below, please answer "
+    "yes or no."
+)
+NO_REMOVAL = "A 'no' does not remove anything by itself: we confirm before any change."
+CLOSING = [
+    "Thank you.",
+    "",
+    "(Prepared with palimp. The references R and E point to the full report.)",
+    "",
+]
+
+
+def _person_letter(person: str, owned: list[RuleEntry], may_own: list[RuleEntry]) -> str:
+    lines = [_subject(owned + may_own), "", f"Hello {person},", "", INTRO, NO_REMOVAL, ""]
+    if owned:
+        lines += [
+            f"Rules for your applications ({len(owned)})",
+            "",
+            "These rules seem to belong to applications you requested changes for.",
+            "",
+            *_items(owned, 1, person),
+        ]
+    if may_own:
+        lines += [
+            f"Rules you may own, please forward if not ({len(may_own)})",
+            "",
+            "You requested changes for an application these rules involve, but we are not sure "
+            "they are yours. If a rule is not yours, please forward it to its owner, or tell us "
+            "who to ask.",
+            "",
+            *_items(may_own, len(owned) + 1, person),
+        ]
+    return "\n".join(lines + CLOSING)
+
+
+def _unnamed_letter(group: str, entries: list[RuleEntry]) -> str:
+    target = group.removeprefix("no name found").removeprefix(": ") or "the team concerned"
+    lines = [
+        _subject(entries),
         "",
-        "(Prepared with palimp. The references R and E point to the full report.)",
+        f"Hello ({target}),",
         "",
+        "We are reviewing the firewall rules we inherited. We found no owner name for the "
+        "rules below. If they concern you, please answer yes or no for each one; otherwise, "
+        "tell us who to ask.",
+        NO_REMOVAL,
+        "",
+        *_items(entries, 1),
     ]
-    return "\n".join(lines)
+    return "\n".join(lines + CLOSING)
+
+
+def _cleanup_letter(entries: list[RuleEntry]) -> str:
+    plural = "s" if len(entries) != 1 else ""
+    lines = [
+        f"Subject: Firewall cleanup list: {len(entries)} deactivated rule{plural}",
+        "",
+        "Hello firewall team,",
+        "",
+        "These rules are deactivated: they are still in the configuration but match no "
+        "traffic today. Their application owners are not asked, because their answer would "
+        "not change the action. For each rule: is it kept on purpose, as a rollback switch? "
+        "A 'yes' keeps it, a 'no' makes it a candidate for deletion.",
+        NO_REMOVAL,
+        "",
+        *_items(entries, 1),
+    ]
+    return "\n".join(lines + CLOSING)
 
 
 def build(report: Report) -> list[Questionnaire]:
     asked = [r for r in report.rules if r.section in ("removal_candidate", "verify")]
-    groups: dict[str, list[RuleEntry]] = {}
+    owned: dict[str, list[RuleEntry]] = {}
+    may_own: dict[str, list[RuleEntry]] = {}
+    unnamed: dict[str, list[RuleEntry]] = {}
+    cleanup = []
     for entry in sorted(asked, key=lambda r: r.section != "removal_candidate"):
-        groups.setdefault(entry.group, []).append(entry)
+        assessment = entry.finding.assessment
+        assert assessment is not None
+        if is_cleanup(entry.finding):
+            cleanup.append(entry)
+        elif assessment.owner:
+            owned.setdefault(assessment.owner, []).append(entry)
+        elif assessment.owner_candidates:
+            for person in assessment.owner_candidates:
+                may_own.setdefault(person, []).append(entry)
+        else:
+            unnamed.setdefault(entry.group, []).append(entry)
     found = []
-    for number, group in enumerate(sorted(groups, key=group_order), start=1):
-        entries = groups[group]
-        recipients = _recipients(entries[0])
+    if cleanup:
+        found.append(
+            Questionnaire(
+                name=CLEANUP_NAME,
+                group=FIREWALL_TEAM,
+                recipients=[FIREWALL_TEAM],
+                owned=[e.ref for e in cleanup],
+                text=_cleanup_letter(cleanup),
+            )
+        )
+    number = 0
+    for person in sorted(set(owned) | set(may_own)):
+        number += 1
+        mine, maybe = owned.get(person, []), may_own.get(person, [])
+        found.append(
+            Questionnaire(
+                name=f"{number:02d}-{_slug(person)}",
+                group=person,
+                recipients=[person],
+                owned=[e.ref for e in mine],
+                may_own=[e.ref for e in maybe],
+                text=_person_letter(person, mine, maybe),
+            )
+        )
+    for group in sorted(unnamed):
+        number += 1
+        entries = unnamed[group]
         found.append(
             Questionnaire(
                 name=f"{number:02d}-{_slug(group)}",
                 group=group,
-                recipients=recipients,
-                rules=[e.ref for e in entries],
-                text=_letter(group, recipients, entries),
+                recipients=[],
+                owned=[e.ref for e in entries],
+                text=_unnamed_letter(group, entries),
             )
         )
     return found
 
 
 def answers_csv(report: Report, questionnaires: list[Questionnaire]) -> str:
+    """One row per rule asked, naming every questionnaire that asks it."""
+    asked: dict[str, list[Questionnaire]] = {}
+    for q in questionnaires:
+        for ref in q.rules:
+            asked.setdefault(ref, []).append(q)
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(ANSWER_COLUMNS)
-    for q in questionnaires:
-        for ref in q.rules:
-            entry = report.rule(ref)
-            assessment = entry.finding.assessment
-            assert assessment is not None
-            writer.writerow(
-                [
-                    q.name,
-                    "; ".join(q.recipients),
-                    ref,
-                    entry.key,
-                    entry.section,
-                    assessment.verdict_rule,
-                    entry.question,
-                    "",
-                    "",
-                    "",
-                    "",
-                ]
-            )
+    for entry in report.rules:
+        if entry.ref not in asked:
+            continue
+        assessment = entry.finding.assessment
+        assert assessment is not None
+        found = asked[entry.ref]
+        writer.writerow(
+            [
+                "; ".join(q.name for q in found),
+                "; ".join(r for q in found for r in q.recipients),
+                entry.ref,
+                entry.key,
+                entry.section,
+                assessment.verdict_rule,
+                entry.question,
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
     return buffer.getvalue()

@@ -21,7 +21,16 @@ from palimp.cli import app
 from palimp.ingest import ingest
 from palimp.questions import answers_csv
 from palimp.questions import build as build_questions
-from palimp.report import Report, build, cited_ids, markdown
+from palimp.report import (
+    FIREWALL_TEAM,
+    Report,
+    build,
+    cited_ids,
+    counters_only,
+    is_cleanup,
+    markdown,
+    worth_a_look,
+)
 
 RULE_HEADING = re.compile(r"^#{3,4} (R\d+) `([^`]+)`")
 TABLE_ROW = re.compile(r"^\| (R\d+) \| `([^`]+)` \|")
@@ -94,17 +103,42 @@ def check(report: Report) -> None:
         items = {e.id: e for e in rule.finding.evidence}
         cited = {i for c in rule.why for i in c.evidence}
         assert any(items[i].kind in NOT_LIVE_KINDS for i in cited), rule.ref
-    # Questionnaires ask about every rule to verify or remove, exactly once, never keep.
+    # Questionnaires (decision 0026): every rule to verify or remove is asked, never keep;
+    # deactivated ones only of the firewall team; one email per person.
     questionnaires = build_questions(report)
-    asked = [ref for q in questionnaires for ref in q.rules]
     expected = [r.ref for r in report.rules if r.section != "keep"]
-    assert sorted(asked) == sorted(expected)
+    assert sorted({ref for q in questionnaires for ref in q.rules}) == sorted(expected)
+    cleanup = {r.ref for r in report.rules if is_cleanup(r.finding)}
+    for q in questionnaires:
+        if q.group == FIREWALL_TEAM:
+            assert set(q.rules) == cleanup
+        else:
+            assert not set(q.rules) & cleanup, q.name
+        assert len(q.rules) == len(set(q.rules))
+    people = [p for q in questionnaires if q.group != FIREWALL_TEAM for p in q.recipients]
+    assert len(people) == len(set(people))
+    # A rule with a certain owner is asked once, in its owner's first section.
+    for rule in report.rules:
+        owner = rule.finding.assessment.owner  # type: ignore[union-attr]
+        if rule.ref in expected and rule.ref not in cleanup and owner:
+            asking = [q for q in questionnaires if rule.ref in q.rules]
+            assert [q.recipients for q in asking] == [[owner]]
+            assert rule.ref in asking[0].owned
     rows = list(csv.DictReader(io.StringIO(answers_csv(report, questionnaires))))
-    assert sorted(row["rule"] for row in rows) == sorted(expected)
+    assert [row["rule"] for row in rows] == [r.ref for r in report.rules if r.ref in expected]
     for q in questionnaires:
         for ref in q.rules:
             assert f"Rule {ref} (" in q.text
         assert "[E" not in q.text
+    # Worth a look: keep rules with LOW confidence or counters only, in the report only.
+    look = [r.ref for r in report.rules if worth_a_look(r)]
+    for rule in report.rules:
+        a = rule.finding.assessment
+        assert a is not None
+        flagged = rule.section == "keep" and (a.confidence == "LOW" or counters_only(rule.finding))
+        assert (rule.ref in look) == flagged
+    section = text.split("## Worth a look", 1)[1].split("\n## ", 1)[0]
+    assert [line.split(" ")[1] for line in section.splitlines() if line.startswith("- R")] == look
 
 
 def test_easy_report(easy: Path) -> None:
@@ -116,6 +150,8 @@ def test_easy_report(easy: Path) -> None:
     assert order == sorted(order)
     for topic in ("Policies without logging", "Log window", "History horizon"):
         assert f"**{topic}" in text
+    for heading in ("## Firewall team cleanup list", "## Worth a look"):
+        assert heading in text
 
 
 def test_removal_candidate_without_not_live_item_is_refused(easy: Path) -> None:

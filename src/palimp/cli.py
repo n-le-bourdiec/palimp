@@ -249,11 +249,11 @@ def questions(
         Path("palimp-questions"),
         "--out",
         "-o",
-        help="Output directory (one questionnaire per owner, answers.csv).",
+        help="Output directory (one questionnaire per person, cleanup list, answers.csv).",
     ),
     log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
 ) -> None:
-    """Write one questionnaire per owner and a CSV to track the answers."""
+    """Write one questionnaire per person, the firewall team cleanup list and an answer CSV."""
     dataset, findings = _findings(source, log_year)
     built = build_report(dataset, findings)
     found = build_questions(built)
@@ -261,5 +261,5 @@ def questions(
     for q in found:
         (out / f"{q.name}.txt").write_text(q.text, encoding="utf-8")
     (out / "answers.csv").write_text(answers_csv(built, found), encoding="utf-8")
-    rules = sum(len(q.rules) for q in found)
+    rules = len({ref for q in found for ref in q.rules})
     typer.echo(f"{len(found)} questionnaires covering {rules} rules written to {out}")
