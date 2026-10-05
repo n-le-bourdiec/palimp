@@ -73,6 +73,10 @@ class Score:
         c["overconfident"] += LEVELS[row["confidence"]] > LEVELS[row["max_conf"]]
         c["intent ok"] += row["intent_ok"]
         c["owner named"] += row["owner_ok"]
+        c["owner certain right"] += row["owner_certain"] == "right"
+        c["owner certain wrong"] += row["owner_certain"] == "wrong"
+        c["owner candidate right"] += row["owner_candidate_ok"]
+        c["conflict"] += row["conflict"]
         c[f"verdict {row['palimp']}"] += 1
 
 
@@ -80,9 +84,28 @@ def pct(part: int, whole: int) -> str:
     return f"{part / whole:.1%}" if whole else "n/a"
 
 
+def owner_certain(assessment: dict, owner: str, names: set[str]) -> str:
+    """'right' or 'wrong' when palimp states one owner as certain, '' otherwise.
+
+    Without the `owner` field (palimp before session 14), any person named in
+    `ask` counts as stated: right when it is the owner, wrong otherwise.
+    """
+    if "owner" in assessment:
+        stated = assessment["owner"]
+        if not stated:
+            return ""
+        return "right" if stated == owner else "wrong"
+    ask = assessment["ask"] or ""
+    if owner in ask:
+        return "right"
+    return "wrong" if any(n in ask for n in names) else ""
+
+
 def evaluate(truth: dict, findings: list[dict], manifest: dict) -> list[dict]:
     by_key = {key_of(f["key"]): f for f in findings}
     people = {p["person_id"]: p["name"] for p in truth["people"]}
+    names = set(people.values()) | {a["name"] for a in truth["admins"]}
+    names |= {a["login"] for a in truth["admins"]}
     formats = [f"{k}={v}" for k, v in sorted(manifest.get("format_draw", {}).items())]
     rows = []
     for rule in truth["rules"]:
@@ -110,6 +133,9 @@ def evaluate(truth: dict, findings: list[dict], manifest: dict) -> list[dict]:
                 "intent_ok": app_of(rule["intent"]["app_id"])
                 in [app_of(a) for a in assessment["intent_apps"][:1]],
                 "owner_ok": bool(assessment["ask"]) and owner in assessment["ask"],
+                "owner_certain": owner_certain(assessment, owner, names),
+                "owner_candidate_ok": owner in assessment.get("owner_candidates", []),
+                "conflict": bool(assessment["conflicts"]),
                 "naive": baseline(finding),
                 "evidence": finding["evidence"],
             }
@@ -140,6 +166,18 @@ def headline(scores: dict[str, Score]) -> None:
     )
     print(f"| intent application right (first named app) | {pct(c['intent ok'], n)} | n/a |")
     print(f"| owner named in `ask` | {pct(c['owner named'], n)} | n/a |")
+    for label, key in (
+        ("owner stated as certain, right", "owner certain right"),
+        ("owner stated as certain, wrong", "owner certain wrong"),
+        ("right owner among the candidates", "owner candidate right"),
+    ):
+        print(f"| {label} | {pct(c[key], n)} ({c[key]}) | n/a |")
+    for scope, label in (
+        ("trap (none)", "rules with no trap"),
+        ("trap TRAP-MISLEADING-COMMENT", "MISLEADING-COMMENT rules"),
+    ):
+        k = scores[scope].c if scope in scores else Counter()
+        print(f"| T1-T3 conflicts on {label} | {k['conflict']} of {k['rules']} | n/a |")
     print(
         "| palimp verdicts | "
         + ", ".join(f"{v} {c[f'verdict {v}']}" for v in ("keep", "verify", "removal_candidate"))
