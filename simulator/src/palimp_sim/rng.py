@@ -41,6 +41,15 @@ class Rng:
     def choice(self, items: Sequence[T]) -> T:
         return items[int(self.random() * len(items))]
 
+    def weighted(self, weights: Sequence[float]) -> int:
+        """Index drawn with the given weights (they sum to 1)."""
+        point = self.random()
+        for index, weight in enumerate(weights):
+            if point < weight:
+                return index
+            point -= weight
+        return len(weights) - 1
+
     def sample(self, items: Sequence[T], count: int) -> list[T]:
         pool = list(items)
         return [pool.pop(int(self.random() * len(pool))) for _ in range(count)]

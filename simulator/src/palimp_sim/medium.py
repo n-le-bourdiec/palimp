@@ -7,16 +7,20 @@ commit comments. The traps come out of these events; `TrapFacts` records what
 was done on purpose, and truth.py checks each trap condition on the final
 state.
 
-Trap mechanisms (decision 0012 lists the seven v1 traps):
-- TRAP-LIVE-NOLOG: a weekly job rule without logging, in a zone pair whose
+Trap mechanisms (decision 0012 lists the seven v1 traps). The number of
+instances of the first five is drawn per scenario (levels.TRAP_COUNT_WEIGHTS,
+decision 0018), so a scenario can hold none or several of each:
+- TRAP-LIVE-NOLOG: weekly job rules without logging, in the zone pair whose
   counters were cleared (`clear security policies hit-count from-zone A
-  to-zone B`, VSRX-7c) a few days after the last run.
-- TRAP-RARE-JOB: quarterly or yearly job rules; one yearly job always last ran
-  before the hit count reset.
+  to-zone B`, VSRX-7c) a few days after their last run. The cleared pair is
+  drawn on its own, among the pairs a weekly job can use.
+- TRAP-RARE-JOB: yearly job rules that last ran before the hit count reset.
+  Quarterly job rules (application to partner) still show hits, unless the
+  clear happens to hit their zone pair after their last run.
 - TRAP-EMERGENCY-LOADBEARING: an on-call admin inserts a broad rule at the top
   of users to servers; it shadows the proper rules, which then show no hits and
   are removed by the next cleanup. The temporary rule is left carrying the flow.
-- TRAP-MISLEADING-COMMENT: a commit comment copied from an earlier commit
+- TRAP-MISLEADING-COMMENT: commit comments copied from an earlier commit
   about another application.
 - TRAP-BATCH-COMMIT: a hurried operator puts the go-live of two or three
   applications in one commit with a comment naming one of them.
@@ -30,6 +34,7 @@ from palimp_sim import catalog, voice
 from palimp_sim.artifacts import RETAINED
 from palimp_sim.catalog import FlowTemplate, service_port
 from palimp_sim.junos import ANY, Policy, Zone
+from palimp_sim.levels import TRAP_COUNT_WEIGHTS
 from palimp_sim.model import Admin, App, Endpoint, Event, Flow, Person, PolicyMeta
 from palimp_sim.rng import Rng
 from palimp_sim.traffic import Matcher
@@ -50,6 +55,10 @@ ACCESS_PER_YEAR = 30  # ad hoc access requests
 ACCESS_TEMPORARY_RATE = 0.5  # the access ends some day (project over, person left)
 ACCESS_REMOVAL_RATE = 0.3  # its rule is removed when it ends
 VENDOR_SHARE = 0.25
+# Zone pairs (roles) a weekly job can run in; the hit count clear lands on one
+# of them, drawn independently of every job (decision 0018).
+CLEAR_PAIRS = (("servers", "internet"), ("servers", "management"), ("management", "servers"))
+BACKUP = "app:shared-backup:bkp"
 
 
 class MediumSimulation(Simulation):
@@ -58,6 +67,9 @@ class MediumSimulation(Simulation):
         root = Rng(f"palimp-sim:{level.name}:{seed}")
         self.rng_medium = root.derive("medium")
         self.rng_traps = root.derive("traps")
+        self.rng_counts = root.derive("trap_counts")
+        self.rng_clear = root.derive("hit_count_clear")
+        self._copied_count = 0
         self.zone_names = dict(self.zone_names)
         self.zone_names["management"] = self.rng_medium.choice(catalog.MANAGEMENT_NAMES)
         self.config.zones.append(
@@ -518,13 +530,23 @@ class MediumSimulation(Simulation):
 
     # ------------------------------------------------------------------ plan
 
-    def _add_job(self, app: App, kind: str, phase: int) -> None:
+    def _add_job(
+        self, app: App, kind: str, phase: int, pair: tuple[str, str] = CLEAR_PAIRS[0]
+    ) -> None:
         service, base, intent, summary = catalog.JOB_KINDS[kind]
         tiers = [t.name for t in app.template.tiers if self._tier_zone(app, t) == "servers"]
-        source = next((t for t in JOB_SOURCE_TIERS if t in tiers), tiers[0])
-        used = {f.dst.split(":", 1)[1] for f in app.template.flows if f.dst.startswith("partner:")}
-        partner = self.rng_traps.choice([p for p in catalog.JOB_PARTNERS if p not in used])
-        target = f"partner:{partner}"
+        own = next((t for t in JOB_SOURCE_TIERS if t in tiers), tiers[0])
+        if pair == ("servers", "management"):
+            source, target, intent = own, BACKUP, "backup"
+            summary = "Weekly database dump copied to the backup server"
+        elif pair == ("management", "servers"):
+            source, target, intent = BACKUP, own, "backup"
+            summary = "Backup server collects a weekly full export from the application"
+        else:
+            flows = app.template.flows
+            used = {f.dst.split(":", 1)[1] for f in flows if f.dst.startswith("partner:")}
+            partner = self.rng_traps.choice([p for p in catalog.JOB_PARTNERS if p not in used])
+            source, target = own, f"partner:{partner}"
         template = FlowTemplate(source, target, (service,), kind, base, intent, summary)
         app.extra_flows.append(template)
         self._jobs[(app.app_id, template)] = (catalog.JOB_PERIODS[kind], phase, kind == "weekly")
@@ -564,43 +586,60 @@ class MediumSimulation(Simulation):
                 for f in app.template.flows
             )
 
-        emergency_count = round(level.years * level.emergency_per_year)
+        counts = {
+            name: self.rng_counts.weighted(weights) for name, weights in TRAP_COUNT_WEIGHTS.items()
+        }
+        self._copied_count = counts["copied_comments"]
         candidates = [a for a in early if servers_users_flow(a)]
-        emergency_apps = traps.sample(candidates, min(emergency_count, len(candidates)))
+        emergency_apps = traps.sample(candidates, min(counts["emergencies"], len(candidates)))
         job_candidates = [
             a
             for a in early
             if a not in emergency_apps
             and any(self._tier_zone(a, t) == "servers" for t in a.template.tiers)
         ]
-        job_apps = traps.sample(job_candidates, min(level.rare_jobs + 1, len(job_candidates)))
-        clear_day = total - traps.randint(2, 5)
-        if job_apps:
-            # The weekly job last ran the day before its zone pair was cleared.
-            self._add_job(job_apps[0], "weekly", clear_day - 1)
-            pair = (self.zone("servers"), self.zone("internet"))
-            self.pair_resets[pair] = clear_day
-        for number, app in enumerate(job_apps[1:]):
-            kind = "yearly" if number == 0 else traps.choice(("quarterly", "yearly"))
-            if kind == "yearly":
-                phase = total - traps.randint(200, 350)
+        kinds = (
+            ["weekly"] * counts["nolog_jobs"]
+            + ["yearly"] * counts["yearly_jobs"]
+            + ["quarterly"] * counts["quarterly_jobs"]
+        )
+        job_apps = traps.sample(job_candidates, min(len(kinds), len(job_candidates)))
+        # One zone pair is cleared a few days before the snapshot, whatever the
+        # jobs are. Weekly jobs without logging are put in that pair and last
+        # ran in the days before the clear (and less than a week before the
+        # snapshot, so they did not run again).
+        clear_roles = self.rng_clear.choice(CLEAR_PAIRS)
+        clear_day = total - self.rng_clear.randint(2, 5)
+        self.pair_resets[(self.zone(clear_roles[0]), self.zone(clear_roles[1]))] = clear_day
+        for kind, app in zip(kinds, job_apps, strict=False):
+            if kind == "weekly":
+                last_run = traps.randint(total - 6, clear_day - 1)
+                self._add_job(app, kind, last_run, clear_roles)
+            elif kind == "yearly":
+                self._add_job(app, kind, total - traps.randint(200, 350))
             else:
-                phase = total - traps.randint(1, 91)
-            self._add_job(app, kind, phase)
+                self._add_job(app, kind, total - traps.randint(1, 91))
         protected = {a.app_id for a in emergency_apps + job_apps}
         others = [a for a in apps if a.app_id not in protected]
-        batch = traps.sample(others, 3 if traps.chance(0.3) else 2)
-        batch_day = self.workday(traps.randint(total - 110, total - 40))
+        batches = []
+        for _ in range(counts["batch_commits"]):
+            batch = traps.sample(others, 3 if traps.chance(0.3) else 2)
+            others = [a for a in others if a not in batch]
+            batches.append((self.workday(traps.randint(total - 110, total - 40)), batch))
+        batched = {a.app_id for _, batch in batches for a in batch}
 
         for app in apps:
-            if app not in batch:
+            if app.app_id not in batched:
                 plan.append((go_lives[app.app_id], 1, "new_app", app))
-        plan.append((batch_day, 1, "batch", sorted(batch, key=lambda a: a.index)))
+        for day, batch in batches:
+            plan.append((day, 1, "batch", sorted(batch, key=lambda a: a.index)))
 
         eligible = [
             (go_lives[a.app_id], a)
             for a in apps
-            if a.app_id not in protected and a not in batch and go_lives[a.app_id] < total - 300
+            if a.app_id not in protected
+            and a.app_id not in batched
+            and go_lives[a.app_id] < total - 300
         ]
         decommissions = round(level.years * level.decommissions_per_year)
         migrations = round(level.years * level.migrations_per_year)
@@ -613,10 +652,21 @@ class MediumSimulation(Simulation):
             plan.append((day, 2, "migration", app))
             plan.append((self.workday(day + rng.randint(7, 30)), 3, "migration_cleanup", app))
 
+        # Hit count based cleanups, one a year whatever the incidents; each
+        # emergency happens 90 to 150 days before one of them.
+        cleanups = sorted(self.workday(traps.randint(180, total - 50)) for _ in range(level.years))
+        for day in cleanups:
+            plan.append((day, 3, "cleanup", None))
         for app in emergency_apps:
-            day = traps.randint(go_lives[app.app_id] + 60, total - 200)
+            first = go_lives[app.app_id] + 60
+            fitting = [day for day in cleanups if day - 90 >= first]
+            if fitting:
+                cleanup = traps.choice(fitting)
+                day = traps.randint(max(first, cleanup - 150), cleanup - 90)
+            else:
+                day = traps.randint(first, total - 200)
+                plan.append((self.workday(day + traps.randint(90, 150)), 3, "cleanup", None))
             plan.append((day, 2, "emergency", app))
-            plan.append((self.workday(day + traps.randint(90, 150)), 3, "cleanup", None))
 
         for _ in range(round(level.years * ACCESS_PER_YEAR)):
             request: dict = {}
@@ -665,10 +715,9 @@ class MediumSimulation(Simulation):
     def _copy_pasted_comments(self) -> None:
         """Comments copied from an earlier commit about another application.
 
-        One retained commit always gets one (spec 7.2 coverage); every other
-        retained commit that creates rules gets one with
-        `misleading_comment_rate`. Older commits are not shown, so changing
-        them would make no trap.
+        The number of copied comments is drawn per scenario; each goes to a
+        retained commit whose rules survive to the snapshot. Older commits are
+        not shown, so changing them would make no trap.
         """
         rng = self.rng_traps
         events = {e.event_id: e for e in self.events}
@@ -697,14 +746,10 @@ class MediumSimulation(Simulation):
             and self.admin(c.admin_id).persona != AUTOMATION
             and source_of(c) is not None
         ]
-        # The forced one must leave a rule in the final config to carry the tag.
+        # Each must leave a rule in the final config to carry the tag.
         visible = [c for c in candidates if any(uid in final for uid in c.created)]
-        if not visible:
-            return
-        forced = rng.choice(visible)
-        for commit in candidates:
-            if commit is not forced and not rng.chance(self.level.misleading_comment_rate):
-                continue
+        chosen = rng.sample(visible, min(self._copied_count, len(visible)))
+        for commit in sorted(chosen, key=lambda c: c.seq):
             source = source_of(commit)
             other = app_of(source)
             if source.comment and voice.code(other) in source.comment:

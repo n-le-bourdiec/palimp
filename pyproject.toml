@@ -45,4 +45,7 @@ members = ["simulator"]
 [tool.pytest.ini_options]
 testpaths = ["tests", "simulator/tests"]
 addopts = "-ra --import-mode=importlib"
-markers = ["slow: long tests, run in CI or with --runslow"]
+markers = [
+    "slow: long tests, run in CI or with --runslow",
+    "full: Medium seeds 10 to 99, run with --runslow only (not in CI)",
+]

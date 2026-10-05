@@ -24,7 +24,13 @@ V1_TRAPS = [
     "TRAP-HISTORY-HORIZON",
     "TRAP-DEACTIVATED",
 ]
-SEEDS = [0, 1, 2, 3, 4]
+# Trap counts are drawn per scenario (decision 0018). Seeds 0 to 4 hold every
+# v1 trap between them; 6 and 8 add scenarios without some of the drawn traps.
+SEEDS = [0, 1, 2, 3, 4, 6, 8]
+# Traps whose number of instances is drawn; the other two follow from the
+# timeline and are in every scenario.
+DRAWN_TRAPS = V1_TRAPS[:5]
+TIMELINE_TRAPS = V1_TRAPS[5:]
 COMMIT = re.compile(r"^(\d+)\s+(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) ")
 ON_CALL_NAMES = ("temp-fix", "emergency-allow", "test", "tmp-allow")
 
@@ -94,13 +100,36 @@ def misleading(rule: dict, artifact: str) -> list[dict]:
 # ------------------------------------------------------------------ coverage
 
 
-@pytest.mark.parametrize(
-    "seed", [s if s < 10 else pytest.param(s, marks=pytest.mark.slow) for s in range(100)]
-)
-def test_every_v1_trap_in_every_medium_scenario(seed: int) -> None:
+def trap_counts(seed: int) -> dict[str, int]:
     truth = json.loads(generate("medium", seed)["ground_truth.json"])
-    found = {trap for rule in truth["rules"] for trap in rule["traps"]}
-    assert found == set(V1_TRAPS), sorted(set(V1_TRAPS) - found)
+    return {t: sum(1 for r in truth["rules"] if t in r["traps"]) for t in V1_TRAPS}
+
+
+@pytest.mark.parametrize("seed", range(10))
+def test_timeline_traps_in_every_medium_scenario(seed: int) -> None:
+    counts = trap_counts(seed)
+    assert all(counts[trap] for trap in TIMELINE_TRAPS), counts
+
+
+def test_fixture_seeds_cover_every_trap_and_its_absence() -> None:
+    counts = [trap_counts(seed) for seed in SEEDS]
+    for trap in V1_TRAPS:
+        assert any(c[trap] for c in counts), trap
+    for trap in DRAWN_TRAPS:
+        assert any(not c[trap] for c in counts), trap
+
+
+@pytest.mark.full
+def test_drawn_trap_distribution_over_seeds_0_to_99() -> None:
+    """Each drawn trap is in 60 to 90% of scenarios, with varying counts."""
+    counts = [trap_counts(seed) for seed in range(100)]
+    for trap in DRAWN_TRAPS:
+        values = [c[trap] for c in counts]
+        share = sum(1 for v in values if v) / len(values)
+        assert 0.6 <= share <= 0.9, (trap, share)
+        assert len({v for v in values if v}) >= 2, (trap, sorted(set(values)))
+    for trap in TIMELINE_TRAPS:
+        assert all(c[trap] for c in counts), trap
 
 
 # ------------------------------------------------------------------ format draw
@@ -166,7 +195,6 @@ def test_easy_keeps_server_clock_equal_to_device_clock() -> None:
 
 def test_live_nolog_looks_dead_but_is_live(medium: Scenario) -> None:
     rules = medium.rules("TRAP-LIVE-NOLOG")
-    assert rules
     clears = {(c["from_zone"], c["to_zone"]) for c in medium.manifest["hit_count_clears"]}
     for rule in rules:
         # Naive reading: no logging configured, no log line, zero hits: dead.
@@ -183,7 +211,6 @@ def test_live_nolog_looks_dead_but_is_live(medium: Scenario) -> None:
 
 def test_rare_job_has_no_hits_in_window_but_is_live(medium: Scenario) -> None:
     rules = medium.rules("TRAP-RARE-JOB")
-    assert rules
     for rule in rules:
         assert medium.hit_count(rule) == 0
         assert medium.log_lines(rule) == 0
@@ -198,7 +225,6 @@ def test_rare_job_has_no_hits_in_window_but_is_live(medium: Scenario) -> None:
 
 def test_emergency_rule_looks_temporary_but_carries_the_flow(medium: Scenario) -> None:
     rules = medium.rules("TRAP-EMERGENCY-LOADBEARING")
-    assert len(rules) == 4
     pair_policies: dict[tuple, list[str]] = {}
     for line in medium.config.splitlines():
         match = re.match(
@@ -244,7 +270,6 @@ def test_emergency_rule_looks_temporary_but_carries_the_flow(medium: Scenario) -
 
 def test_misleading_comment_names_another_application(medium: Scenario) -> None:
     rules = medium.rules("TRAP-MISLEADING-COMMENT")
-    assert rules
     comments = medium.comments()
     codes = {code: app for app, code in APP_CODES.items()}
     for rule in rules:
@@ -256,20 +281,19 @@ def test_misleading_comment_names_another_application(medium: Scenario) -> None:
 
 
 def test_batch_commit_mixes_unrelated_applications(medium: Scenario) -> None:
-    rules = medium.rules("TRAP-BATCH-COMMIT")
-    assert rules
-    indexes = {r["created"]["commit_index"] for r in rules}
-    assert len(indexes) == 1
-    index = indexes.pop()
-    # One commit adds all these policies (visible by diffing the rollbacks)...
-    for rule in rules:
-        assert medium.policy_lines(rule, medium.rollback(index))
-        assert not medium.policy_lines(rule, medium.rollback(index + 1))
-    # ...under one comment, but they serve unrelated applications.
-    assert len({r["intent"]["app_id"] for r in rules}) >= 2
-    assert all(misleading(rule, "rollbacks") for rule in rules)
-    if index in medium.comments():
-        assert any(misleading(rule, "commits.txt") for rule in rules)
+    batches: dict[int, list[dict]] = {}
+    for rule in medium.rules("TRAP-BATCH-COMMIT"):
+        batches.setdefault(rule["created"]["commit_index"], []).append(rule)
+    for index, rules in batches.items():
+        # One commit adds all these policies (visible by diffing the rollbacks)...
+        for rule in rules:
+            assert medium.policy_lines(rule, medium.rollback(index))
+            assert not medium.policy_lines(rule, medium.rollback(index + 1))
+        # ...under one comment, but they serve unrelated applications.
+        assert len({r["intent"]["app_id"] for r in rules}) >= 2
+        assert all(misleading(rule, "rollbacks") for rule in rules)
+        if index in medium.comments():
+            assert any(misleading(rule, "commits.txt") for rule in rules)
 
 
 def test_history_horizon_rules_have_no_direct_evidence(medium: Scenario) -> None:

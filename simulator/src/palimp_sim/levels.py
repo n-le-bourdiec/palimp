@@ -53,9 +53,6 @@ class Level:
     rescue_line: bool = False
     zones: int = field(default=4, metadata=NEW)
     persona_mix: bool = field(default=False, metadata=NEW)
-    misleading_comment_rate: float = field(default=0.0, metadata=NEW)
-    emergency_per_year: float = field(default=0.0, metadata=NEW)
-    rare_jobs: int = field(default=0, metadata=NEW)
     cleanup_deactivate_rate: float = field(default=0.0, metadata=NEW)
     traps: bool = field(default=False, metadata=NEW)
     draw_formats: bool = field(default=False, metadata=NEW)
@@ -149,9 +146,6 @@ MEDIUM = Level(
     rescue_line=True,
     zones=5,
     persona_mix=True,
-    misleading_comment_rate=0.03,
-    emergency_per_year=1.0,
-    rare_jobs=2,
     cleanup_deactivate_rate=0.3,
     traps=True,
     draw_formats=True,
@@ -164,6 +158,22 @@ FORMAT_DRAWS = {
     "log_release": (("pre-22.2", 0.7), ("12.x", 0.3)),
     "hitcount_layout": (("standard", 0.7), ("legacy", 0.3)),
     "rescue_line": ((True, 0.5), (False, 0.5)),
+}
+
+# Instances of each drawn v1 trap per Medium scenario (decision 0018): weights
+# of 0, 1, 2, ... instances, drawn from the seed (sub-generator `trap_counts`).
+# An instance is one weekly job without logging in the cleared zone pair, one
+# yearly job, one emergency event, one copied comment, one batch commit.
+# Quarterly jobs are not traps by themselves: one becomes TRAP-RARE-JOB only
+# when the hit count clear happens to hit its zone pair after its last run.
+# TRAP-HISTORY-HORIZON and TRAP-DEACTIVATED follow from the timeline.
+TRAP_COUNT_WEIGHTS = {
+    "nolog_jobs": (0.25, 0.5, 0.25),
+    "yearly_jobs": (0.3, 0.45, 0.25),
+    "quarterly_jobs": (0.5, 0.5),
+    "emergencies": (0.2, 0.35, 0.3, 0.15),
+    "copied_comments": (0.25, 0.4, 0.25, 0.1),
+    "batch_commits": (0.25, 0.55, 0.2),
 }
 
 LEVELS = {"easy": EASY, "medium": MEDIUM}
