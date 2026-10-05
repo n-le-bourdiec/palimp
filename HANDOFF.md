@@ -1,89 +1,108 @@
 # Handoff
 
-## Last session: 12 (2026-10-05), analyzer: verdicts, confidence, first real evaluation
+## Last session: 13 (2026-10-05), evaluation infrastructure: unseen dev check and held-out workflow
+
+No change under `src/palimp` (by mission).
+
+### Note for analyzer sessions
+
+- No ground truth schema change. Held-out ground truth uses the same schema;
+  its `scenario_id` is `<level>-<index>` and can equal a dev id. Only the
+  manifest tells them apart (`split: held-out`, `holdout_index`, no `seed`).
+  Decision 0021.
+- `eval/evidence_recall.run_seed` takes `holdout=False`; `eval/verdicts.py`
+  has `--holdout N` (workflow only, needs `HOLDOUT_SALT`, aggregate output).
 
 ### Note for simulator sessions
 
-- No ground truth schema change. The new harness `eval/verdicts.py` reads
-  `expected`, `status.live`, `intent.app_id`, `people`, `traps` and
-  `created.event_id`; the slow test `tests/test_medium_verdicts.py` reads
-  `status.live`. palimp itself never reads ground truth or manifest.
-- Observation, not a request: `expected.verdict` is `removal_candidate` for
-  many dead rules whose only not-live evidence is zero hits and no log lines
-  (193 rules over seeds 0 to 19 have T2-only not-live evidence). Decision 0020
-  makes palimp answer `verify` there on purpose.
+- `palimp-sim generate --holdout INDEX` (decision 0021, spec section 8.2
+  updated): needs `HOLDOUT_SALT`, else exit code 2 with a clear message. Seed
+  = `2**63` + first 8 bytes of `SHA-256("<salt>:<level>:<index>")`; `generate`
+  now rejects dev seeds outside `[0, 2**63)`. `ground_truth()` takes an
+  optional `scenario_id`. Dev output unchanged (golden hashes pass), version
+  stays 0.3.0. Tests in `simulator/tests/test_holdout.py`.
+
+### How the project lead runs the held-out evaluation
+
+1. Once: GitHub repository, Settings, Secrets and variables, Actions, New
+   repository secret, name `HOLDOUT_SALT`, any long random value. Never put it
+   on the development machine (decision 0007). Rotate it when a simulator
+   change affects difficulty.
+2. Each run: Actions tab, workflow "Held-out evaluation", "Run workflow"
+   button, branch `main`, "Run workflow".
+3. Read the result in the run page summary ("Held-out run record": date,
+   palimp commit, palimp and simulator versions, who started it, then the
+   headline, per trap, per format variant and calibration tables). The log
+   shows the same tables and nothing per rule. Every run stays in the Actions
+   history.
+4. Paste only the aggregate tables into a session prompt if you want an
+   agent to see them, and never ask it to tune on them.
+
+The workflow (`.github/workflows/holdout.yml`) generates 50 Medium held-out
+scenarios under `$RUNNER_TEMP/holdout`, runs palimp and the verdict eval,
+uploads nothing and deletes the scenarios at the end, even on failure. A
+failure prints only `held-out scenario N failed (details hidden)`. It was not
+triggered in session 13 and has never run. It was dry-run locally with a test
+salt (not the secret) on 1 and 2 scenarios.
 
 ### Done
 
-- Session 11 metrics row finalized (67 calls, 4.54 USD API-equivalent).
-- Decision 0020: absence of evidence is never evidence of absence.
-  `removal_candidate` needs a positive not-live signal; zero hits and no log
-  lines alone give `verify`. Refinements recorded in the same file.
-- Evidence items carry `kind` and `apps` (applications they name). App
-  vocabulary (`apps.py`) learned from the artifacts: ticket related CI,
-  object name first segments (role words like `pc`, `users` skipped), ticket
-  short names (`Decom ESHOP` + related CI `webshop` gives `eshop`).
-- New evidence: T3 deactivated policy, T3 temporary label (temp, test,
-  urgent, typos of temp), T1 decommission leftover (`notlive.py`): a commit
-  comment or ticket retiring an app, linked to its commit (ticket ID in the
-  comment, else close date), that deleted policies on the same objects, and
-  every app the policy names is the retired one.
-- Ingest records `removed_by_commit` (policies each commit deleted).
-- `assess.py`: verdict rules V-CONTRADICTION, V-NOTLIVE, V-TEMPORARY-IN-USE,
-  V-TRAFFIC-NOT-RECENT, V-TRAFFIC, V-NO-TRAFFIC-SEEN, V-NO-VISIBILITY;
-  confidence rules C-T1-T3-CONFLICT, C-T1-T3-AGREE (HIGH, needs traffic
-  seen), C-T1-T3-AGREE-NO-TRAFFIC, C-T1-ONLY, C-T3, C-WEAK. Conflict findings
-  cite both evidence IDs. Question and who to ask on every non-keep verdict.
-- `explain` shows the assessment; `explain --all` text collapses blind T2
-  items into numbered global notes (the JSON keeps every item).
-- `eval/verdicts.py`: verdict accuracy (expected and best achievable),
-  dangerous errors listed, overconfidence, calibration, per trap (rule and
-  instance), per format variant, naive baseline (zero hits gives removal).
-- Medium dev seeds 0 to 19 (3099 rules), final:
-  palimp 90.0% vs best achievable (naive 90.1%), 85.3% vs expected (naive
-  90.2%), dangerous errors 0 (naive 44), overconfidence 0.0%, HIGH: intent
-  app right 96.7%, verdict = best 97.0%. Before the new not-live evidence and
-  refinements: 86.5% vs best, 0 dangerous, 2.4% overconfident.
-- Conflicts flagged on all 44 TRAP-MISLEADING-COMMENT rules, 68 BATCH-COMMIT
-  rules and 5 untrapped rules.
-- Slow test: zero removal candidates on live rules, Medium seeds 0 to 9.
+- Session 12 metrics row finalized (85 calls, 6.18 USD API-equivalent).
+- Part A, five conflicts on untrapped rules (seeds 5, 10, 11, 15, 19), report
+  only: all five are false conflicts, the same rule each time,
+  `monitoring-to-servers` (`mon-01` to `servers-net`, udp/161, ground truth
+  app `shared-monitoring`, no trap). The description and the ticket (related
+  CI `shared-monitoring`) name `monitoring`; the address objects give `mon`
+  (an abbreviation) and `servers` (a role word for "all servers", not an
+  app). Nothing in the artifacts contradicts. Effect: confidence lowered
+  (MEDIUM or LOW instead of a possible HIGH), intent app counted wrong
+  (`mon`). Verdict `keep` is right in all five. Seeds 20 to 99 show 13 more
+  on the same rule, plus 1 on `rule-54` (not inspected).
+- Overfitting check, current code unchanged, no tuning. Seeds 0 to 19
+  reproduce session 12 exactly. Seeds 20 to 99 (12553 rules), never looked at
+  before: verdict vs best 91.1% (dev 90.0%), vs expected 86.8% (85.3%),
+  dangerous errors 0 (0; naive 160), overconfidence 0.0%, HIGH intent app
+  right 97.9% (96.7%), HIGH verdict = best 97.5% (97.0%). Full tables in the
+  session 13 report. No drop: no sign of overfitting to seeds 0 to 19. Note:
+  seeds 20 to 99 are still dev seeds of the same generator, not held-out.
+- Held-out generation in the simulator CLI, eval `--holdout` mode, workflow,
+  decision 0021.
 
 ### Next
 
-- 183 dead rules stay at `verify` (best achievable `removal_candidate`):
-  mostly decommissions with no comment and no exported ticket. Candidate
-  positive signals: the destination never seen in any log while logging
-  rules to neighboring hosts are (decision 0020 lists it), decommission
-  commit found without a marker (a commit that deletes most rules of one
-  application).
-- 126 not-live rules with hits get `keep` (best `verify`): hits since an
-  unknown clear date on a retired app. Hit count clear detection (session 11
-  next list) and the retired-app signal on rules with traffic would help.
-- `ask` names the ground truth owner only 18.5% of the time: palimp names
-  the ticket requester, or the latest requester for the app. Look at who the
-  owner is in the artifacts.
-- `report` and `questions` commands (the questions are now in the JSON).
-- Held-out seeds were not run (by mission). Run them only after the next
-  tuning round is frozen.
+- Project lead: create the `HOLDOUT_SALT` secret and trigger the first
+  held-out run (baseline before the next tuning round).
+- Analyzer, from session 12 (unchanged): 183 dead rules at `verify` (best
+  `removal_candidate`) on 0 to 19 (697 on 20 to 99); 126 not-live rules with
+  hits at `keep` (409); `ask` names the owner 18.5% (18.3%); `report` and
+  `questions` commands.
+- Analyzer: the `mon` and `servers` vocabulary gap above (abbreviation of a
+  known app, role word `servers`).
+- 20 to 99: one `verify` rule got `removal_candidate` (best `verify`, not
+  live per the dangerous count) and V-CONTRADICTION fires 94 times (12 on
+  0 to 19). Not inspected.
 
 ### Open questions
 
-- Is 90.0% vs best achievable with 0 dangerous errors the right trade, given
-  that the ground truth `expected.verdict` rewards removal on absence alone?
-- Should deactivated rules always be removal candidates (all 238 match the
-  ground truth today)? A deactivated rule kept as a fallback is a real case.
-- HIGH now needs traffic seen. Should a T1 that names a ticket still open
-  also allow HIGH?
+- Should held-out runs also cover Easy, or other scenario counts? The
+  workflow has `LEVEL` and `SCENARIOS` at the top; inputs were left out so
+  every run is comparable.
+- From session 12: is 90% vs best with 0 dangerous errors the right trade;
+  deactivated rules always removal candidates; HIGH with an open ticket.
 - Carried over: blind T2 items per policy (decision 0019); per trap headline
   metric (per rule or per instance); Hard trap weights; Medium size; on_call
   persona; decision 0015; `commit activate`; CONFIRMED-TEXT; scenario names.
 
 ### Known issues
 
+- Held-out `scenario_id` can equal a dev id (decision 0021); tools must read
+  the manifest `split`.
+- Session 13 read `docs/simulator-spec.md` and simulator code (needed to build
+  held-out generation) and also ran palimp on dev scenarios. It changed no
+  analyzer code, so the independence rule was not used to tune anything.
 - App vocabulary misses names with no ticket and no object prefix
-  (`vendor-arch-109` does not name `archive`: prefix matching was dropped
-  because `web` named `webshop`).
-- Five conflicts on untrapped rules (not inspected).
+  (`vendor-arch-109` does not name `archive`; `mon-01` does not name
+  `monitoring`).
 - Carried over: logged sessions undercount traffic; time of day in logged
   time zone; Junos predefined applications from general knowledge (VSRX-12);
   VSRX-2b; ticket assignee `svc-ansible`; S2 and S5; git identity in repo
@@ -115,9 +134,10 @@ Session 9 has transcript `60a6f3c8-c28b-457e-8a93-e9da7abb4439` (finalized in
 session 10). Session 10 has transcript `3649919e-84f0-4cd3-8b8d-c49cc31eff22` (finalized
 in session 11). Session 11 has transcript `0d141375-db8e-4e9e-8979-0100e197eb49`
 (finalized in session 12). Session 12 has transcript
-`8ed29a6f-73ed-4fd4-b799-5bcf0a8290c4`. Finalize it at the start of session
-13 with:
+`8ed29a6f-73ed-4fd4-b799-5bcf0a8290c4` (finalized in session 13). Session 13
+has transcript `427d7108-6479-4578-a3a6-f699f1889575`. Finalize it at the start
+of session 14 with:
 
-    uv run python metrics/session_tokens.py 8ed29a6f-73ed-4fd4-b799-5bcf0a8290c4
+    uv run python metrics/session_tokens.py 427d7108-6479-4578-a3a6-f699f1889575
 
 Cost is API-equivalent (decision 0006), not a billed amount.
