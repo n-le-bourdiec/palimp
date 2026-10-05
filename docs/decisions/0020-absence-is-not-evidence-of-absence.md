@@ -82,8 +82,9 @@ new not-live evidence collectors, next to the baseline.
 ## Refinements after the first evaluation (same session)
 
 Recorded the same day, before the decision was pushed, after the first run on
-Medium dev seeds 0 to 19. Both are scoring rules, stated here so that the
-decision stays the single place that describes them:
+Medium dev seeds 0 to 19. The first two are scoring rules, the third an
+evidence collector left out; all are stated here so that the decision stays
+the single place that describes them:
 
 - HIGH also needs traffic seen (a `present` T2 item). Without it, agreeing T1
   and T3 give MEDIUM (`C-T1-T3-AGREE-NO-TRAFFIC`): a documented intent on a

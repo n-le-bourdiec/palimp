@@ -31,7 +31,7 @@ T4 alone can never exceed LOW.
 from palimp.models import Assessment, Conflict, Dataset, Evidence, Finding
 
 # Evidence kinds that say a policy is unused (decision 0020), not that nothing is known.
-NOT_LIVE_KINDS = frozenset({"deactivated", "decommission", "cleanup_leftover"})
+NOT_LIVE_KINDS = frozenset({"deactivated", "decommission"})
 LEVELS = ("LOW", "MEDIUM", "HIGH")
 # T1 kinds that state why a policy exists (a decommission states why it ended).
 INTENT_KINDS = frozenset({"description", "commit_comment", "ticket"})

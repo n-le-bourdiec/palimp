@@ -221,11 +221,7 @@ def main() -> int:
     dangerous = [r for r in rows if r["palimp"] == "removal_candidate" and r["live"]]
     print(f"\nDangerous errors, palimp ({len(dangerous)}):")
     for r in dangerous:
-        cited = [
-            e
-            for e in r["evidence"]
-            if e["kind"] in ("deactivated", "decommission", "cleanup_leftover")
-        ]
+        cited = [e for e in r["evidence"] if e["kind"] in ("deactivated", "decommission")]
         print(f"  {r['scenario']} {r['key']} traps={r['traps']} rule={r['rule']}")
         for e in cited:
             print(f"    [{e['id']}] {e['kind']}: {e['locator']} :: {e['claim'][:160]}")
