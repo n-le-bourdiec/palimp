@@ -50,7 +50,7 @@ def test_hitcount() -> None:
 
 
 def test_rt_flow_summary() -> None:
-    summaries, stats = parse_rt_flow(LOG)
+    summaries, stats, _ = parse_rt_flow(LOG)
     summary = summaries["users-to-crm-web"]
     assert (summary.create, summary.close) == (1, 1)
     assert summary.first_seen.day == 14 and summary.last_seen.day == 15

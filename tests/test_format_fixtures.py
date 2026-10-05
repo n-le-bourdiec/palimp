@@ -17,6 +17,12 @@ from palimp.formats.rt_flow import parse_event, parse_rt_flow
 FIXTURES = Path(__file__).parent / "fixtures" / "junos_docs"
 
 
+def by_name(summaries: dict, name: str):
+    """The only log summary of policy NAME (summaries are keyed by FROM/TO/NAME)."""
+    (summary,) = [s for s in summaries.values() if s.policy_name == name]
+    return summary
+
+
 def body(name: str) -> str:
     lines = (FIXTURES / name).read_text(encoding="utf-8").splitlines()
     return "\n".join(lines[lines.index("# ---") + 1 :]) + "\n"
@@ -144,8 +150,8 @@ def test_g6_hitcount_rows_in_any_order() -> None:
 
 
 def test_g7_logical_system_messages() -> None:
-    summaries, stats = parse_rt_flow(body("rt_flow_structured_12.1x47.txt"))
-    lsys = summaries["lsys1trust-to-lsys1trust"]
+    summaries, stats, _ = parse_rt_flow(body("rt_flow_structured_12.1x47.txt"))
+    lsys = by_name(summaries, "lsys1trust-to-lsys1trust")
     assert (lsys.create, lsys.close) == (1, 2)
     assert stats.unknown == 0
     first = next(
@@ -169,8 +175,8 @@ def test_session_id_32() -> None:
 
 
 def test_g8_structured_from_syslog_server() -> None:
-    summaries, stats = parse_rt_flow(body("rt_flow_structured_12.3_remote.txt"))
-    summary = summaries["trust-untrust"]
+    summaries, stats, _ = parse_rt_flow(body("rt_flow_structured_12.3_remote.txt"))
+    summary = by_name(summaries, "trust-untrust")
     assert (summary.create, summary.close) == (1, 2)
     # Device time, not the server's receive time.
     assert summary.first_seen == datetime(2010, 9, 6, 4, 24, 22, 94000)
@@ -191,8 +197,8 @@ def test_g9_text_after_bracket() -> None:
     text = body("rt_flow_structured_wrapped.txt")
     messages = ["<14>1" + part for part in text.split("<14>1") if part.strip()]
     joined = "\n".join(" ".join(m.split()) for m in messages)
-    summaries, stats = parse_rt_flow(joined)
-    assert (summaries["policy1"].create, summaries["policy1"].close) == (1, 1)
+    summaries, stats, _ = parse_rt_flow(joined)
+    assert (by_name(summaries, "policy1").create, by_name(summaries, "policy1").close) == (1, 1)
     assert stats.unknown == 0
 
 
@@ -201,16 +207,16 @@ def test_g9_text_after_bracket() -> None:
 
 def test_g10_standard_from_syslog_server() -> None:
     text = body("rt_flow_standard_12.3_remote.txt")
-    summaries, stats = parse_rt_flow(text)
-    summary = summaries["trust-untrust"]
+    summaries, stats, _ = parse_rt_flow(text)
+    summary = by_name(summaries, "trust-untrust")
     assert (summary.create, summary.close) == (1, 1)
     # No year in BSD syslog timestamps: counted, times left unset.
     assert summary.first_seen is None
     # "last message repeated" is not an RT_FLOW message.
     assert stats.unknown == 0 and stats.ignored == 1
 
-    summaries, _ = parse_rt_flow(text, year=2010)
-    summary = summaries["trust-untrust"]
+    summaries, _, _ = parse_rt_flow(text, year=2010)
+    summary = by_name(summaries, "trust-untrust")
     assert summary.first_seen == datetime(2010, 9, 6, 2, 52, 30)
     assert summary.last_seen == datetime(2010, 9, 6, 2, 53, 49)
 

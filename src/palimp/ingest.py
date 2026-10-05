@@ -3,6 +3,7 @@
 Only config.set is required. Missing optional inputs produce warnings.
 """
 
+from datetime import date, datetime
 from pathlib import Path
 
 from palimp.formats.commits import parse_commits
@@ -56,7 +57,24 @@ def history(configs: dict[int, Config]) -> tuple[dict[str, PolicyHistory], dict[
     return result, created_by
 
 
-def ingest(directory: Path) -> Dataset:
+def reference_date(dataset: Dataset) -> datetime | None:
+    """Latest date found in the artifacts read so far (commits, then tickets)."""
+    if dataset.commits:
+        return max(c.timestamp for c in dataset.commits)
+    dates: list[datetime] = []
+    for ticket in dataset.tickets.values():
+        for value in (ticket.opened, ticket.closed):
+            try:
+                dates.append(
+                    datetime.combine(date.fromisoformat((value or "")[:10]), datetime.min.time())
+                )
+            except ValueError:
+                continue
+    return max(dates, default=None)
+
+
+def ingest(directory: Path, log_year: int | None = None) -> Dataset:
+    """Read DIRECTORY. `log_year` forces the year of undated log lines (see rt_flow)."""
     directory = resolve_directory(directory)
     config_text = _read(directory / "config.set")
     if config_text is None:
@@ -82,15 +100,20 @@ def ingest(directory: Path) -> Dataset:
     else:
         dataset.hit_counts, dataset.hit_count_stats = parse_hitcount(text)
 
-    text = _read(directory / "logs" / "rt_flow.log")
-    if text is None:
-        dataset.warnings.append("logs/rt_flow.log missing")
-    else:
-        dataset.logs, dataset.log_stats = parse_rt_flow(text)
-
     text = _read(directory / "tickets.csv")
     if text is None:
         dataset.warnings.append("tickets.csv missing (optional)")
     else:
         dataset.tickets, dataset.ticket_stats = parse_tickets(text)
+
+    text = _read(directory / "logs" / "rt_flow.log")
+    if text is None:
+        dataset.warnings.append("logs/rt_flow.log missing")
+    else:
+        dataset.logs, dataset.log_stats, dataset.log_window = parse_rt_flow(
+            text, year=log_year, reference=reference_date(dataset)
+        )
+        if dataset.log_window.year_source in ("inferred", "none"):
+            dataset.warnings.append(dataset.log_window.year_note)
+
     return dataset

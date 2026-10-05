@@ -36,12 +36,18 @@ def main(
     """Reconstruct the lost intent behind inherited firewall rules."""
 
 
-def _load(source: Path) -> Dataset:
+LOG_YEAR_HELP = (
+    "Year of the first log line whose timestamp has no year (standard syslog format). "
+    "By default it is inferred from the latest commit date, with a warning."
+)
+
+
+def _load(source: Path, log_year: int | None = None) -> Dataset:
     """Read an artifact directory, or a JSON file written by `palimp ingest`."""
     if source.is_file() and source.suffix == ".json":
         return Dataset.model_validate_json(source.read_text(encoding="utf-8"))
     try:
-        return ingest_directory(source)
+        return ingest_directory(source, log_year=log_year)
     except FileNotFoundError as error:
         typer.echo(f"error: {error}", err=True)
         raise typer.Exit(2) from error
@@ -60,9 +66,10 @@ def _stats_line(stats: ParseStats | None) -> str:
 def ingest(
     directory: Path = typer.Argument(..., help="Directory holding the artifacts."),
     out: Path = typer.Option(Path("palimp-ingest.json"), "--out", "-o", help="Output JSON file."),
+    log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
 ) -> None:
     """Parse all artifacts of DIRECTORY and write a normalized JSON file."""
-    dataset = _load(directory)
+    dataset = _load(directory, log_year)
     out.write_text(dataset.model_dump_json(indent=2) + "\n", encoding="utf-8")
     all_stats = [
         dataset.config.stats,
@@ -127,11 +134,14 @@ def explain(
     no_llm: bool = typer.Option(False, "--no-llm", help="Facts and evidence only, no prose."),
     as_json: bool = typer.Option(False, "--json", help="Print JSON instead of text."),
     all_policies: bool = typer.Option(False, "--all", help="Explain every policy."),
+    log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
 ) -> None:
     """Show a policy and the evidence found for it."""
     if not no_llm:
         typer.echo("note: LLM prose is not implemented yet; showing --no-llm output", err=True)
-    dataset = _load(source)
+    dataset = _load(source, log_year)
+    if dataset.log_window.year_source in ("inferred", "none"):
+        typer.echo(f"warning: {dataset.log_window.year_note}", err=True)
     if all_policies:
         findings = collect_all(dataset)
     else:

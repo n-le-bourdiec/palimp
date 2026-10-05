@@ -1,6 +1,6 @@
 """Normalized data model shared by the readers, the evidence collectors and the CLI."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -114,12 +114,36 @@ class HitCount(BaseModel):
 
 
 class LogSummary(BaseModel):
+    """What the RT_FLOW log says about one policy. Lists are capped, counts are not."""
+
     policy_name: str
+    from_zone: str = ""
+    to_zone: str = ""
     create: int = 0
     close: int = 0
     deny: int = 0
+    sessions: int = Field(0, description="distinct sessions (by session id when logged)")
     first_seen: datetime | None = None
     last_seen: datetime | None = None
+    sources: list[str] = []
+    source_count: int = 0
+    destinations: list[str] = []
+    destination_count: int = 0
+    ports: list[str] = Field([], description="protocol/port, for example tcp/443")
+    services: list[str] = Field([], description="service-name as logged, for example junos-ssh")
+    hours: list[int] = Field([0] * 24, description="sessions per hour of day, as logged")
+    weekdays: list[int] = Field([0] * 7, description="sessions per weekday, Monday first")
+    days: list[date] = Field([], description="distinct days with at least one session")
+
+
+class LogWindow(BaseModel):
+    """Time span covered by the log file, and how the year was found."""
+
+    start: datetime | None = None
+    end: datetime | None = None
+    undated_lines: int = Field(0, description="lines whose timestamp has no year")
+    year_source: str = Field("", description="'forced', 'inferred', 'none' or '' (not needed)")
+    year_note: str = ""
 
 
 class Ticket(BaseModel):
@@ -143,12 +167,20 @@ class PolicyHistory(BaseModel):
     oldest_retained_index: int
 
 
+Signal = Literal["present", "absent", "blind"]
+
+
 class Evidence(BaseModel):
     id: str
     tier: Tier
     artifact: str
     locator: str
     claim: str
+    # T2 only (decision 0019): "present" when the artifact shows traffic,
+    # "absent" when it could show traffic and shows none, "blind" when it cannot
+    # show traffic for this policy (no logging, deactivated, artifact missing).
+    # A blind item is a stated gap, never evidence of use or non-use.
+    signal: Signal | None = None
 
 
 class Finding(BaseModel):
@@ -172,8 +204,11 @@ class Dataset(BaseModel):
     )
     hit_counts: list[HitCount] = []
     hit_count_stats: ParseStats | None = None
-    logs: dict[str, LogSummary] = {}
+    logs: dict[str, LogSummary] = Field(
+        {}, description="keyed by FROM/TO/NAME, or by NAME when the log has no zones"
+    )
     log_stats: ParseStats | None = None
+    log_window: LogWindow = LogWindow()
     tickets: dict[str, Ticket] = {}
     ticket_stats: ParseStats | None = None
     warnings: list[str] = []
