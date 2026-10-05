@@ -1,39 +1,49 @@
 # Handoff
 
-## Last session: 9 (2026-10-05), simulator: Medium level and the 7 v1 traps
+## Last session: 10 (2026-10-05), simulator: variable Medium trap counts
+
+### Note for analyzer sessions
+
+- Ground truth schema: event kind `access_request` was added in session 9
+  (decision 0017, additive, `schema_version` stays 1). Accept it wherever event
+  kinds are mapped. From now on every schema change gets a decision file and a
+  note here (CLAUDE.md).
+- Simulator 0.3.0 (decision 0018): a Medium scenario can contain none, one or
+  several instances of TRAP-LIVE-NOLOG, TRAP-RARE-JOB,
+  TRAP-EMERGENCY-LOADBEARING, TRAP-MISLEADING-COMMENT and TRAP-BATCH-COMMIT.
+  The hit count clear (`hit_count_clears` in the manifest) can be on servers
+  to internet, servers to management or management to servers. Per-trap
+  metrics must be computed over the scenarios that contain the trap.
 
 ### Done
 
-- Session 8 metrics row finalized (52 calls, 3.48 USD API-equivalent).
-- Medium level (`simulator/src/palimp_sim/medium.py`, `levels.MEDIUM`), spec
-  7.1 values: 4 years, 25 applications (7 Medium-only templates in
-  `catalog.EXTRA_APPS`), 5 zones (management zone `mgmt`/`admin` with
-  monitoring, backup, jump hosts), personas senior x2, hurried operator,
-  automation (`svc-ansible via netconf`). Volume comes from integrations
-  between applications and ad hoc access requests (spec 4.9).
-- Seven v1 traps built by the timeline and checked on the final state in
-  `truth.py` (spec 7.4): LIVE-NOLOG, RARE-JOB, EMERGENCY-LOADBEARING,
-  MISLEADING-COMMENT, BATCH-COMMIT, HISTORY-HORIZON, DEACTIVATED. Each sets
-  `expected.verdict`, `best_achievable_verdict`, `max_justified_confidence`
-  and misleading evidence items.
-- Format knobs drawn per Medium scenario from the seed, recorded in
-  `manifest.json` (`format_draw`); 22.2 never drawn; overrides win
-  (decision 0016). Medium syslog-server lines carry a constant clock skew of
-  1 to 6 seconds (`syslog_clock_skew_seconds`).
-- Easy outputs byte-identical: all files of seeds 0 to 99 (plus legacy and
-  12.x variants every tenth seed) hashed before and after; golden hashes
-  unchanged. Medium-only knobs are left out of the manifest at their
-  defaults; simulator version stays 0.2.0 (decision 0016).
-- Tests: `simulator/tests/test_medium.py` (coverage of the 7 traps in every
-  scenario, seeds 0 to 99 in slow mode; format draw; skew; one "naive reading
-  is wrong" test per trap); existing tests extended to Medium seeds; Medium
-  golden hash (seed 0).
-- Measured over Medium seeds 0 to 99: 148 policies on average (124 to 169),
-  19.1% dead rules (10.4 to 32.7%), every v1 trap in 100 of 100 scenarios,
-  no shadowed dead rule (a v2 trap) left, 2.6 s and 8.0 MB per scenario.
-- Schema: event kind `access_request` added (additive change to the shared
-  contract).
-- Spec: 4.9, 5.4, 5.5, 7.1, 7.4, VSRX-2b. Decision 0016.
+- Session 9 metrics row finalized (125 calls, 12.40 USD API-equivalent).
+- Trap counts drawn per Medium scenario (sub-generator `trap_counts`, weights
+  in `levels.TRAP_COUNT_WEIGHTS`); the knobs `emergency_per_year`,
+  `rare_jobs` and `misleading_comment_rate` are gone (replaced by the
+  weights). Several batch commits and several copied comments per scenario are
+  possible.
+- Hit count clear decoupled from rare jobs: pair drawn on its own
+  (sub-generator `hit_count_clear`); weekly no-log jobs go in that pair (two new
+  job shapes with the backup server, intent `backup`); rare jobs stay
+  application to partner. A RARE-JOB rule sits in the cleared pair in 21 of
+  100 scenarios, by chance.
+- Cleanups are now one a year, independent of emergencies (each emergency is
+  placed 90 to 150 days before one of them), so TRAP-DEACTIVATED stays in
+  every scenario.
+- Measured over Medium seeds 0 to 99 (rules tagged per scenario):
+  LIVE-NOLOG 73% (0 to 2), RARE-JOB 68% (0 to 2), EMERGENCY-LOADBEARING 83%
+  (0 to 3), MISLEADING-COMMENT 72% (0 to 15), BATCH-COMMIT 71% (0 to 25),
+  HISTORY-HORIZON 100% (40 to 105), DEACTIVATED 100% (1 to 25). 156 policies
+  on average (125 to 194), 20.5% dead rules (9.9 to 36.5%).
+- Simulator 0.3.0. Easy output identical apart from the version string
+  (checked by `test_easy_changed_only_by_version` against the 0.2.0 hashes);
+  golden hashes updated.
+- New pytest marker `full`: Medium seeds 10 to 99 (trap distribution test,
+  leakage) run only with `--runslow`; CI runs Medium on seeds 0 to 9.
+- CLAUDE.md: schema changes need a decision file and a HANDOFF note.
+  Decisions 0017 (access_request) and 0018 (trap counts, clear placement).
+- Spec 5.5, 7.1, 7.2, 7.4 updated.
 
 ### Next
 
@@ -47,20 +57,17 @@
 
 ### Open questions
 
-- Version: Medium is new in 0.2.0 and Easy did not change, so no bump. The
-  next Medium change needs a bump, which changes every Easy file (version
-  string). Per-level output versions, or accept the Easy hash change then?
-- Schema change `access_request` (event kind) made in a simulator session;
-  analyzer sessions read the schema. Acceptable as an additive change?
-- Medium is about 8 MB per scenario (logs 60 days, rollbacks 49 x 150
-  policies); 100 scenarios are 0.8 GB. Reduce `log_samples_per_policy_day`
-  or keep?
-- TRAP-HISTORY-HORIZON tags about 62 rules per scenario (40% of rules) and
-  TRAP-DEACTIVATED about 15: per-trap metrics will be dominated by them.
-  Fine, or tag HISTORY-HORIZON only on rules with no other trap?
-- Emergency rules are committed by whichever human admin is on call (senior
-  or operator), with on-call voice; the `on_call` persona is not a separate
-  admin at Medium (spec lists senior, operator, automation).
+- Weights in `TRAP_COUNT_WEIGHTS` were set by hand to land in 60 to 90%;
+  should Hard reuse the same mechanism with higher counts?
+- A copied comment on an operator commit split per site tags up to 15 rules,
+  and a batch commit up to 25: per-trap metrics counted per rule are weighted
+  by these large instances. Count per instance (commit) instead?
+- Medium is about 8 MB per scenario; 100 scenarios are 0.8 GB. Reduce
+  `log_samples_per_policy_day` or keep?
+- TRAP-HISTORY-HORIZON tags about 69 rules per scenario: per-trap metrics will
+  be dominated by it. Tag it only on rules with no other trap?
+- Emergency rules are committed by whichever human admin is on call; the
+  `on_call` persona is not a separate admin at Medium.
 - Carried over: decision 0015 as a separate decision; `commit activate` as a
   commit type; CONFIRMED-TEXT acceptance; Easy 100% recall says little;
   scenario directory names without overrides.
@@ -68,9 +75,10 @@
 ### Known issues
 
 - VSRX-2b unverified: deactivated policies are left out of hit counts.
-- The LIVE-NOLOG zone pair clear is also on the rare jobs' zone pair
-  (servers to internet), so a quarterly job can lose its hits to the clear
-  rather than to its schedule.
+- When the clear lands on management to servers or servers to management,
+  other live rules of that pair with sparse traffic may show zero hits too
+  (not tagged as traps; their best verdict is `verify` through the generic
+  hidden-live rule).
 - Ticket assignee can be `svc-ansible` (automation deploys an application);
   realistic for a pipeline, but unusual in a ticket export.
 - S2: stored rollback files not emitted. S5: no system commits besides the
@@ -100,9 +108,10 @@ Session 6 has its own transcript `72beb9ef-54f4-42f0-8f55-6f97aafd613c`
 (finalized in session 7). Session 7 has transcript
 `cd397e63-3f27-4583-ab2d-1855580dff63` (finalized in session 8). Session 8 has
 transcript `f5449cc1-ac4a-4d11-aab3-d77d2bc207ee` (finalized in session 9).
-Session 9 has transcript `60a6f3c8-c28b-457e-8a93-e9da7abb4439`. Finalize it at
-the start of session 10 with:
+Session 9 has transcript `60a6f3c8-c28b-457e-8a93-e9da7abb4439` (finalized in
+session 10). Session 10 has transcript `3649919e-84f0-4cd3-8b8d-c49cc31eff22`.
+Finalize it at the start of session 11 with:
 
-    uv run python metrics/session_tokens.py 60a6f3c8-c28b-457e-8a93-e9da7abb4439
+    uv run python metrics/session_tokens.py 3649919e-84f0-4cd3-8b8d-c49cc31eff22
 
 Cost is API-equivalent (decision 0006), not a billed amount.
