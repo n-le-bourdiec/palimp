@@ -29,7 +29,7 @@ from palimp.models import Dataset, Evidence, Finding
 from palimp.services import describe
 
 SHOWN = 3
-CITE = re.compile(r"\[((?:R\d+\.)?E\d+|G\d+)\]")
+CITE = re.compile(r"\[((?:R\d+\.)?E\d+|G\d+|S\d+)\]")
 
 
 class Cited(BaseModel):
@@ -66,6 +66,7 @@ class RuleEntry(BaseModel):
     intent: Cited
     owner: str = ""
     question: str = ""  # yes/no question, empty for keep
+    prose: str = ""  # LLM paragraph, validated (palimp.prose), empty without --llm
     finding: Finding
 
 
@@ -85,6 +86,32 @@ class Summary(BaseModel):
     not_sure: list[Cited] = []
 
 
+class SummaryFact(BaseModel):
+    """A fact the executive summary may cite: S1, S2, ... from the summary, G1, ... global."""
+
+    id: str
+    text: str
+
+
+class Rejection(BaseModel):
+    """An LLM sentence dropped by the validation pass (palimp.prose)."""
+
+    target: str  # rule reference (R12) or "summary"
+    sentence: str
+    reason: str
+
+
+class LLMRun(BaseModel):
+    """What the LLM writer did: counts and every rejection."""
+
+    backend: str
+    model: str = ""
+    sentences_kept: int = 0
+    sentences_rejected: int = 0
+    fallbacks: int = 0  # paragraphs that use the deterministic text
+    rejections: list[Rejection] = []
+
+
 class Report(BaseModel):
     source: str
     palimp_version: str = __version__
@@ -93,6 +120,9 @@ class Report(BaseModel):
     global_evidence: list[GlobalEvidence] = []
     notes: list[Note] = []
     rules: list[RuleEntry] = []
+    executive_summary: str = ""  # LLM paragraph citing summary_facts, empty without --llm
+    summary_facts: list[SummaryFact] = []
+    llm: LLMRun | None = None
 
     def rule(self, ref: str) -> RuleEntry:
         return next(r for r in self.rules if r.ref == ref)
