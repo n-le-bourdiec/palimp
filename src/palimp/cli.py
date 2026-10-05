@@ -9,6 +9,10 @@ from palimp import __version__
 from palimp.evidence import collect, collect_all
 from palimp.ingest import ingest as ingest_directory
 from palimp.models import Dataset, Finding, ParseStats, PolicyKey
+from palimp.questions import answers_csv
+from palimp.questions import build as build_questions
+from palimp.report import build as build_report
+from palimp.report import json_report, markdown
 
 app = typer.Typer(
     help="Reconstruct the lost intent behind inherited firewall rules.",
@@ -204,3 +208,58 @@ def explain(
         typer.echo("\n\n".join(_render(f, dataset, notes) for f in findings))
         if notes:
             typer.echo("\n" + _notes(notes, findings))
+
+
+def _findings(source: Path, log_year: int | None) -> tuple[Dataset, list[Finding]]:
+    dataset = _load(source, log_year)
+    if dataset.log_window.year_source in ("inferred", "none"):
+        typer.echo(f"warning: {dataset.log_window.year_note}", err=True)
+    return dataset, collect_all(dataset)
+
+
+@app.command()
+def report(
+    source: Path = typer.Option(
+        Path("."), "--artifacts", "-a", help="Artifact directory or `palimp ingest` JSON."
+    ),
+    out: Path = typer.Option(
+        Path("palimp-report"), "--out", "-o", help="Output directory (report.md, report.json)."
+    ),
+    log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
+) -> None:
+    """Write a Markdown and a JSON report of every policy."""
+    dataset, findings = _findings(source, log_year)
+    built = build_report(dataset, findings)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "report.md").write_text(markdown(built), encoding="utf-8")
+    (out / "report.json").write_text(json_report(built), encoding="utf-8")
+    s = built.summary
+    typer.echo(
+        f"{s.total} policies: {s.removal_candidate} removal_candidate, {s.verify} verify, "
+        f"{s.keep} keep; written to {out / 'report.md'} and {out / 'report.json'}"
+    )
+
+
+@app.command()
+def questions(
+    source: Path = typer.Option(
+        Path("."), "--artifacts", "-a", help="Artifact directory or `palimp ingest` JSON."
+    ),
+    out: Path = typer.Option(
+        Path("palimp-questions"),
+        "--out",
+        "-o",
+        help="Output directory (one questionnaire per owner, answers.csv).",
+    ),
+    log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
+) -> None:
+    """Write one questionnaire per owner and a CSV to track the answers."""
+    dataset, findings = _findings(source, log_year)
+    built = build_report(dataset, findings)
+    found = build_questions(built)
+    out.mkdir(parents=True, exist_ok=True)
+    for q in found:
+        (out / f"{q.name}.txt").write_text(q.text, encoding="utf-8")
+    (out / "answers.csv").write_text(answers_csv(built, found), encoding="utf-8")
+    rules = sum(len(q.rules) for q in found)
+    typer.echo(f"{len(found)} questionnaires covering {rules} rules written to {out}")
