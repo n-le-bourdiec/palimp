@@ -78,6 +78,18 @@ def test_two_applications_never_give_a_certain_owner() -> None:
     assert result.owner is None
     assert result.owner_candidates == ["Ann Example", "Bob Sample"]
     assert "either side may own it" in result.ask
+    assert "not ranked" in result.ask
+
+
+def test_two_applications_list_candidates_unranked() -> None:
+    # Zed has more tickets than Bob, but neither side of a flow is preferred.
+    tickets = dict(TICKETS)
+    for ticket_id in ("CHG1", "CHG2", "CHG5"):
+        tickets[ticket_id] = ticket(ticket_id, "Zed Other", "crm")
+    result = owner_of(dataset(tickets), ["crm", "billing"])
+    assert result.owner is None
+    assert result.owner_candidates == ["Bob Sample", "Zed Other"]
+    assert result.ask.index("Bob Sample") < result.ask.index("Zed Other")
 
 
 def test_initials_confirm_a_single_ticket() -> None:

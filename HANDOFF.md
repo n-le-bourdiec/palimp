@@ -82,6 +82,16 @@ baseline was rerun from a clean worktree of the pre-change commit.
   applications from general knowledge (VSRX-12); VSRX-2b; `svc-ansible`; S2
   and S5; git identity in repo config only; session 2 Part C checks.
 
+## Simulator backlog (v2)
+
+For simulator sessions. Analyzer sessions add items here, they never read
+simulator code.
+
+- Service desk tickets: a service desk files tickets on behalf of
+  application owners (requester = service desk agent, owner named elsewhere
+  or not at all), to test that palimp does not take the requester as the
+  owner (decisions 0022 and 0023).
+
 ## Measuring tokens and cost
 
 From session 6 on, each session starts in a fresh Claude Code conversation,

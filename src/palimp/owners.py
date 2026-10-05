@@ -16,7 +16,10 @@ person (no other candidate, no unresolved initials), the policy involves one
 application only (a flow between two applications may belong to either side),
 the intent shows no T1-T3 conflict, and either the application has
 at least two tickets all requested by that person, or two different sources
-agree. Otherwise palimp says it is not sure and lists the candidates.
+agree. Otherwise palimp says it is not sure and lists the candidates, most
+supported first, except for a flow between two applications: there both
+sides' candidates are listed in alphabetical order, never ranked by flow
+direction or support (decision 0023).
 """
 
 import re
@@ -140,10 +143,15 @@ def find_owner(finding: Finding, dataset: Dataset, apps: list[str], conflict: bo
             text = f"{name}, application owner ({'; '.join(reasons[name])})."
             return Owner(owner=name, candidates=[name], text=text + staff_note)
     if ranked or reasons:
-        why = "; ".join(f"{n}: {', '.join(reasons[n])}" for n in ranked + unresolved)
         doubt = " the intent evidence conflicts," if conflict else ""
         if len(apps) > 1:
-            doubt += f" the flow involves {', '.join(apps)}, either side may own it,"
+            # Decision 0023: no side of a flow is preferred, candidates are not ranked.
+            ranked = sorted(names)
+            doubt += (
+                f" the flow involves {', '.join(sorted(apps))}, either side may own it,"
+                " candidates in alphabetical order, not ranked,"
+            )
+        why = "; ".join(f"{n}: {', '.join(reasons[n])}" for n in ranked + unresolved)
         text = f"Not sure who owns it:{doubt} candidates are {why}."
         return Owner(candidates=ranked, text=text + staff_note)
     if apps:
