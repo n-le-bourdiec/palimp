@@ -10,7 +10,7 @@ import ipaddress
 from dataclasses import dataclass, field
 
 from palimp_sim.catalog import service_port
-from palimp_sim.junos import Config
+from palimp_sim.junos import ANY_APPLICATION, Config
 from palimp_sim.model import Flow
 from palimp_sim.rng import Rng
 
@@ -61,6 +61,8 @@ class Matcher:
         self.by_pair: dict[tuple[str, str], list] = {}
         self.policies = {p.uid: p for p in config.policies}
         for policy in config.ordered_policies():
+            if policy.inactive:
+                continue
             entry = (
                 policy.uid,
                 config.resolve_address_list(policy.sources),
@@ -78,7 +80,7 @@ class Matcher:
             found = None
             for uid, sources, destinations, services in self.by_pair.get(pair, []):
                 if (
-                    service in services
+                    (service in services or ANY_APPLICATION in services)
                     and any(src_net.subnet_of(n) for n in sources)
                     and any(dst_net.subnet_of(n) for n in destinations)
                 ):
@@ -88,9 +90,11 @@ class Matcher:
         return self.cache[key]
 
 
-def sessions_for_day(flow: Flow, weekday: int, rng: Rng) -> int:
+def sessions_for_day(flow: Flow, day: int, weekday: int, rng: Rng) -> int:
     base = flow.template.base
     schedule = flow.template.schedule
+    if flow.period is not None:
+        return base if flow.runs_on(day) else 0
     if schedule == "nightly":
         return base
     if schedule == "always":
@@ -125,6 +129,9 @@ def simulate(sim, rng: Rng) -> TrafficResult:
     level = sim.level
     total = sim.total_days
     reset_day = sim.hit_reset_day if sim.hit_reset_day is not None else 0
+    # `clear security policies hit-count from-zone A to-zone B` (VSRX-7c):
+    # counters of one zone pair restart later than the others.
+    pair_resets = getattr(sim, "pair_resets", {})
     log_start = total - level.log_window_days
     zone_of_role = dict(sim.zone_names)
     result = TrafficResult()
@@ -152,7 +159,7 @@ def simulate(sim, rng: Rng) -> TrafficResult:
         for flow in sim.flows.values():
             if not flow.active(day):
                 continue
-            count = sessions_for_day(flow, weekday, rng_count)
+            count = sessions_for_day(flow, day, weekday, rng_count)
             parts = [
                 (src, dst, service)
                 for src in flow.src.prefixes
@@ -170,7 +177,13 @@ def simulate(sim, rng: Rng) -> TrafficResult:
                     continue
                 stats = result.policies.setdefault(uid, PolicyStats())
                 stats.hits_total += part_count
-                if day >= reset_day:
+                if pair_resets:
+                    policy = matcher.policies[uid]
+                    pair = (policy.from_zone, policy.to_zone)
+                    counted = day >= max(reset_day, pair_resets.get(pair, 0))
+                else:
+                    counted = day >= reset_day
+                if counted:
                     stats.hits_since_reset += part_count
                 stats.first_hit = day if stats.first_hit is None else stats.first_hit
                 stats.last_hit = day

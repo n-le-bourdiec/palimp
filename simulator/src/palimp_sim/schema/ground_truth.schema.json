@@ -109,7 +109,7 @@
           "kind": {"enum": ["bootstrap", "new_app", "migration", "migration_cleanup",
                             "decommission", "emergency_rule", "partial_cleanup",
                             "object_rename", "contractor_period", "upgrade", "admin_join",
-                            "admin_leave", "routine"]},
+                            "admin_leave", "routine", "access_request"]},
           "date": {"$ref": "#/$defs/date"},
           "admin_id": {"type": "string"},
           "app_id": {"type": ["string", "null"]},

@@ -30,6 +30,14 @@ APP_CODES = {
     "gitlab": "GIT",
     "ci": "CI",
     "edi": "EDI",
+    "bi": "BI",
+    "telephony": "VOIP",
+    "badge": "BADGE",
+    "print": "PRINT",
+    "vault": "VAULT",
+    "apigw": "APIGW",
+    "archive": "ARCH",
+    "shared-jump": "JUMP",
     "shared-dns": "DNS",
     "shared-ntp": "NTP",
     "shared-internet": "INET",
@@ -48,6 +56,7 @@ TIER_WORDS = {
     "bkp": ("bkp srv", "media agent", "BKP"),
     "mon": ("NMS", "poller", "mon srv"),
     "gw": ("GW", "b2b gw", "sftp gw"),
+    "jump": ("bastion", "jump srv", "JMP"),
 }
 
 SOURCE_WORDS = {
@@ -82,6 +91,13 @@ def port_words(service: str) -> str:
 
 
 def endpoint_words(token: str, app_id: str, rng: Rng) -> str:
+    if token.startswith("app:"):
+        _, other, tier = token.split(":")
+        return f"{code(other)} {rng.choice(TIER_WORDS[tier])}"
+    if token.startswith("pc:"):
+        return rng.choice(("PC", "user PC", "wks")) + " " + token.split("-", 1)[1]
+    if token.startswith("vendor:"):
+        return rng.choice(("vendor", "ext support", "3rd party"))
     if token in SOURCE_WORDS:
         return rng.choice(SOURCE_WORDS[token])
     if token.startswith("partner:"):
@@ -124,7 +140,7 @@ def description(persona: str, flow, ticket_id: str | None, requester: str, rng: 
     if persona == "contractor":
         return f"{code(flow.app_id)} lot {rng.randint(1, 4)}"
     if persona == "automation":
-        return f"managed: {flow.app_id}/{flow.template.dst}"
+        return f"ansible role fw-{flow.app_id} v{rng.randint(1, 9)}"
     return rng.choice(("urgent", "temp", "see INC"))
 
 
@@ -151,15 +167,17 @@ def commit_comment(
             "banner": ("banner update",),
             "syslog_add": ("syslog: add collector",),
             "syslog_remove": ("syslog: remove old collector",),
+            "cleanup": ("rule cleanup", "remove unused rules", "cleanup zero hit rules"),
+            "access": (f"{app} access request", f"access to {app}", f"{app} user access"),
+            "access_end": (f"{app} access removed", f"remove {app} access"),
         }[kind]
         text = rng.choice(options)
         if facts.get("requester") and rng.chance(0.3):
             text += f" (req {initials(facts['requester'])})"
         return f"{ticket_id} {text}" if ticket_id else text
     if persona == "hurried_operator":
-        return typo(
-            rng.choice(("fix", "upd", "as requested", "add rule", f"{app} stuff")), rng, 0.4
-        )
+        options = ("fix", "upd", "as requested", "add rule", f"{app} stuff" if app else "misc")
+        return typo(rng.choice(options), rng, 0.4)
     if persona == "contractor":
         return f"MEP {app}".strip()
     if persona == "automation":
@@ -167,6 +185,23 @@ def commit_comment(
     if persona == "on_call":
         return rng.choice(("urgent", f"INC{rng.randint(10000, 99999):07d}", ""))
     return rng.choice(("cleanup", "remove unused"))
+
+
+def batch_comment(app_id: str, rng: Rng) -> str:
+    """Comment of a hurried operator's batch commit: it names one change only."""
+    app = code(app_id)
+    return typo(rng.choice((f"{app} rules", f"add {app} flows", f"{app} go live")), rng, 0.3)
+
+
+def operator_name(app_id: str, number: int, rng: Rng) -> str:
+    """Policy name in a hurried operator's style: numbered or ad hoc."""
+    if rng.chance(0.65):
+        return f"rule-{number}"
+    return rng.choice((f"allow-{code(app_id).lower()}", f"{app_id}-access", "allow-new"))
+
+
+def on_call_name(rng: Rng) -> str:
+    return rng.choice(("temp-fix", "emergency-allow", "test", "tmp-allow"))
 
 
 def ticket_summary(category: str, app_id: str, rng: Rng) -> str:
@@ -180,5 +215,6 @@ def ticket_summary(category: str, app_id: str, rng: Rng) -> str:
         ),
         "decommission": (f"Decom {app}", f"{app} retirement - remove access"),
         "migration": (f"{app} srv migration - FW part", f"Move {app} to new hosts"),
+        "access": (f"Access request {app}", f"Need access to {app} server", f"{app} - access pls"),
     }[category]
     return rng.choice(options)

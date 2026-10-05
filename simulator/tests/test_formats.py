@@ -7,6 +7,7 @@ not from the simulator), and every line the simulator writes must match it.
 Field names are read from the fixtures themselves.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -16,12 +17,16 @@ from palimp_sim.generate import generate
 
 FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "junos_docs"
 
-# Knob combinations covering every format choice (levels.CHOICES, rescue_line).
+# Knob combinations covering every format choice (levels.CHOICES, rescue_line),
+# on Easy, and Medium with its per scenario draw (decision 0016).
 VARIANTS = [
-    {},
-    {"hitcount_layout": "legacy", "rescue_line": "true"},
-    {"log_release": "12.x", "log_collection": "syslog-server"},
-    {"log_release": "22.2", "log_collection": "syslog-server"},
+    ("easy", 2, {}),
+    ("easy", 2, {"hitcount_layout": "legacy", "rescue_line": "true"}),
+    ("easy", 2, {"log_release": "12.x", "log_collection": "syslog-server"}),
+    ("easy", 2, {"log_release": "22.2", "log_collection": "syslog-server"}),
+    ("medium", 0, {}),
+    ("medium", 1, {"hitcount_layout": "legacy", "log_release": "12.x"}),
+    ("medium", 2, {"log_collection": "syslog-server", "rescue_line": "false"}),
 ]
 
 
@@ -41,9 +46,10 @@ def body(name: str) -> list[str]:
 
 @pytest.fixture(scope="module", params=range(len(VARIANTS)))
 def scenario(request) -> tuple[dict, dict[str, str]]:
-    overrides = VARIANTS[request.param]
-    files = generate("easy", 2, overrides)
-    return overrides, {path: data.decode("utf-8") for path, data in files.items()}
+    """Effective knobs (from the manifest, drawn or not) and the files."""
+    level, seed, overrides = VARIANTS[request.param]
+    files = {path: data.decode("utf-8") for path, data in generate(level, seed, overrides).items()}
+    return json.loads(files["manifest.json"])["knobs"], files
 
 
 def lines_of(text: str) -> list[str]:
@@ -114,7 +120,7 @@ def test_commit_shapes_match_fixtures() -> None:
 
 
 def test_commit_lines_have_fixture_shapes(scenario) -> None:
-    overrides, files = scenario
+    knobs, files = scenario
     lines = lines_of(files["artifacts/commits.txt"])
     methods = fixture_methods() | UNVERIFIED_METHODS
     previous = None
@@ -131,7 +137,7 @@ def test_commit_lines_have_fixture_shapes(scenario) -> None:
         else:
             assert RESCUE.match(line), line
             assert line == lines[-1], "rescue must be the last line"
-    assert any(RESCUE.match(line) for line in lines) == bool(overrides.get("rescue_line"))
+    assert any(RESCUE.match(line) for line in lines) == knobs["rescue_line"]
 
 
 # ---------------------------------------------------------------- hitcount.txt
@@ -151,9 +157,9 @@ def test_hitcount_rows_match_fixtures() -> None:
 
 
 def test_hitcount_layout_matches_fixture(scenario) -> None:
-    overrides, files = scenario
+    knobs, files = scenario
     lines = lines_of(files["artifacts/hitcount.txt"])
-    if overrides.get("hitcount_layout") == "legacy":
+    if knobs["hitcount_layout"] == "legacy":
         reference = body("hitcount_legacy.txt")
         assert columns(lines[0]) == columns(reference[0])
         rows = lines[1:-2]
@@ -218,9 +224,9 @@ def test_structured_shape_matches_fixtures() -> None:
 
 
 def test_log_lines_have_fixture_shapes_and_names(scenario) -> None:
-    overrides, files = scenario
-    release = overrides.get("log_release", "pre-22.2")
-    server = overrides.get("log_collection") == "syslog-server"
+    knobs, files = scenario
+    release = knobs["log_release"]
+    server = knobs["log_collection"] == "syslog-server"
     expected = {}
     for kind in ("CREATE", "CLOSE"):
         if release == "12.x":

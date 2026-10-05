@@ -711,3 +711,219 @@ INTERFACES = {
 SITE_NAMES = ("hq", "branch1", "branch2", "branch3")
 
 JUNOS_VERSIONS = ("20.4R3-S2", "21.4R3-S4")
+
+# ---------------------------------------------------------------- Medium only
+# Kept out of APPS, SHARED, ZONE_STYLES and INTERFACES' Easy roles so the Easy
+# draws (sample of APPS, choice of zone style) do not change.
+
+EXTRA_APPS = (
+    AppTemplate(
+        "bi",
+        "Business intelligence",
+        (_t("web"), _t("db")),
+        (
+            _f(
+                "users",
+                "web",
+                ["junos-https"],
+                "business",
+                140,
+                "app_access",
+                "Office users open the BI dashboards",
+            ),
+            _f(
+                "web",
+                "db",
+                ["tcp-5432"],
+                "business",
+                350,
+                "app_dependency",
+                "BI dashboards read the warehouse database",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "telephony",
+        "IP telephony",
+        (_t("app", 2),),
+        (
+            _f(
+                "users",
+                "app",
+                ["udp-5060"],
+                "business",
+                900,
+                "app_access",
+                "Desk phones register with the call managers",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "badge",
+        "Physical access control",
+        (_t("app"), _t("db")),
+        (
+            _f(
+                "users",
+                "app",
+                ["tcp-8443"],
+                "business",
+                40,
+                "app_access",
+                "Security staff manage badges in the access control console",
+            ),
+            _f(
+                "app",
+                "db",
+                ["tcp-1433"],
+                "always",
+                300,
+                "app_dependency",
+                "Access control server stores badge events in SQL Server",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "print",
+        "Print management",
+        (_t("app"),),
+        (
+            _f(
+                "users",
+                "app",
+                ["tcp-9100"],
+                "business",
+                600,
+                "app_access",
+                "Workstations send print jobs to the print server",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "vault",
+        "Secrets vault",
+        (_t("app", 2),),
+        (
+            _f(
+                "servers-net",
+                "app",
+                ["tcp-8200"],
+                "always",
+                700,
+                "shared_service",
+                "Application servers fetch secrets from the vault cluster",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "apigw",
+        "Partner API gateway",
+        (_t("gw", 1, "dmz"), _t("app")),
+        (
+            _f(
+                "internet",
+                "gw",
+                ["junos-https"],
+                "always",
+                900,
+                "app_access",
+                "Partners call the public API gateway",
+            ),
+            _f(
+                "gw",
+                "app",
+                ["tcp-8080"],
+                "always",
+                850,
+                "app_dependency",
+                "API gateway forwards calls to the order service",
+            ),
+        ),
+    ),
+    AppTemplate(
+        "archive",
+        "Document archive",
+        (_t("file"), _t("db")),
+        (
+            _f(
+                "users",
+                "file",
+                ["tcp-445"],
+                "business",
+                220,
+                "app_access",
+                "Office users read archived documents from the archive share",
+            ),
+            _f(
+                "file",
+                "db",
+                ["tcp-5432"],
+                "business",
+                160,
+                "app_dependency",
+                "Archive file server indexes documents in its database",
+            ),
+        ),
+    ),
+)
+
+SHARED_MEDIUM = (
+    AppTemplate(
+        "shared-jump",
+        "Admin jump hosts",
+        (_t("jump", 2, "management"),),
+        (
+            _f(
+                "users",
+                "jump",
+                ["junos-ssh"],
+                "business",
+                60,
+                "management",
+                "IT staff open sessions on the jump hosts",
+            ),
+            _f(
+                "jump",
+                "servers-net",
+                ["junos-ssh"],
+                "business",
+                250,
+                "management",
+                "Administrators reach servers over SSH from the jump hosts",
+            ),
+        ),
+    ),
+)
+
+# Shared services that live in the management zone at Medium (zone count 5).
+MANAGEMENT_APPS = ("shared-monitoring", "shared-backup", "shared-jump")
+
+MANAGEMENT_NAMES = ("mgmt", "admin")
+INTERFACES = INTERFACES | {"management": ("ge-0/0/4", "10.30.0.1/24")}
+
+# Scheduled jobs added to applications at Medium. `src` is filled with one of
+# the application's server tiers; `dst` with a partner the application does
+# not already reach with that service. The period and the day of the run are
+# drawn per scenario (world.py).
+JOB_KINDS = {
+    "weekly": (
+        "junos-ssh",
+        2,
+        "partner_access",
+        "Weekly export file pushed to an external partner",
+    ),
+    "quarterly": (
+        "junos-https",
+        3,
+        "partner_access",
+        "Quarter-end figures uploaded to an external partner",
+    ),
+    "yearly": (
+        "junos-ssh",
+        1,
+        "partner_access",
+        "Year-end archive transferred to an external partner",
+    ),
+}
+JOB_PERIODS = {"weekly": 7, "quarterly": 91, "yearly": 365}
+JOB_PARTNERS = ("bank-sftp", "payroll-provider", "carrier-api", "edi-partner")

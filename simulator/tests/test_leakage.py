@@ -52,11 +52,15 @@ def visible_texts(files: dict[str, str], truth: dict, rule: dict) -> list[str]:
     return [text for text in texts if text]
 
 
+CASES = [("easy", s) for s in range(100)] + [("medium", s) for s in range(100)]
+
+
 @pytest.mark.parametrize(
-    "seed", [s if s < 10 else pytest.param(s, marks=pytest.mark.slow) for s in range(100)]
+    ("level", "seed"),
+    [case if case[1] < 3 else pytest.param(*case, marks=pytest.mark.slow) for case in CASES],
 )
-def test_no_ground_truth_text_in_visible_texts(seed: int) -> None:
-    files = {path: data.decode("utf-8") for path, data in generate("easy", seed).items()}
+def test_no_ground_truth_text_in_visible_texts(level: str, seed: int) -> None:
+    files = {path: data.decode("utf-8") for path, data in generate(level, seed).items()}
     truth = json.loads(files["ground_truth.json"])
     for rule in truth["rules"]:
         summary = rule["intent"]["summary"]

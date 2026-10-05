@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from palimp_sim.catalog import PREDEFINED_APPLICATIONS
 
 ANY = "any"
+ANY_APPLICATION = ("any", 0)
 
 
 @dataclass
@@ -26,6 +27,7 @@ class Policy:
     log_init: bool = False
     log_close: bool = False
     description: str | None = None
+    inactive: bool = False  # `deactivate` statement (VSRX-2)
 
 
 @dataclass
@@ -103,6 +105,8 @@ class Config:
         return [net for name in names for net in self.resolve_address(name)]
 
     def resolve_application(self, name: str) -> tuple[str, int]:
+        if name == ANY:
+            return ANY_APPLICATION
         if name in PREDEFINED_APPLICATIONS:
             return PREDEFINED_APPLICATIONS[name]
         return self.applications[name]
@@ -145,6 +149,13 @@ def render_set(config: Config) -> str:
             lines.append(f"{prefix} then log session-init")
         if policy.log_close:
             lines.append(f"{prefix} then log session-close")
+        if policy.inactive:
+            # display_set_deactivate.txt: the deactivate statement follows the
+            # set statements of the deactivated element.
+            lines.append(
+                f"deactivate security policies from-zone {policy.from_zone} "
+                f"to-zone {policy.to_zone} policy {policy.name}"
+            )
     lines.append("set security policies default-policy deny-all")
     for zone in config.zones:
         base = f"set security zones security-zone {zone.name}"

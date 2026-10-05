@@ -50,6 +50,7 @@ class App:
     go_live: int | None = None
     retired: int | None = None
     generation: int = 0
+    extra_flows: list[FlowTemplate] = field(default_factory=list)  # scheduled jobs (Medium)
 
 
 @dataclass
@@ -69,9 +70,14 @@ class Flow:
     dst: Endpoint
     start: int
     end: int | None = None
+    period: int | None = None  # weekly, quarterly and yearly jobs run every `period` days
+    phase: int = 0  # a day on which the job runs
 
     def active(self, day: int) -> bool:
         return self.start <= day and (self.end is None or day < self.end)
+
+    def runs_on(self, day: int) -> bool:
+        return self.period is None or (day - self.phase) % self.period == 0
 
 
 @dataclass
@@ -124,3 +130,23 @@ class PolicyMeta:
     commit_seq: int
     admin_id: str
     ticket_id: str | None
+    intent_kind: str | None = None  # overrides the flow's kind (emergency rules)
+    summary: str | None = None
+
+
+@dataclass
+class TrapFacts:
+    """What the timeline did on purpose to build traps (Medium, spec 7.3).
+
+    truth.py turns these facts into trap tags, expected verdicts and
+    misleading evidence; it checks each condition on the final state, so a
+    fact that did not lead to a trap (for example a quarterly job that still
+    has hits) gives no tag.
+    """
+
+    nolog_jobs: list[str] = field(default_factory=list)  # policy uids
+    rare_jobs: list[str] = field(default_factory=list)  # policy uids
+    emergency: dict[str, list[str]] = field(default_factory=dict)  # uid -> shadowed uids
+    removed_by: dict[str, int] = field(default_factory=dict)  # uid -> removing commit seq
+    misleading_comments: dict[int, str] = field(default_factory=dict)  # seq -> other app
+    batch_commits: dict[int, str] = field(default_factory=dict)  # seq -> app named

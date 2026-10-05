@@ -22,6 +22,7 @@ from palimp_sim.model import (
     PolicyMeta,
     Server,
     Ticket,
+    TrapFacts,
 )
 from palimp_sim.rng import Rng
 
@@ -57,6 +58,8 @@ class Simulation:
         self.tickets: list[Ticket] = []
         self.policy_meta: dict[str, PolicyMeta] = {}
         self.hit_reset_day: int | None = None
+        self.pair_resets: dict[tuple[str, str], int] = {}
+        self.traps = TrapFacts()
 
         self._next_ticket = self.rng_tickets.randint(10000, 60000)
         self._counters: dict[str, int] = {}
@@ -98,6 +101,27 @@ class Simulation:
 
     def zone(self, role: str) -> str:
         return self.zone_names[role]
+
+    def admin(self, admin_id: str) -> Admin:
+        return next(a for a in self.admins if a.admin_id == admin_id)
+
+    # Hooks that MediumSimulation overrides. Easy keeps these defaults, so its
+    # random draws and output stay the same.
+
+    def _rate(self, admin: Admin, base: float) -> float:
+        return base
+
+    def _tier_zone(self, app: App, tier) -> str:
+        return tier.zone_role
+
+    def _name_for(self, flow: Flow, suffix: str, admin: Admin) -> str:
+        return self._policy_name(flow, suffix)
+
+    def _policies_for_flow(self, flow: Flow, app: App, event: Event, ticket) -> list[str]:
+        return [self._add_policy(flow, app, event, ticket)]
+
+    def _commit_second(self, day: int, admin: Admin) -> int:
+        return self.rng_times.randint(9 * 3600, 18 * 3600)
 
     # ------------------------------------------------------------------ setup
 
@@ -173,12 +197,17 @@ class Simulation:
 
     def _create_servers(self, app: App, day: int) -> None:
         dmz_count = sum(1 for s in self.servers.values() if s.zone_role == "dmz")
+        mgmt_count = sum(1 for s in self.servers.values() if s.zone_role == "management")
         app.tiers = {}
         host_offset = 11 + 10 * app.generation
         for tier_index, tier in enumerate(app.template.tiers):
             ids = []
+            zone_role = self._tier_zone(app, tier)
             for i in range(tier.count):
-                if tier.zone_role == "dmz":
+                if zone_role == "management":
+                    mgmt_count += 1
+                    ip = f"10.30.0.{10 + mgmt_count}"
+                elif tier.zone_role == "dmz":
                     dmz_count += 1
                     ip = f"172.16.10.{20 + dmz_count}"
                 elif app.shared:
@@ -194,7 +223,7 @@ class Simulation:
                     else (f"{tier.name}-{number:02d}")
                 )
                 server = Server(
-                    self.next_id("S", 3), hostname, ip, tier.zone_role, app.app_id, tier.name, day
+                    self.next_id("S", 3), hostname, ip, zone_role, app.app_id, tier.name, day
                 )
                 self.servers[server.server_id] = server
                 ids.append(server.server_id)
@@ -203,7 +232,9 @@ class Simulation:
     # ------------------------------------------------------------------ commits
 
     def _commit(self, day: int, admin: Admin, comment: str, event: Event, **lists) -> Commit:
-        second = self.rng_times.randint(9 * 3600, 18 * 3600)
+        second = lists.get("second")
+        if second is None:
+            second = self._commit_second(day, admin)
         if self._last_commit[0] == day:
             second = max(second, self._last_commit[1] + self.rng_times.randint(120, 900))
         self._last_commit = (day, second)
@@ -213,7 +244,7 @@ class Simulation:
             second=second,
             login=admin.login,
             admin_id=admin.admin_id,
-            client="cli",
+            client="netconf" if admin.persona == "automation" else "cli",
             comment=comment,
             event_id=event.event_id,
             config=self.config.snapshot(),
@@ -230,7 +261,7 @@ class Simulation:
     def _comment(
         self, admin: Admin, kind: str, app: App | None, ticket: Ticket | None, **facts
     ) -> str:
-        if not self.rng_text.chance(self.level.comment_rate):
+        if not self.rng_text.chance(self._rate(admin, self.level.comment_rate)):
             return ""
         if app is not None:
             facts["requester"] = self._owner_name(app)
@@ -275,23 +306,32 @@ class Simulation:
             name, n = f"{base}-{n}", n + 1
         return name
 
-    def _add_policy(self, flow: Flow, app: App, event: Event, ticket, suffix: str = "") -> str:
+    def _add_policy(
+        self,
+        flow: Flow,
+        app: App,
+        event: Event,
+        ticket,
+        suffix: str = "",
+        sources: list[str] | None = None,
+        nolog: bool = False,
+    ) -> str:
         rng = self.rng_text
+        admin = self.admin(event.admin_id)
         for service in flow.template.services:
             self._ensure_application(service)
         description = None
-        if rng.chance(self.level.description_rate):
-            persona = next(a.persona for a in self.admins if a.admin_id == event.admin_id)
-            description = voice.description(
-                persona, flow, ticket.ticket_id if ticket else None, self._owner_name(app), rng
-            )
-        logged = rng.chance(self.level.log_rate)
+        if rng.chance(self._rate(admin, self.level.description_rate)):
+            ticket_id = ticket.ticket_id if ticket else None
+            owner = self._owner_name(app)
+            description = voice.description(admin.persona, flow, ticket_id, owner, rng)
+        logged = rng.chance(self._rate(admin, self.level.log_rate)) and not nolog
         policy = Policy(
             uid=self.next_id("R"),
-            name=self._policy_name(flow, suffix),
+            name=self._name_for(flow, suffix, admin),
             from_zone=self.zone(flow.src.zone_role),
             to_zone=self.zone(flow.dst.zone_role),
-            sources=[flow.src.address],
+            sources=sources or [flow.src.address],
             destinations=[flow.dst.address],
             applications=list(flow.template.services),
             log_init=logged and rng.chance(self.level.log_init_rate),
@@ -354,9 +394,9 @@ class Simulation:
         go_live = day if app.shared else day + self.rng_events.randint(0, 2)
         app.go_live = go_live
         created = []
-        for template in app.template.flows:
+        for template in list(app.template.flows) + app.extra_flows:
             flow = self._new_flow(app, template, go_live)
-            created.append(self._add_policy(flow, app, event, ticket))
+            created += self._policies_for_flow(flow, app, event, ticket)
         kind = "shared" if app.shared else "new_app"
         comment = self._comment(admin, kind, app, ticket, rules=len(created))
         commit = self._commit(day, admin, comment, event, created=created)

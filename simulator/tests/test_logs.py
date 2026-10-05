@@ -40,10 +40,13 @@ def configs_by_time(files: dict[str, str]) -> list[tuple[datetime, dict[str, set
     return sorted(timeline, key=lambda item: item[0])
 
 
-@pytest.mark.parametrize("seed", range(10))
-def test_log_lines_follow_policy_log_options(seed: int) -> None:
+CASES = [("easy", s) for s in range(10)] + [("medium", s) for s in range(3)]
+
+
+@pytest.mark.parametrize(("level", "seed"), CASES)
+def test_log_lines_follow_policy_log_options(level: str, seed: int) -> None:
     overrides = {"log_collection": "syslog-server"} if seed % 2 else {}
-    generated = generate("easy", seed, overrides)
+    generated = generate(level, seed, overrides)
     files = {path: data.decode("utf-8") for path, data in generated.items()}
     timeline = configs_by_time(files)
     for line in files["artifacts/logs/rt_flow.log"].splitlines():
@@ -57,9 +60,9 @@ def test_log_lines_follow_policy_log_options(seed: int) -> None:
         assert expected in in_force.get(name, set()), (kind, name, stamp)
 
 
-@pytest.mark.parametrize("seed", range(10))
-def test_policies_without_logging_produce_no_lines(seed: int) -> None:
-    files = {path: data.decode("utf-8") for path, data in generate("easy", seed).items()}
+@pytest.mark.parametrize(("level", "seed"), CASES)
+def test_policies_without_logging_produce_no_lines(level: str, seed: int) -> None:
+    files = {path: data.decode("utf-8") for path, data in generate(level, seed).items()}
     logged = set()
     for path, text in files.items():
         if path.endswith(".set"):

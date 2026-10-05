@@ -53,4 +53,25 @@ def test_unknown_knob_or_value_is_rejected() -> None:
 
 def test_unknown_level_is_rejected() -> None:
     with pytest.raises(ValueError):
-        generate("medium", 1)
+        generate("hard", 1)
+
+
+# 0.2.0 (session 9): Medium added; Easy output unchanged.
+GOLDEN_MEDIUM = {
+    0: "1e480c52bf5ff07158d24b5c95b54a4698a09d62c3dc250ddccc25c814864e87",
+}
+
+
+@pytest.mark.parametrize("seed", sorted(GOLDEN_MEDIUM))
+def test_golden_manifest_medium(seed: int) -> None:
+    manifest = generate("medium", seed)["manifest.json"]
+    assert hashlib.sha256(manifest).hexdigest() == GOLDEN_MEDIUM[seed]
+
+
+def test_medium_same_seed_same_bytes() -> None:
+    assert generate("medium", 4) == generate("medium", 4)
+
+
+def test_medium_has_no_carriage_returns() -> None:
+    for path, data in generate("medium", 1).items():
+        assert b"\r" not in data, path

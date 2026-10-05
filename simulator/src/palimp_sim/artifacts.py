@@ -60,8 +60,10 @@ def hitcount_txt(sim, traffic: TrafficResult, rng: Rng) -> str:
 
     Without options the device lists rows in random order and `Index` is a
     line number (VSRX-7b), so rows are shuffled and numbered from 1.
+    Deactivated policies are not installed, so they are not listed (VSRX-2b,
+    unverified).
     """
-    policies = rng.shuffled(sim.config.ordered_policies())
+    policies = rng.shuffled([p for p in sim.config.ordered_policies() if not p.inactive])
     counts = []
     for policy in policies:
         stats = traffic.policies.get(policy.uid)
@@ -185,14 +187,15 @@ def _source_address(sim) -> str:
     return str(ipaddress.IPv4Interface(sim.config.zones[0].address).ip)
 
 
-def rt_flow_log(sim, traffic: TrafficResult) -> tuple[str, dict[str, int]]:
+def rt_flow_log(sim, traffic: TrafficResult, skew: int = 0) -> tuple[str, dict[str, int]]:
     """Structured syslog RT_FLOW lines, and the number of lines per policy uid.
 
     `log_collection="device"` writes lines as `show security log file` prints
     them (`<14>1 ...`, rt_flow_structured_12.1x47.txt). "syslog-server" writes
     them as a remote server stores them: server timestamp and device address
     first, no `<PRI>` (rt_flow_structured_12.3_remote.txt, VSRX-9d). The
-    server clock is taken equal to the device clock.
+    server clock is `skew` seconds ahead of the device clock (negative:
+    behind).
     """
     policies = _all_policies(sim)
     interface_of = {zone.name: f"{zone.interface}.0" for zone in sim.config.zones}
@@ -209,7 +212,7 @@ def rt_flow_log(sim, traffic: TrafficResult) -> tuple[str, dict[str, int]]:
     def emit(kind: str, moment: datetime, millis: int, values: dict[str, str]) -> None:
         pairs = " ".join(f'{k}="{v}"' for k, v in _attributes(kind, release, values))
         body = f"{_iso(moment, millis)} {host} RT_FLOW - RT_FLOW_SESSION_{kind} [{SD_ID} {pairs}]"
-        prefix = f"{_bsd(moment)} {source} 1" if server else "<14>1"
+        prefix = f"{_bsd(moment + timedelta(seconds=skew))} {source} 1" if server else "<14>1"
         entries.append((moment, millis, f"{prefix} {body}"))
 
     for number, session in enumerate(sessions):
