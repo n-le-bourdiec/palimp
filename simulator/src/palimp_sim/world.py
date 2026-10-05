@@ -1,8 +1,9 @@
 """Company model and timeline of events (spec sections 2 to 4).
 
-Milestone 1 plays the Easy level: meticulous senior admins only, new
+The base timeline plays the Easy level: meticulous senior admins only, new
 applications, shared services, decommissions, duplicate style migrations,
 one upgrade (hit count reset), admin turnover and routine commits. No traps.
+medium.py extends it for the Medium level through the hooks below.
 """
 
 from datetime import date, timedelta

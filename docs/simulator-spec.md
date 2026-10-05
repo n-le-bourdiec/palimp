@@ -241,7 +241,27 @@ A server or a whole application moves to a new IP, a new zone, or both.
 - Owner changes, team reorganizations.
 - Log rotation: only the last `log_window_days` of logs survive.
 
-### 4.9 Traffic model
+### 4.9 Access requests and integrations (Medium)
+
+Implemented in session 9 (`medium.py`), to reach the Medium rule volume with
+rules a real rule base accumulates:
+
+- Integrations: at go-live an application calls 0, 1 or 2 other live
+  applications (weights 0.2, 0.45, 0.35), on a non-web tier those other
+  applications serve to other servers. The flow belongs to the calling
+  application (`app_dependency`). When the called application is
+  decommissioned the call stops and its rule stays; when it migrates the call
+  moves to the new servers with a new rule.
+- Access requests (event kind `access_request`, 30 per year): one named
+  workstation (`pc-<initials>-NN`, a /32 in a user site) or one support vendor
+  (`vendor-<app>-NN`, a /32 in 203.0.113.150 to .254, SSH) gets access to one
+  tier of a live application. Half of them end after 30 to 400 days; the rule
+  is then removed with probability 0.3, otherwise it stays dead. A workstation
+  request for something users already reach, or for an application behind an
+  emergency rule, would be shadowed (`TRAP-SHADOWED-DUPLICATE`, v2), so it
+  becomes vendor access instead.
+
+### 4.10 Traffic model
 
 Each flow has a schedule: continuous business hours, 24x7, nightly, weekly,
 monthly, quarterly, yearly. For each day and flow the simulator computes a
@@ -375,9 +395,15 @@ Format knobs (each checked against the fixtures by
   starting with `<14>1`) or `syslog-server` (lines as a remote syslog server
   stores them: server timestamp `Sep 06 16:54:22`, the device address, then
   the message without `<PRI>`, as in `rt_flow_structured_12.3_remote.txt`).
-  The device address is its interface toward the collector; the server clock
-  equals the device clock. Default: `device` for Easy, `syslog-server` for
-  Medium.
+  The device address is its interface toward the collector. Easy: server
+  clock equal to the device clock. Medium: the server clock is off by a
+  seeded skew of 1 to 6 seconds, either sign, constant per scenario (decision
+  0016, `syslog_clock_skew_seconds` in the manifest).
+
+Easy uses fixed formats (`device`, `pre-22.2`, `standard`, no rescue line).
+Medium draws `log_collection`, `log_release` (never `22.2`), `hitcount_layout`
+and `rescue_line` per scenario from the seed (decision 0016); the draw is in
+`manifest.json` (`format_draw`). An override wins over the draw.
 
 The SD-ID `junos@2636.1.1.1.2.129` is unverified: the published samples come
 from other platforms (`.34`, `.39`).
@@ -408,7 +434,13 @@ column, a blank line and `Number of policy: N` at the end.
 Counts are cumulative since the last reset (reboot, upgrade, or
 `clear security policies hit-count`). The reset date is not in the file; it can
 sometimes be inferred from the commit history (routine commit comment
-`upgrade to ...`) or not at all.
+`upgrade to ...`) or not at all. Medium also clears one zone pair a few days
+before the snapshot (`clear security policies hit-count from-zone A to-zone
+B`, VSRX-7c), an operational command that leaves no commit; the manifest
+records it (`hit_count_clears`).
+
+Deactivated policies are not installed, so they are not listed (VSRX-2b,
+unverified).
 
 ### 5.6 Tickets (`tickets.csv`, optional)
 
@@ -537,8 +569,10 @@ Field meanings:
 | `ticket_rate` / export coverage | 0.9 / 1.0 | 0.6 / 0.8 | 0.4 / 0.5 | 0.2 / 0.3 |
 | CMDB present / staleness | yes / low | yes / medium | yes / high | no |
 | `cleanup_rate` | 0.35 | 0.6 | 0.3 | 0.15 |
-| decommissions per year | 2 | not set yet | not set yet | not set yet |
-| migrations per year (duplicate style in v1) | 1 | not set yet | not set yet | not set yet |
+| decommissions per year | 2 | 1.5 | not set yet | not set yet |
+| migrations per year (duplicate style in v1) | 1 | 1.5 | not set yet | not set yet |
+| access requests per year (section 4.9) | 0 | 30 | not set yet | not set yet |
+| integrations per application (section 4.9) | 0 | 0 to 2, mean 1.15 | not set yet | not set yet |
 | `cleanup_error_rate` | 0 | 0 (v2: 0.02) | 0.05 | 0.1 |
 | emergency events per year | 0 | 1 | 4 | 8 |
 | contractor periods | 0 | 0 (v2: 1) | 2 | 4 |
@@ -547,15 +581,27 @@ Field meanings:
 | commits per year (drives history horizon) | 20 | 60 | 150 | 300 |
 | rare jobs (quarterly, yearly) | 0 | 2 | 6 | 12 |
 | log format | structured | structured | structured | standard |
-| `log_collection` | device | syslog-server | not set yet | not set yet |
-| `log_release` | pre-22.2 | pre-22.2 | not set yet | not set yet |
-| `hitcount_layout` | standard | standard | not set yet | not set yet |
-| `rescue_line` | no | yes | not set yet | not set yet |
+| `log_collection` | device | drawn: syslog-server 0.6, device 0.4 | not set yet | not set yet |
+| `log_release` | pre-22.2 | drawn: pre-22.2 0.7, 12.x 0.3 | not set yet | not set yet |
+| `hitcount_layout` | standard | drawn: standard 0.7, legacy 0.3 | not set yet | not set yet |
+| `rescue_line` | no | drawn: yes 0.5, no 0.5 | not set yet | not set yet |
+| syslog server clock skew | none | 1 to 6 s, either sign | not set yet | not set yet |
 
 Easy values were tuned in session 4 to about 40 final policies with 15 to 20%
 dead rules (measured over seeds 0 to 99: mean 39.9 policies, 17.6% dead). A low
 `cleanup_rate` is what leaves dead rules behind; Easy stays easy because its
 evidence is complete and consistent, not because its rule base is clean.
+
+Medium values were measured in session 9 over seeds 0 to 99: mean 148 final
+policies (124 to 169), 19% dead rules (10 to 33%). Personas: two seniors in
+turn, one hurried operator for the whole period, and an automation account
+(`svc-ansible`, `via netconf`) from about mid-period, which deploys 60% of new
+applications. `comment_rate`, `description_rate` and `log_rate` are weighted
+means: the senior applies a factor 1.4, the operator 0.5, automation always
+comments, describes and logs. The fifth zone is `mgmt` or `admin`
+(management: monitoring, backup and a jump host service).
+Decision 0016 sets the format draw; Medium-only knobs are left out of the
+manifest while at their neutral default, so Easy manifests do not change.
 
 Each knob can be overridden individually; a scenario is defined by a level plus
 overrides.
@@ -593,6 +639,28 @@ affects, so metrics can be reported per trap.
 | `TRAP-HISTORY-HORIZON` | v1 | rule older than retained history | no T1 evidence means no intent | intent only from T2/T3/T4, confidence capped |
 | `TRAP-SHARED-LOGIN` | v2 | commits by `admin` or `root` | one author | several personas |
 | `TRAP-CLEANUP-FLAP` | v2 | live rule removed by mistake, re-added under another name | new unrelated rule | same intent as the removed one |
+
+### 7.4 How Medium builds the v1 traps
+
+Session 9 (`simulator/src/palimp_sim/medium.py`). The timeline records what it
+did on purpose (`TrapFacts`); `truth.py` tags a rule only if the trap condition
+holds on the final state. Coverage over seeds 0 to 99: every v1 trap in 100 of
+100 scenarios (test `test_every_v1_trap_in_every_medium_scenario`).
+
+| Trap | Mechanism | Ground truth |
+|---|---|---|
+| `TRAP-LIVE-NOLOG` | a weekly job (application tier to a partner, SSH) without logging; its zone pair (servers to internet) is cleared 2 to 5 days before the snapshot, the day after the last run | live; verdict `keep`, best `verify`; hit count and log evidence marked misleading |
+| `TRAP-RARE-JOB` | two jobs per scenario: one yearly whose last run is 200 to 350 days before the snapshot (before the hit count reset), one quarterly or yearly; cleanups keep job rules (their owners object, S2) | tagged when live with zero hits and no log line; verdict `keep`, best `verify`; hit count and log evidence misleading |
+| `TRAP-EMERGENCY-LOADBEARING` | four emergency events (night or week-end, on-call comment and names such as `temp-fix`): `users-all` to `<app>-net` (/24), application `any`, inserted on top of users to servers; the proper rules lose all hits and the cleanup 90 to 150 days later removes them | intent `emergency_temporary` with the flows it was for; verdict and best `verify`; a "marked temporary" item (supports `not_live`) misleading; removal of the proper rules listed as T3 evidence when retained |
+| `TRAP-MISLEADING-COMMENT` | after the timeline, one retained commit that creates rules (plus others at rate 0.03) gets the comment of an earlier commit about an application none of its rules serve | comment (and the other application's ticket, if exported) misleading |
+| `TRAP-BATCH-COMMIT` | the hurried operator commits the go-live of 2 or 3 applications at once, 40 to 110 days before the snapshot, with a comment naming the first one | "created together" evidence misleading for every rule; comment misleading for rules of the other applications |
+| `TRAP-HISTORY-HORIZON` | about 60 commits a year leave only the last ten months in the 50 retained commits | tagged when the creating commit is not retained and no T1 evidence remains; confidence therefore at most `MEDIUM` |
+| `TRAP-DEACTIVATED` | each cleanup removes unused rules with `cleanup_rate`, deactivates them with 0.3, keeps the rest; at least one deactivation per cleanup | `deactivated: true`; verdict and best `removal_candidate`; the `then permit` statements count as misleading `live` evidence; no hit count row |
+
+Trap verdict rule: a live rule whose liveness the artifacts cannot show (zero
+hits in its counting window and no log line) gets best achievable verdict
+`verify`. A dead rule whose counting window is under 90 days (zone pair cleared)
+also gets `verify`.
 
 ## 8. Determinism and the dev / held-out split
 
@@ -675,6 +743,7 @@ Rules:
 |---|---|---|
 | VSRX-1 | `show configuration \| display set` and `show system rollback N \| display set` print one `set` statement per line, in the layout shown, with quoted descriptions | capture both on vSRX, store as fixtures |
 | VSRX-2 | deactivated statements appear as `deactivate ...` lines in set output; annotations are dropped | `deactivate` and `annotate` a policy, then display set |
+| VSRX-2b | a deactivated policy is not listed by `show security policies hit-count` (the simulator leaves it out) | deactivate a policy with hits, show hit-count |
 | VSRX-3 | order of policy lines in set output is the evaluation order within a zone pair, including after `insert policy ... before` | insert a policy, compare set output and `show security policies` order |
 | VSRX-4 | exact layout of `show system commit`: column widths, time zone abbreviation, `via cli` / `via netconf`, comment on next line, `commit confirmed, rollback in Nmins` text | several commits with and without comments, over netconf, with commit confirmed |
 | VSRX-5 | a `rename` shows as delete plus add between two rollbacks | rename an address object, `show system rollback compare 1 0` |

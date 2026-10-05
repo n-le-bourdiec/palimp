@@ -93,7 +93,7 @@ COMMIT_FIXTURES = [
     "show_system_commit_include_revision.txt",
 ]
 # `via netconf` is not shown in any sample (VSRX-4b); it stays allowed until a
-# capture settles it, and simulator Easy does not use it.
+# capture settles it; only the Medium automation account uses it.
 UNVERIFIED_METHODS = {"netconf"}
 
 

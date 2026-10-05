@@ -1,4 +1,4 @@
-"""Traffic model (spec section 4.9).
+"""Traffic model (spec section 4.10).
 
 Every day, each active flow produces a number of sessions. Each session is
 attributed to the first matching policy of its zone pair in the configuration
