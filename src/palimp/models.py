@@ -224,6 +224,14 @@ class Finding(BaseModel):
     assessment: Assessment | None = None
 
 
+class RemovedPolicy(BaseModel):
+    """A policy that a commit deleted, with the address objects it referenced."""
+
+    key: str
+    sources: list[str] = []
+    destinations: list[str] = []
+
+
 class Dataset(BaseModel):
     """Everything palimp read from one artifact directory, normalized."""
 
@@ -235,6 +243,9 @@ class Dataset(BaseModel):
     history: dict[str, PolicyHistory] = {}
     created_by_commit: dict[int, list[str]] = Field(
         {}, description="policy keys added by each commit, found by diffing consecutive configs"
+    )
+    removed_by_commit: dict[int, list[RemovedPolicy]] = Field(
+        {}, description="policies deleted by each commit, found by diffing consecutive configs"
     )
     hit_counts: list[HitCount] = []
     hit_count_stats: ParseStats | None = None

@@ -28,6 +28,8 @@ from palimp.models import Assessment, Conflict, Dataset, Evidence, Finding
 # Evidence kinds that say a policy is unused (decision 0020), not that nothing is known.
 NOT_LIVE_KINDS = frozenset({"deactivated", "decommission", "cleanup_leftover"})
 LEVELS = ("LOW", "MEDIUM", "HIGH")
+# T1 kinds that state why a policy exists (a decommission states why it ended).
+INTENT_KINDS = frozenset({"description", "commit_comment", "ticket"})
 
 
 def _ids(items: list[Evidence]) -> list[str]:
@@ -92,7 +94,7 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
 
 def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], list[Conflict]]:
     evidence = finding.evidence
-    direct = [e for e in evidence if e.tier == "T1" and e.apps]
+    direct = [e for e in evidence if e.tier == "T1" and e.apps and e.kind in INTENT_KINDS]
     objects = next((e for e in evidence if e.kind == "address_objects" and e.apps), None)
     object_apps = set(objects.apps) if objects else set()
     agree = [e for e in direct if object_apps & set(e.apps)]

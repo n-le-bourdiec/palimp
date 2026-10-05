@@ -115,6 +115,7 @@ def test_vocabulary_learns_aliases_from_tickets() -> None:
     assert vocab.in_text("CHG0030016 ESHOP go-live, 2 rules") == ["webshop"]
     assert vocab.in_text("NTP - open flows pls") == ["ntp"]
     assert "fw" not in vocab.aliases  # seen with two related CIs
-    assert vocab.in_object("vendor-arch-109") == ["archive"]
+    assert vocab.in_object("vendor-arch-109") == []
+    assert vocab.in_object("webshop-app-01") == ["webshop"]
     assert vocab.in_object("pc-kc-111") == []
     assert PolicyKey.parse("a/b/c").name == "c"

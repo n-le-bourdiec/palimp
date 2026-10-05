@@ -2,7 +2,8 @@
 
 T1 direct: policy description, comment of the commit that created the policy,
 ticket references found in the name, description or that comment (matched
-against tickets.csv when present).
+against tickets.csv when present), a decommission the policy was left behind
+by (palimp.notlive).
 T2 behavioral: hit count row, RT_FLOW log summary. Each T2 item says whether
 the artifact shows traffic ("present"), could show it and shows none
 ("absent"), or cannot show it for this policy ("blind": no logging,
@@ -21,6 +22,7 @@ from palimp.apps import Vocabulary, vocabulary
 from palimp.assess import assess
 from palimp.behavior import recurrence, time_of_day
 from palimp.models import Dataset, Evidence, Finding, LogSummary, Policy, PolicyKey, Signal
+from palimp.notlive import Marker, decommission_items, markers
 from palimp.services import describe
 
 TICKET_REF = re.compile(r"\b(?:CHG|INC|RITM|REQ|CR|SR|TASK)[-_]?\d{4,}\b", re.IGNORECASE)
@@ -168,11 +170,17 @@ def _temporary_words(policy: Policy) -> list[str]:
     )
 
 
-def collect(dataset: Dataset, key: PolicyKey, vocab: Vocabulary | None = None) -> Finding:
+def collect(
+    dataset: Dataset,
+    key: PolicyKey,
+    vocab: Vocabulary | None = None,
+    found: list[Marker] | None = None,
+) -> Finding:
     policy = dataset.config.policy(key)
     if policy is None:
         raise KeyError(f"policy {key} not found in config.set")
     vocab = vocab or vocabulary(dataset)
+    found = markers(dataset, vocab) if found is None else found
     history = dataset.history.get(str(key))
     created = history.created_in_commit if history else None
     commit = next((c for c in dataset.commits if c.index == created), None)
@@ -228,6 +236,11 @@ def collect(dataset: Dataset, key: PolicyKey, vocab: Vocabulary | None = None) -
                 items.append(
                     Item("T1", artifact, locator, "not in tickets.csv", None, "ticket_reference")
                 )
+
+    for artifact, locator, claim, apps in decommission_items(
+        dataset, policy, created, found, vocab
+    ):
+        items.append(Item("T1", artifact, locator, claim, None, "decommission", apps))
 
     named = [n for n in policy.sources + policy.destinations if n != "any"]
     if named:
@@ -290,4 +303,5 @@ def collect(dataset: Dataset, key: PolicyKey, vocab: Vocabulary | None = None) -
 
 def collect_all(dataset: Dataset) -> list[Finding]:
     vocab = vocabulary(dataset)
-    return [collect(dataset, p.key, vocab) for p in dataset.config.policies]
+    found = markers(dataset, vocab)
+    return [collect(dataset, p.key, vocab, found) for p in dataset.config.policies]

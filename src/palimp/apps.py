@@ -9,8 +9,7 @@ Plain rules, no scoring. Applications are learned from the input itself:
   A short name seen with two different related CIs is ambiguous and dropped.
 
 A token names an application when it is one of the learned names or aliases.
-In object names, a token of 3 letters or more that starts a single learned
-name also counts (`arch` in `vendor-arch-109` names `archive`).
+No prefix matching: `web` must not name `webshop`.
 """
 
 import re
@@ -51,19 +50,13 @@ class Vocabulary:
     names: set[str] = field(default_factory=set)
     aliases: dict[str, str] = field(default_factory=dict)
 
-    def lookup(self, token: str, prefix: bool = False) -> str | None:
+    def lookup(self, token: str) -> str | None:
         token = token.lower()
         if token in ROLE_WORDS:
             return None
         if token in self.names:
             return token
-        if token in self.aliases:
-            return self.aliases[token]
-        if prefix and len(token) >= 3:
-            starts = [n for n in self.names if n.startswith(token)]
-            if len(starts) == 1:
-                return starts[0]
-        return None
+        return self.aliases.get(token)
 
     def in_text(self, text: str) -> list[str]:
         """Applications named in free text (comment, description, ticket summary)."""
@@ -82,7 +75,7 @@ class Vocabulary:
         for token in re.split(r"[-_.]", name):
             if not token.isalpha():
                 continue
-            app = self.lookup(token, prefix=True)
+            app = self.lookup(token)
             if app and app not in found:
                 found.append(app)
         return found

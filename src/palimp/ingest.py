@@ -12,7 +12,7 @@ from palimp.formats.junos_set import parse_set
 from palimp.formats.rollbacks import read_rollbacks
 from palimp.formats.rt_flow import parse_rt_flow
 from palimp.formats.tickets import parse_tickets
-from palimp.models import Config, Dataset, PolicyHistory
+from palimp.models import Config, Dataset, PolicyHistory, RemovedPolicy
 
 
 def resolve_directory(directory: Path) -> Path:
@@ -29,8 +29,11 @@ def _read(path: Path) -> str | None:
     return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else None
 
 
-def history(configs: dict[int, Config]) -> tuple[dict[str, PolicyHistory], dict[int, list[str]]]:
-    """Find the commit that added each policy by diffing consecutive configurations.
+def history(
+    configs: dict[int, Config],
+) -> tuple[dict[str, PolicyHistory], dict[int, list[str]], dict[int, list[RemovedPolicy]]]:
+    """Find the commit that added each policy, and what each commit deleted, by diffing
+    consecutive configurations.
 
     configs[i] is the configuration after commit i (0 is the active one). Only
     the contiguous run 0, 1, 2, ... is used.
@@ -40,10 +43,18 @@ def history(configs: dict[int, Config]) -> tuple[dict[str, PolicyHistory], dict[
         oldest += 1
     keys = {i: configs[i].keys() for i in range(oldest + 1)}
     created_by: dict[int, list[str]] = {}
+    removed_by: dict[int, list[RemovedPolicy]] = {}
     for i in range(oldest):
         added = sorted(str(k) for k in keys[i] - keys[i + 1])
         if added:
             created_by[i] = added
+        removed = [configs[i + 1].policy(k) for k in sorted(keys[i + 1] - keys[i], key=str)]
+        if removed:
+            removed_by[i] = [
+                RemovedPolicy(key=str(p.key), sources=p.sources, destinations=p.destinations)
+                for p in removed
+                if p
+            ]
     result: dict[str, PolicyHistory] = {}
     for policy in configs[0].policies:
         created = None
@@ -54,7 +65,7 @@ def history(configs: dict[int, Config]) -> tuple[dict[str, PolicyHistory], dict[
         result[str(policy.key)] = PolicyHistory(
             created_in_commit=created, oldest_retained_index=oldest
         )
-    return result, created_by
+    return result, created_by, removed_by
 
 
 def reference_date(dataset: Dataset) -> datetime | None:
@@ -92,7 +103,9 @@ def ingest(directory: Path, log_year: int | None = None) -> Dataset:
     if not rollbacks:
         dataset.warnings.append("no rollback files: creation commits cannot be found")
     dataset.rollback_stats = [rollbacks[i].stats for i in sorted(rollbacks)]
-    dataset.history, dataset.created_by_commit = history({0: config, **rollbacks})
+    dataset.history, dataset.created_by_commit, dataset.removed_by_commit = history(
+        {0: config, **rollbacks}
+    )
 
     text = _read(directory / "hitcount.txt")
     if text is None:
