@@ -8,12 +8,14 @@ the artifact shows traffic ("present"), could show it and shows none
 ("absent"), or cannot show it for this policy ("blind": no logging,
 deactivated, artifact missing), see decision 0019.
 T3 structural: address object names, policies created in the same commit.
+T4 contextual: plain service names of the applications the policy matches.
 """
 
 import re
 
 from palimp.behavior import recurrence, time_of_day
 from palimp.models import Dataset, Evidence, Finding, LogSummary, Policy, PolicyKey, Signal
+from palimp.services import describe
 
 TICKET_REF = re.compile(r"\b(?:CHG|INC|RITM|REQ|CR|SR|TASK)[-_]?\d{4,}\b", re.IGNORECASE)
 
@@ -214,6 +216,14 @@ def collect(dataset: Dataset, key: PolicyKey) -> Finding:
             )
 
     items += hit_count_items(dataset, policy) + log_items(dataset, policy)
+    if policy.applications:
+        services = [
+            line
+            for name in policy.applications
+            for line in describe(name, dataset.config.applications)
+        ]
+        locator = "applications " + ", ".join(policy.applications)
+        items.append(("T4", "config.set", locator, "; ".join(services), None))
 
     evidence = [
         Evidence(
