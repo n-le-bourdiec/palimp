@@ -60,6 +60,8 @@ realistic firewall history plus a ground-truth file (true intent of every rule).
   (decision 0017).
 - Scenarios are split into a dev set and a held-out test set. Never look at
   held-out results while tuning the analyzer.
+- The held-out workflow is run only by the project lead, at most once per
+  release. Every run is recorded in `docs/evaluation-history.md`.
 - Real Junos output formats come from samples copied from Juniper's official
   documentation, stored under `tests/fixtures/junos_docs/` (decision 0013).
   A vSRX lab stays a later upgrade.
