@@ -1,90 +1,89 @@
 # Handoff
 
-## Last session: 10 (2026-10-05), simulator: variable Medium trap counts
+## Last session: 11 (2026-10-05), analyzer: Medium ingest, T2 and T4 evidence
 
-### Note for analyzer sessions
+### Note for simulator sessions
 
-- Ground truth schema: event kind `access_request` was added in session 9
-  (decision 0017, additive, `schema_version` stays 1). Accept it wherever event
-  kinds are mapped. From now on every schema change gets a decision file and a
-  note here (CLAUDE.md).
-- Simulator 0.3.0 (decision 0018): a Medium scenario can contain none, one or
-  several instances of TRAP-LIVE-NOLOG, TRAP-RARE-JOB,
-  TRAP-EMERGENCY-LOADBEARING, TRAP-MISLEADING-COMMENT and TRAP-BATCH-COMMIT.
-  The hit count clear (`hit_count_clears` in the manifest) can be on servers
-  to internet, servers to management or management to servers. Per-trap
-  metrics must be computed over the scenarios that contain the trap.
+- No ground truth schema change. The analyzer now reads every T2 and T4
+  item; the eval harness reads `manifest.json` (`format_draw`) only to break
+  results down per format variant. palimp itself never reads the manifest.
 
 ### Done
 
-- Session 9 metrics row finalized (125 calls, 12.40 USD API-equivalent).
-- Trap counts drawn per Medium scenario (sub-generator `trap_counts`, weights
-  in `levels.TRAP_COUNT_WEIGHTS`); the knobs `emergency_per_year`,
-  `rare_jobs` and `misleading_comment_rate` are gone (replaced by the
-  weights). Several batch commits and several copied comments per scenario are
-  possible.
-- Hit count clear decoupled from rare jobs: pair drawn on its own
-  (sub-generator `hit_count_clear`); weekly no-log jobs go in that pair (two new
-  job shapes with the backup server, intent `backup`); rare jobs stay
-  application to partner. A RARE-JOB rule sits in the cleared pair in 21 of
-  100 scenarios, by chance.
-- Cleanups are now one a year, independent of emergencies (each emergency is
-  placed 90 to 150 days before one of them), so TRAP-DEACTIVATED stays in
-  every scenario.
-- Measured over Medium seeds 0 to 99 (rules tagged per scenario):
-  LIVE-NOLOG 73% (0 to 2), RARE-JOB 68% (0 to 2), EMERGENCY-LOADBEARING 83%
-  (0 to 3), MISLEADING-COMMENT 72% (0 to 15), BATCH-COMMIT 71% (0 to 25),
-  HISTORY-HORIZON 100% (40 to 105), DEACTIVATED 100% (1 to 25). 156 policies
-  on average (125 to 194), 20.5% dead rules (9.9 to 36.5%).
-- Simulator 0.3.0. Easy output identical apart from the version string
-  (checked by `test_easy_changed_only_by_version` against the 0.2.0 hashes);
-  golden hashes updated.
-- New pytest marker `full`: Medium seeds 10 to 99 (trap distribution test,
-  leakage) run only with `--runslow`; CI runs Medium on seeds 0 to 9.
-- CLAUDE.md: schema changes need a decision file and a HANDOFF note.
-  Decisions 0017 (access_request) and 0018 (trap counts, clear placement).
-- Spec 5.5, 7.1, 7.2, 7.4 updated.
+- Session 10 metrics row finalized (57 calls, 3.72 USD API-equivalent);
+  session 10 commits pushed, CI green.
+- CLAUDE.md: every session pushes its commits and reports the CI status of
+  the last push in the session report.
+- Ingest on Medium seeds 0 to 9: zero unknown lines in every artifact, before
+  and after (config, commits, hit counts, logs, tickets, 49 rollbacks each).
+  Checked beyond unknown counts: every log event has a timestamp, every hit
+  count row names a configured policy. Locked in by `tests/test_medium_ingest.py`
+  (slow, CI). Seeds 0 to 9 contain no standard (unstructured) RT_FLOW lines.
+- Log year: an undated syslog timestamp takes its year from an ISO server
+  stamp on the same line, from `--log-year` (year of the first undated line,
+  on `ingest` and `explain`), or is inferred from the newest commit (then
+  ticket dates); December to January rollover handled; inferred year printed
+  as a warning. Unit tests in `tests/test_log_year.py`.
+- Log reader keeps per policy (keyed FROM/TO/NAME): sessions, first and last
+  seen, sources, destinations, ports, services, sessions per hour and weekday,
+  active days. Log window start and end in `Dataset.log_window`.
+- T2 collectors (`evidence.py`, `behavior.py`): hit count row (any layout,
+  any row order), log summary with time-of-day pattern (nightly, business
+  hours, daytime, around the clock) and recurrence hint (daily, weekly,
+  monthly, quarterly, single day, irregular; late start or early stop in the
+  window called out). Decision 0019: each T2 item has `signal` present,
+  absent or blind; no logging, deactivated and missing artifacts are blind.
+- T4 collector (`services.py`): one item per policy naming each application's
+  service (Junos predefined, well-known port, application sets expanded,
+  `any` stated as nothing to infer).
+- Eval (`eval/evidence_recall.py`) now scores T1 to T4, per trap (per rule
+  and per instance), per format variant, T2 direction, and "absent" signals
+  on live rules. `eval/trap_rules.py` lists rules of a trap (harness only).
+- Medium seeds 0 to 9 (1542 rules): T1 99.9%, T2 100.0% (direction agrees
+  100.0%), T3 84.2%, T4 100.0%. No format variant below 81.9% on any tier.
+  Per trap instance mean recall: BATCH 100%, LIVE-NOLOG 100%, MISLEADING
+  100%, RARE-JOB 100%, HISTORY-HORIZON 88.5%, EMERGENCY 59.3%, DEACTIVATED
+  53.2% (the gaps are all T3).
 
 ### Next
 
-- Analyzer session: run the readers on Medium scenarios (all format
-  combinations, deactivate lines, `via netconf`, `match application any`,
-  skewed syslog-server prefixes); the black-box test only covers Easy.
-- Analyzer plan from session 5: T2 collectors, T4, confidence scoring and
-  verdicts, `report` and `questions`; then a first Medium evaluation.
-- Simulator: standard (unstructured) RT_FLOW format as a knob; DENY messages;
-  stored rollback files (S2).
+- Confidence scoring and verdicts (not started, by mission). Inputs to use:
+  blind T2 items never count as support; 32 "absent" T2 items fall on live
+  rules in seeds 0 to 9 (22 zero hit counts, 10 empty logs, all on
+  RARE-JOB, LIVE-NOLOG or HISTORY-HORIZON rules): absent alone must never
+  give "removal candidate".
+- Hit count clear detection: zero hits on a policy whose logs show sessions
+  in the window means the counters were cleared; zero hits on every rule of a
+  zone pair is the same hint. Not implemented.
+- T3 recall gaps: DEACTIVATED (33.6% T3 per rule) and EMERGENCY-LOADBEARING
+  (22.1%), mostly config.set and rollbacks items. Look at what the ground
+  truth expects there.
+- The recurrence hint is tested on synthetic days only: Medium log windows
+  are 60 days, so weekly, monthly and quarterly patterns never show in them.
+- `report` and `questions` commands.
 
 ### Open questions
 
-- Weights in `TRAP_COUNT_WEIGHTS` were set by hand to land in 60 to 90%;
-  should Hard reuse the same mechanism with higher counts?
-- A copied comment on an operator commit split per site tags up to 15 rules,
-  and a batch commit up to 25: per-trap metrics counted per rule are weighted
-  by these large instances. Count per instance (commit) instead?
-- Medium is about 8 MB per scenario; 100 scenarios are 0.8 GB. Reduce
-  `log_samples_per_policy_day` or keep?
-- TRAP-HISTORY-HORIZON tags about 69 rules per scenario: per-trap metrics will
-  be dominated by it. Tag it only on rules with no other trap?
-- Emergency rules are committed by whichever human admin is on call; the
-  `on_call` persona is not a separate admin at Medium.
-- Carried over: decision 0015 as a separate decision; `commit activate` as a
-  commit type; CONFIRMED-TEXT acceptance; Easy 100% recall says little;
-  scenario directory names without overrides.
+- Should a blind T2 item be emitted for every policy without logging (988
+  blind items over seeds 0 to 9), or only in `explain` text? Kept in the
+  evidence list so the LLM writer can cite the gap (decision 0019).
+- Per trap metrics counted per rule are dominated by large instances
+  (HISTORY-HORIZON 616 rules, BATCH 125): per instance figures are printed
+  next to them. Which one should be the headline metric?
+- Carried over from session 10: Hard trap weights; Medium size (8 MB per
+  scenario); TRAP-HISTORY-HORIZON tagging; on_call persona; decision 0015;
+  `commit activate`; CONFIRMED-TEXT; scenario directory names.
 
 ### Known issues
 
-- VSRX-2b unverified: deactivated policies are left out of hit counts.
-- When the clear lands on management to servers or servers to management,
-  other live rules of that pair with sparse traffic may show zero hits too
-  (not tagged as traps; their best verdict is `verify` through the generic
-  hidden-live rule).
-- Ticket assignee can be `svc-ansible` (automation deploys an application);
-  realistic for a pipeline, but unusual in a ticket export.
-- S2: stored rollback files not emitted. S5: no system commits besides the
-  rescue line; `via netconf` unverified.
-- Git identity is set in the repository config only (`n-le-bourdiec`).
-- Session 2 Part C checks (WSL, KVM, Docker) are still not done.
+- Session counts are those logged: the simulator samples about one log line
+  per policy and day, so "sessions" undercount real traffic.
+- Time of day uses the logged time (UTC in Medium); a device in another time
+  zone would shift "nightly".
+- Junos predefined applications beyond the five documented ones in
+  `junos_defaults_applications_13.2.txt` are from general knowledge (VSRX-12).
+- Carried over: VSRX-2b unverified; ticket assignee `svc-ansible`; S2 and S5;
+  git identity in repository config only; session 2 Part C checks not done.
 
 ## Measuring tokens and cost
 
@@ -109,9 +108,11 @@ Session 6 has its own transcript `72beb9ef-54f4-42f0-8f55-6f97aafd613c`
 `cd397e63-3f27-4583-ab2d-1855580dff63` (finalized in session 8). Session 8 has
 transcript `f5449cc1-ac4a-4d11-aab3-d77d2bc207ee` (finalized in session 9).
 Session 9 has transcript `60a6f3c8-c28b-457e-8a93-e9da7abb4439` (finalized in
-session 10). Session 10 has transcript `3649919e-84f0-4cd3-8b8d-c49cc31eff22`.
-Finalize it at the start of session 11 with:
+session 10). Session 10 has transcript `3649919e-84f0-4cd3-8b8d-c49cc31eff22` (finalized
+in session 11). Session 11 has transcript
+`0d141375-db8e-4e9e-8979-0100e197eb49`. Finalize it at the start of session
+12 with:
 
-    uv run python metrics/session_tokens.py 3649919e-84f0-4cd3-8b8d-c49cc31eff22
+    uv run python metrics/session_tokens.py 0d141375-db8e-4e9e-8979-0100e197eb49
 
 Cost is API-equivalent (decision 0006), not a billed amount.
