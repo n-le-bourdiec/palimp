@@ -1,8 +1,8 @@
 """`palimp report` and `palimp questions`: citations, coverage, removal candidates.
 
-Checked on the Easy scenario in the repository (fast) and on Medium dev seeds
-0 to 4 (slow, black box: the simulator writes a scenario, palimp reads only
-its artifacts).
+Checked on Easy seed 0 (fast) and on Medium dev seeds
+0 to 4 (slow). Black box: the simulator writes a scenario, palimp reads only its
+artifacts.
 """
 
 import csv
@@ -23,17 +23,21 @@ from palimp.questions import answers_csv
 from palimp.questions import build as build_questions
 from palimp.report import Report, build, cited_ids, markdown
 
-EASY = Path(__file__).parent.parent / "scenarios" / "scenario-easy-000000" / "artifacts"
 RULE_HEADING = re.compile(r"^#{3,4} (R\d+) `([^`]+)`")
 TABLE_ROW = re.compile(r"^\| (R\d+) \| `([^`]+)` \|")
 
 
-def generate(seed: int, out: Path) -> Path:
-    command = [sys.executable, "-m", "palimp_sim.cli", "generate", "--level", "medium"]
+def generate(seed: int, out: Path, level: str = "medium") -> Path:
+    command = [sys.executable, "-m", "palimp_sim.cli", "generate", "--level", level]
     subprocess.run(
         command + ["--seed", str(seed), "--out", str(out)], check=True, capture_output=True
     )
-    return out / f"scenario-medium-{seed:06d}"
+    return out / f"scenario-{level}-{seed:06d}"
+
+
+@pytest.fixture(scope="module")
+def easy(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return generate(0, tmp_path_factory.mktemp("easy"), "easy") / "artifacts"
 
 
 def unknown_citations(report: Report, text: str) -> list[str]:
@@ -103,8 +107,8 @@ def check(report: Report) -> None:
         assert "[E" not in q.text
 
 
-def test_easy_report() -> None:
-    report = build(ingest(EASY))
+def test_easy_report(easy: Path) -> None:
+    report = build(ingest(easy))
     check(report)
     text = markdown(report)
     order = [text.index(h) for h in ("## Summary", "## What palimp could not see")]
@@ -114,8 +118,8 @@ def test_easy_report() -> None:
         assert f"**{topic}" in text
 
 
-def test_removal_candidate_without_not_live_item_is_refused() -> None:
-    dataset = ingest(EASY)
+def test_removal_candidate_without_not_live_item_is_refused(easy: Path) -> None:
+    dataset = ingest(easy)
     report = build(dataset)
     findings = [r.finding for r in report.rules]
     target = next(f for f in findings if f.assessment and f.assessment.verdict == "keep")
@@ -124,14 +128,14 @@ def test_removal_candidate_without_not_live_item_is_refused() -> None:
         build(dataset, findings)
 
 
-def test_report_and_questions_cli(tmp_path: Path) -> None:
+def test_report_and_questions_cli(easy: Path, tmp_path: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(app, ["report", "-a", str(EASY), "-o", str(tmp_path / "r")])
+    result = runner.invoke(app, ["report", "-a", str(easy), "-o", str(tmp_path / "r")])
     assert result.exit_code == 0, result.output
     payload = json.loads((tmp_path / "r" / "report.json").read_text(encoding="utf-8"))
     assert payload["summary"]["total"] == len(payload["rules"])
     assert (tmp_path / "r" / "report.md").read_text(encoding="utf-8").startswith("# palimp")
-    result = runner.invoke(app, ["questions", "-a", str(EASY), "-o", str(tmp_path / "q")])
+    result = runner.invoke(app, ["questions", "-a", str(easy), "-o", str(tmp_path / "q")])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "q" / "answers.csv").is_file()
 
