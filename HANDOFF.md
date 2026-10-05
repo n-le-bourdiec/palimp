@@ -1,82 +1,69 @@
 # Handoff
 
-## Last session: 14 (2026-10-05), analyzer: vocabulary abbreviations and application owners
+## Last session: 15 (2026-10-05), analyzer: history lineage and counter evidence
 
 ### Note for analyzer sessions
 
 - No ground truth schema change.
-- New `palimp.owners` module, new T3 evidence kind `app_requesters`, new
-  `Assessment` fields `owner` (stated only when certain) and
-  `owner_candidates`. Every policy now has an `ask` line, `keep` included;
-  `question` stays non-keep only. Decision 0022.
-- `eval/verdicts.py` headline now also shows owner stated as certain (right,
-  wrong), right owner among the candidates, and T1-T3 conflicts on untrapped
-  and MISLEADING-COMMENT rules.
+- New modules `palimp.lineage` (takeover, migration leftover) and
+  `palimp.counters` (inferred counter clears). New evidence kinds: T3
+  `takeover`, T3 `migration_leftover` (positive not-live, in
+  `NOT_LIVE_KINDS`), T2 `counter_clear` (blind), T2 `log_stopped` (absent).
+  New verdict rules `V-TAKEOVER-IN-USE` and `V-TRAFFIC-STOPPED` (both verify).
+  Decision 0024.
+- `Dataset` keeps `added_by_commit`, `deactivated_by_commit`,
+  `past_addresses`; `RemovedPolicy` renamed `PastPolicy` (full match);
+  `LogWindow.addresses` lists every logged address.
+- Decision 0023: owners of a two-application flow are listed in alphabetical
+  order, unranked. Never rank from patterns seen only in simulator data.
 
 ### Done
 
-- Part A: session 13 metrics finalized (60 calls, 2.89 USD API-equivalent).
-  First held-out run recorded in `docs/evaluation-history.md`. Commit
-  `15c9086` tagged `v0.1.0-baseline` and pushed. CLAUDE.md: the held-out
-  workflow is run only by the project lead, at most once per release, every
-  run recorded in `docs/evaluation-history.md`.
+- Part A: session 14 metrics finalized (66 calls, 3.65 USD). Decision 0023,
+  service desk scenario added to the simulator backlog below.
 - Part B, tuned on Medium dev seeds 0 to 19, checked on 20 to 99. Held-out
-  never looked at.
-  - Vocabulary: role words (`servers`, `srv`, `mgmt`...) never name an app;
-    ticket aliases win over object segments; an object segment of 3+ letters
-    that starts exactly one related CI is its abbreviation (`mon`).
-  - Owners: candidates from referenced ticket requester, requesters of the
-    application's tickets, `req XX` initials resolved to one requester.
-    Admins (commit users, assignees) named apart, never owners. Certain only
-    when all sources agree, one application, no conflict, and 2+ tickets by
-    that person or two sources agree. Otherwise "Not sure who owns it" plus
-    candidates.
+  never looked at. The 20 to 99 baseline was rerun from a clean worktree of
+  `54dceb3` (the first run crashed on seed 62 because code changed mid-run).
 
 | metric | 0-19 before | 0-19 after | 20-99 before | 20-99 after |
 |---|---|---|---|---|
-| verdict vs best achievable | 90.0% | 90.3% | 91.1% | 91.2% |
+| verdict vs best achievable | 90.3% | 91.4% | 91.2% | 92.0% |
 | dangerous errors | 0 | 0 | 0 | 0 |
-| conflicts, untrapped rules | 5 of 1469 | 0 | 14 of 5690 | 0 |
-| conflicts, MISLEADING-COMMENT | 44 of 44 | 44 of 44 | 167 of 170 | 167 of 170 |
-| intent app right | 95.1% | 97.1% | 95.6% | 97.4% |
-| owner named in `ask` | 18.5% | 85.9% | 18.3% | 88.9% |
-| owner stated certain, right | 18.5% | 58.3% | 18.3% | 61.3% |
-| owner stated certain, wrong | 14 | 0 | 48 | 0 |
-| HIGH: intent app right | 96.7% | 97.1% | 97.9% | 98.2% |
-| overconfidence | 0.0% | 0.0% | 0.0% | 0.0% |
+| dead rules left at verify | 182 | 171 | 693 | 652 |
+| not-live rules left at keep | 117 | 94 | 400 | 342 |
+| EMERGENCY-LOADBEARING = best | 35/35 | 35/35 | 112/112 | 112/112 |
+| DEACTIVATED = best | 238/238 | 238/238 | 1060/1060 | 1060/1060 |
+| HISTORY-HORIZON = best | 1104/1279 | 1111/1279 | 5015/5602 | 5040/5602 |
 
-"Before" for owners wrong: old code had no `owner` field, so any other person
-or admin named in `ask` counts as stated wrong (eval docstring). The 20-99
-baseline was rerun from a clean worktree of the pre-change commit.
+Every verdict that changed on 20 to 99 is on a not-live rule: 41 migration
+leftovers to removal_candidate, 71 old hits plus leftover to V-CONTRADICTION
+(verify either way), 58 stopped flows keep to verify. Takeover found on 16
+of 35 EMERGENCY-LOADBEARING rules on 0 to 19 (the others' covered rules were
+removed before the retained history). No counter clear inside the log window
+on dev seeds 0 to 19: unit tests only.
 
 ### Next
 
-- Project lead: held-out run for a release that includes session 14.
-- Analyzer: owners of applications with no ticket (aggregating `req`
-  initials across policies would add about 10 apps on 0 to 19); intent app
-  for two-application flows (ground truth owner is the source side app).
-- From session 12, unchanged: 183 dead rules at `verify` (best
-  `removal_candidate`) on 0 to 19; not-live rules with hits at `keep`;
-  `report` and `questions` commands; V-CONTRADICTION on 20 to 99.
+- Project lead: held-out run for a release that includes sessions 14 and 15.
+- Analyzer: remaining dead rules at verify are mostly policies without
+  logging (89 of 171 on 0 to 19) or whose app vanished before the retained
+  history; not-live rules at keep are mostly no-logging policies with hits.
+- Owners of applications with no ticket (aggregating `req` initials).
+- From session 12: `report` and `questions` commands.
 
 ### Open questions
 
-- Should two-application flows name the source side app owner first? The
-  ground truth owner is the source side app on dev seeds; not done, palimp
-  lists both sides without ranking by direction.
-- Real-world risk (decision 0022): a service desk filing every ticket of an
-  application would be stated as its owner.
-- Carried over from session 13: held-out level and count; 90% vs best trade;
-  deactivated rules; HIGH with an open ticket; decision 0019 blind items;
-  per trap metric; Hard trap weights; on_call persona; decision 0015;
-  `commit activate`; CONFIRMED-TEXT; scenario names.
+- Decision 0020 example "destination never seen in any log while other
+  logging rules to neighboring hosts are seen", without a migration: not done.
+- Carried over: held-out level and count; 90% vs best trade; HIGH with an
+  open ticket; decision 0019 blind items; per trap metric; Hard trap weights;
+  on_call persona; decision 0015; `commit activate`; CONFIRMED-TEXT;
+  scenario names.
 
 ### Known issues
 
-- 3 MISLEADING-COMMENT rules on 20 to 99 show no conflict (unchanged, not
-  inspected).
-- `vendor-arch-109` still does not name `archive` (segment `arch` is not a
-  first segment).
+- 3 MISLEADING-COMMENT rules on 20 to 99 show no conflict (not inspected).
+- `vendor-arch-109` still does not name `archive`.
 - Carried over: held-out `scenario_id` can equal a dev id; logged sessions
   undercount traffic; time of day in logged time zone; Junos predefined
   applications from general knowledge (VSRX-12); VSRX-2b; `svc-ansible`; S2
@@ -120,9 +107,11 @@ in session 11). Session 11 has transcript `0d141375-db8e-4e9e-8979-0100e197eb49`
 (finalized in session 12). Session 12 has transcript
 `8ed29a6f-73ed-4fd4-b799-5bcf0a8290c4` (finalized in session 13). Session 13
 has transcript `427d7108-6479-4578-a3a6-f699f1889575` (finalized in session
-14). Session 14 has transcript `22237df9-50f6-42f3-9347-a937849aa44c`.
-Finalize it at the start of session 15 with:
+14). Session 14 has transcript `22237df9-50f6-42f3-9347-a937849aa44c` (finalized
+in session 15). Session 15 has transcript
+`f3652112-9922-44ff-96a9-e1ce452c6128`. Finalize it at the start of session 16
+with:
 
-    uv run python metrics/session_tokens.py 22237df9-50f6-42f3-9347-a937849aa44c
+    uv run python metrics/session_tokens.py f3652112-9922-44ff-96a9-e1ce452c6128
 
 Cost is API-equivalent (decision 0006), not a billed amount.
