@@ -1,71 +1,74 @@
 # Handoff
 
-## Last session: 7 (2026-10-04), analyzer: format readers G1 to G10
+## Last session: 8 (2026-10-05), simulator: formats S1 to S6
 
 ### Done
 
-- Session 6 metrics row finalized (85 calls, 5.22 USD API-equivalent).
-- Decision 0014: extra evidence items are not errors unless misleading. It
-  supersedes the session 6 amendment of 0011, which is removed; 0011 is back
-  to its original text with a status line pointing to 0014.
-- Decision 0015: "practitioner capture" (real device output published by a
-  third party) is a second fixture source type; supersedes in part 0013.
-  Every fixture header now has a `Source type:` line.
-- Fixture `show-system-commit-vmx-2023.txt` (networkcuriosity.com, real vMX,
-  Junos 20.4R3-S2.6, December 2023): commit comments on the next line,
-  indented 4 spaces. VSRX-4d is now CONFIRMED-OUTPUT.
-- `docs/format-assumptions.md`: CONFIRMED split into CONFIRMED-OUTPUT and
-  CONFIRMED-TEXT; reader results before and after; gaps section rewritten.
-- Readers fixed for G1 to G10 (`src/palimp/formats/`, new `terminal.py`),
-  plus syslog-server RT_FLOW (both formats), `session-id-32`, hit-count rows
-  in any order. `Commit` gains `commit_type`, `rollback_minutes`, `revision`;
-  `HitCount.action` may be empty (legacy layout). `rt_flow.parse_event`
-  returns one normalized event (kind, policy, zones, session id, logical
-  system, time).
-- `tests/test_format_fixtures.py`: one test per gap on the fixtures (18
-  tests). The black-box simulator test now also requires zero unknown lines
-  in commits, hit counts and logs; simulator output parses identically
-  (logs, hit counts, commits compared before and after on easy seed 3).
-- `eval/format_fixtures.py`: 1 of 16 reader fixtures parsed before, 14 of 16
-  after.
+- Session 7 metrics row finalized (52 calls, 2.97 USD API-equivalent).
+- Simulator 0.2.0 (`simulator/src/palimp_sim/`), formats aligned with the
+  fixtures in `tests/fixtures/junos_docs/`:
+  - S1: hit counts use the documentation column positions, rows shuffled
+    with the seed, `Index` a line number; knob `hitcount_layout=legacy`.
+  - S3: knob `log_release` (`12.x`, `pre-22.2` default, `22.2`). Fixed a
+    drift: CLOSE attribute order now follows the templates (`application
+    nested-application` before `username roles packet-incoming-interface`).
+  - S4: knob `log_collection=syslog-server` (server timestamp and device
+    address prefix, no `<PRI>`); spec default for Medium, Easy keeps `device`.
+  - S5 (in part): knob `rescue_line` (`rescue ... by root via other`, last
+    line); spec default for Medium.
+  - S2 (spec only) and S6 (flag): stored-file paths and `## Last commit:`
+    header stated in spec 5.3; `junos-ntp` flagged unverified.
+  - Commit comments: already on the next line, 4 spaces (no change needed).
+- Knob overrides: `generate(level, seed, overrides)` and
+  `palimp-sim generate --knob NAME=VALUE`; values validated, recorded in the
+  manifest.
+- `simulator/tests/test_formats.py` (20 tests): each line shape must match the
+  fixture lines first, then every simulator line, for 4 knob combinations;
+  RT_FLOW attribute names compared with the 12.1X47 sample and the 22.2R1
+  template fixtures; hit-count headers compared with the fixture headers.
+- Golden hashes updated (seeds 1 and 7). Changed files for seed 1:
+  `hitcount.txt` (layout and row order), `logs/rt_flow.log` (CLOSE attribute
+  order), `ground_truth.json` (only `simulator_version`), `manifest.json`
+  (four new knobs). Config, commits, rollbacks and tickets are unchanged for
+  Easy defaults.
+- Spec: `TRAP-PREPROVISIONED` marked v2 (decision 0012), v1 has seven traps;
+  sections 5.2 to 5.5, 7.1, 11 and 12.3 updated.
+- `docs/format-assumptions.md`: status of S1 to S6.
 
 ### Next
 
-- Then the analyzer plan from session 5: T2 collectors (hit counts, logs) and
-  T4, confidence scoring and verdicts, `report` and `questions`.
-- Pass a year to `parse_rt_flow` from `ingest` for standard-format logs (CLI
-  option or inference), and handle December to January rollover.
-- Simulator session: S1 to S6, and mark `TRAP-PREPROVISIONED` as v2 in
-  `docs/simulator-spec.md` (decision 0012). Consider emitting syslog-server
-  shapes and the standard RT_FLOW format as knobs, now that the analyzer reads
-  them.
+- Analyzer session: run the readers on simulator output with the new knobs
+  (`--knob log_collection=syslog-server`, `log_release=12.x` and `22.2`,
+  `hitcount_layout=legacy`, `rescue_line=true`); the black-box test only
+  covers Easy defaults today.
+- Analyzer plan from session 5: T2 collectors (hit counts, logs) and T4,
+  confidence scoring and verdicts, `report` and `questions`.
+- Simulator: implement Medium (spec 7.1), with its format defaults; standard
+  (unstructured) RT_FLOW format as a knob; DENY messages once deny policies
+  exist.
 
 ### Open questions
 
-- Decision count: the session 7 prompt says one decision changed; this
-  session recorded two (0014, and 0015 because 0013 explicitly rejected blog
-  sources). Confirm 0015 is wanted as a separate decision.
-- `commit activate` is read as a commit type, not a comment, although
-  `show system commit revision detail` printed `Comment : commit activate`.
-  Fine for T1 (it carries no intent), but not proven.
-- Is text evidence (documentation prose) acceptable to CONFIRM a behavioral
-  assumption? Now explicit as CONFIRMED-TEXT, can be downgraded.
-- Carried over: 100% recall on Easy says little (Medium or a stricter matcher
-  next?); the harness does not yet classify extra items as misleading or
-  neutral (decision 0014).
+- Medium defaults chosen in this session: `log_collection=syslog-server`
+  (asked), `rescue_line=yes` (my choice), `log_release=pre-22.2` and
+  `hitcount_layout=standard`. Confirm or change.
+- 22.2 attributes after `encrypted` are written `N/A`: no published line shows
+  their values. Acceptable, or keep `22.2` out of default levels (it is now)?
+- Scenario directory names do not include overrides (`scenario-easy-000001`
+  with or without `--knob`); the manifest records the knobs. Fine for now?
+- Carried over from session 7: decision 0015 as a separate decision;
+  `commit activate` read as a commit type; CONFIRMED-TEXT acceptance; Easy
+  100% recall says little.
 
 ### Known issues
 
-- Open format gaps (see `docs/format-assumptions.md`): `show system commit
-  revision detail` lines stay unknown (other command); the wrapped RT_FLOW
-  page sample needs its line wrapping undone; standard RT_FLOW lines have no
-  year, so `ingest` leaves their first and last seen times unset; DENY and
-  current-release standard lines are tested on lines built from the
-  templates, not on published lines.
+- S2: stored rollback files are not emitted (spec only). S5: no system
+  commits other than the rescue line; `via netconf` unverified.
+- Server clock equals the device clock in syslog-server lines (no skew, no
+  delay); the device timestamp keeps `Z` and milliseconds.
+- Open analyzer format gaps unchanged (see `docs/format-assumptions.md`).
 - Most documentation samples are old (12.x, 13.x) or state no release.
-- `palimp explain` without `--no-llm` prints a note and the same output (no
-  LLM yet).
-- Session 7 metrics row is provisional (measured before the final commit).
+- Session 8 metrics row is provisional (measured before the final commit).
 - Git identity is set in the repository config only (`n-le-bourdiec`).
 - Session 2 Part C checks (WSL, KVM, Docker) are still not done.
 
@@ -89,9 +92,10 @@ timestamps of the opening prompts:
 
 Session 6 has its own transcript `72beb9ef-54f4-42f0-8f55-6f97aafd613c`
 (finalized in session 7). Session 7 has transcript
-`cd397e63-3f27-4583-ab2d-1855580dff63`. Finalize it at the start of session 8
-with:
+`cd397e63-3f27-4583-ab2d-1855580dff63` (finalized in session 8). Session 8 has
+transcript `f5449cc1-ac4a-4d11-aab3-d77d2bc207ee`. Finalize it at the start of
+session 9 with:
 
-    uv run python metrics/session_tokens.py cd397e63-3f27-4583-ab2d-1855580dff63
+    uv run python metrics/session_tokens.py f5449cc1-ac4a-4d11-aab3-d77d2bc207ee
 
 Cost is API-equivalent (decision 0006), not a billed amount.
