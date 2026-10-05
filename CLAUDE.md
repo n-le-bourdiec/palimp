@@ -78,6 +78,8 @@ realistic firewall history plus a ground-truth file (true intent of every rule).
 - Never use em dashes or en dashes in any text (docs, README, comments, commits).
   Use commas, parentheses or a simple hyphen.
 - Small, focused commits with clear messages.
+- Every commit passes the tests on its own: never commit code that imports
+  a module, or uses a function, added only in a later commit.
 
 ## Decisions
 
