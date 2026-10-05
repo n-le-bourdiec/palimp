@@ -5,6 +5,7 @@ Only config.set is required. Missing optional inputs produce warnings.
 
 from datetime import date, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 from palimp.formats.commits import parse_commits
 from palimp.formats.hitcount import parse_hitcount
@@ -12,7 +13,7 @@ from palimp.formats.junos_set import parse_set
 from palimp.formats.rollbacks import read_rollbacks
 from palimp.formats.rt_flow import parse_rt_flow
 from palimp.formats.tickets import parse_tickets
-from palimp.models import Config, Dataset, PolicyHistory, RemovedPolicy
+from palimp.models import AddressObject, Config, Dataset, PastPolicy, PolicyHistory
 
 
 def resolve_directory(directory: Path) -> Path:
@@ -29,11 +30,18 @@ def _read(path: Path) -> str | None:
     return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else None
 
 
-def history(
-    configs: dict[int, Config],
-) -> tuple[dict[str, PolicyHistory], dict[int, list[str]], dict[int, list[RemovedPolicy]]]:
-    """Find the commit that added each policy, and what each commit deleted, by diffing
-    consecutive configurations.
+class History(NamedTuple):
+    policies: dict[str, PolicyHistory]
+    created_by: dict[int, list[str]]
+    removed_by: dict[int, list[PastPolicy]]
+    added_by: dict[int, list[PastPolicy]]
+    deactivated_by: dict[int, list[PastPolicy]]
+    addresses: dict[str, AddressObject]
+
+
+def history(configs: dict[int, Config]) -> History:
+    """Find the commit that added each policy, and what each commit deleted, added
+    or deactivated, by diffing consecutive configurations.
 
     configs[i] is the configuration after commit i (0 is the active one). Only
     the contiguous run 0, 1, 2, ... is used.
@@ -43,18 +51,25 @@ def history(
         oldest += 1
     keys = {i: configs[i].keys() for i in range(oldest + 1)}
     created_by: dict[int, list[str]] = {}
-    removed_by: dict[int, list[RemovedPolicy]] = {}
+    removed_by: dict[int, list[PastPolicy]] = {}
+    added_by: dict[int, list[PastPolicy]] = {}
+    deactivated_by: dict[int, list[PastPolicy]] = {}
     for i in range(oldest):
-        added = sorted(str(k) for k in keys[i] - keys[i + 1])
+        added = sorted(keys[i] - keys[i + 1], key=str)
         if added:
-            created_by[i] = added
+            created_by[i] = [str(k) for k in added]
+            added_by[i] = [PastPolicy.of(p) for k in added if (p := configs[i].policy(k))]
         removed = [configs[i + 1].policy(k) for k in sorted(keys[i + 1] - keys[i], key=str)]
         if removed:
-            removed_by[i] = [
-                RemovedPolicy(key=str(p.key), sources=p.sources, destinations=p.destinations)
-                for p in removed
-                if p
-            ]
+            removed_by[i] = [PastPolicy.of(p) for p in removed if p]
+        before = {p.key: p for p in configs[i + 1].policies}
+        switched = [
+            PastPolicy.of(p)
+            for p in configs[i].policies
+            if p.deactivated and p.key in before and not before[p.key].deactivated
+        ]
+        if switched:
+            deactivated_by[i] = switched
     result: dict[str, PolicyHistory] = {}
     for policy in configs[0].policies:
         created = None
@@ -65,7 +80,11 @@ def history(
         result[str(policy.key)] = PolicyHistory(
             created_in_commit=created, oldest_retained_index=oldest
         )
-    return result, created_by, removed_by
+    addresses: dict[str, AddressObject] = {}
+    for i in range(oldest + 1):
+        for name, obj in configs[i].addresses.items():
+            addresses.setdefault(name, obj)
+    return History(result, created_by, removed_by, added_by, deactivated_by, addresses)
 
 
 def reference_date(dataset: Dataset) -> datetime | None:
@@ -103,9 +122,13 @@ def ingest(directory: Path, log_year: int | None = None) -> Dataset:
     if not rollbacks:
         dataset.warnings.append("no rollback files: creation commits cannot be found")
     dataset.rollback_stats = [rollbacks[i].stats for i in sorted(rollbacks)]
-    dataset.history, dataset.created_by_commit, dataset.removed_by_commit = history(
-        {0: config, **rollbacks}
-    )
+    past = history({0: config, **rollbacks})
+    dataset.history = past.policies
+    dataset.created_by_commit = past.created_by
+    dataset.removed_by_commit = past.removed_by
+    dataset.added_by_commit = past.added_by
+    dataset.deactivated_by_commit = past.deactivated_by
+    dataset.past_addresses = past.addresses
 
     text = _read(directory / "hitcount.txt")
     if text is None:

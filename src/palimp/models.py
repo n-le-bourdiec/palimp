@@ -144,6 +144,9 @@ class LogWindow(BaseModel):
     undated_lines: int = Field(0, description="lines whose timestamp has no year")
     year_source: str = Field("", description="'forced', 'inferred', 'none' or '' (not needed)")
     year_note: str = ""
+    addresses: list[str] = Field(
+        [], description="every source and destination address seen in a log line"
+    )
 
 
 class Ticket(BaseModel):
@@ -226,12 +229,28 @@ class Finding(BaseModel):
     assessment: Assessment | None = None
 
 
-class RemovedPolicy(BaseModel):
-    """A policy that a commit deleted, with the address objects it referenced."""
+class PastPolicy(BaseModel):
+    """The match of a policy as one configuration of the history shows it."""
 
     key: str
+    from_zone: str = ""
+    to_zone: str = ""
     sources: list[str] = []
     destinations: list[str] = []
+    applications: list[str] = []
+    deactivated: bool = False
+
+    @classmethod
+    def of(cls, policy: Policy) -> "PastPolicy":
+        return cls(
+            key=str(policy.key),
+            from_zone=policy.from_zone,
+            to_zone=policy.to_zone,
+            sources=policy.sources,
+            destinations=policy.destinations,
+            applications=policy.applications,
+            deactivated=policy.deactivated,
+        )
 
 
 class Dataset(BaseModel):
@@ -246,8 +265,17 @@ class Dataset(BaseModel):
     created_by_commit: dict[int, list[str]] = Field(
         {}, description="policy keys added by each commit, found by diffing consecutive configs"
     )
-    removed_by_commit: dict[int, list[RemovedPolicy]] = Field(
+    removed_by_commit: dict[int, list[PastPolicy]] = Field(
         {}, description="policies deleted by each commit, found by diffing consecutive configs"
+    )
+    added_by_commit: dict[int, list[PastPolicy]] = Field(
+        {}, description="match of the policies added by each commit, as that commit left them"
+    )
+    deactivated_by_commit: dict[int, list[PastPolicy]] = Field(
+        {}, description="policies each commit deactivated (active before, deactivated after)"
+    )
+    past_addresses: dict[str, AddressObject] = Field(
+        {}, description="address objects of the retained history, newest definition first"
     )
     hit_counts: list[HitCount] = []
     hit_count_stats: ParseStats | None = None

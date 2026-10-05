@@ -330,7 +330,9 @@ def parse_rt_flow(
         stats.parsed += 1
     window = assign_years(events, year, reference)
     accumulators: dict[str, _Accumulator] = {}
+    addresses: set[str] = set()
     for event in events:
+        addresses.update(a for a in (event.source, event.destination) if a)
         key = summary_key(event.policy_name, event.from_zone, event.to_zone)
         if key not in accumulators:
             summary = LogSummary(
@@ -343,4 +345,5 @@ def parse_rt_flow(
                 window.start = event.timestamp
             if window.end is None or event.timestamp > window.end:
                 window.end = event.timestamp
+    window.addresses = sorted(addresses)
     return {key: acc.finish() for key, acc in accumulators.items()}, stats, window
