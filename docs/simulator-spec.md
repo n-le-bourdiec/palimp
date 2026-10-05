@@ -434,10 +434,11 @@ column, a blank line and `Number of policy: N` at the end.
 Counts are cumulative since the last reset (reboot, upgrade, or
 `clear security policies hit-count`). The reset date is not in the file; it can
 sometimes be inferred from the commit history (routine commit comment
-`upgrade to ...`) or not at all. Medium also clears one zone pair a few days
+`upgrade to ...`) or not at all. Medium also clears one zone pair 2 to 5 days
 before the snapshot (`clear security policies hit-count from-zone A to-zone
 B`, VSRX-7c), an operational command that leaves no commit; the manifest
-records it (`hit_count_clears`).
+records it (`hit_count_clears`). The pair is drawn per scenario among servers
+to internet, servers to management and management to servers (decision 0018).
 
 Deactivated policies are not installed, so they are not listed (VSRX-2b,
 unverified).
@@ -561,7 +562,7 @@ Field meanings:
 | zones | 4 | 5 | 6 | 7 |
 | personas active | senior | senior, operator, automation | all | all, several shared logins |
 | `comment_rate` (weighted mean) | 0.9 | 0.6 | 0.35 | 0.2 |
-| misleading comment rate | 0 | 0.03 | 0.08 | 0.15 |
+| misleading comments (copied) | 0 | drawn: 0 to 3 per scenario (decision 0018) | rate 0.08 | rate 0.15 |
 | `description_rate` | 0.8 | 0.4 | 0.2 | 0.1 |
 | `log_rate` | 0.9 | 0.6 | 0.35 | 0.2 |
 | `log_window_days` | 90 | 60 | 30 | 14 |
@@ -574,12 +575,15 @@ Field meanings:
 | access requests per year (section 4.9) | 0 | 30 | not set yet | not set yet |
 | integrations per application (section 4.9) | 0 | 0 to 2, mean 1.15 | not set yet | not set yet |
 | `cleanup_error_rate` | 0 | 0 (v2: 0.02) | 0.05 | 0.1 |
-| emergency events per year | 0 | 1 | 4 | 8 |
+| emergency events | 0 | drawn: 0 to 3 per scenario (decision 0018) | 4 per year | 8 per year |
 | contractor periods | 0 | 0 (v2: 1) | 2 | 4 |
 | `ip_reuse_rate` | 0 | 0 (v2: 0.1) | 0.3 | 0.5 |
 | renames per year | 0 | 0 (v2: 1) | 4 | 10 |
 | commits per year (drives history horizon) | 20 | 60 | 150 | 300 |
-| rare jobs (quarterly, yearly) | 0 | 2 | 6 | 12 |
+| rare jobs (quarterly, yearly) | 0 | drawn: 0 to 2 yearly, 0 to 1 quarterly (decision 0018) | 6 | 12 |
+| weekly jobs without logging | 0 | drawn: 0 to 2 (decision 0018) | not set yet | not set yet |
+| batch commits | 0 | drawn: 0 to 2 (decision 0018) | not set yet | not set yet |
+| hit count based cleanups | 0 | 1 per year | not set yet | not set yet |
 | log format | structured | structured | structured | standard |
 | `log_collection` | device | drawn: syslog-server 0.6, device 0.4 | not set yet | not set yet |
 | `log_release` | pre-22.2 | drawn: pre-22.2 0.7, 12.x 0.3 | not set yet | not set yet |
@@ -592,8 +596,8 @@ dead rules (measured over seeds 0 to 99: mean 39.9 policies, 17.6% dead). A low
 `cleanup_rate` is what leaves dead rules behind; Easy stays easy because its
 evidence is complete and consistent, not because its rule base is clean.
 
-Medium values were measured in session 9 over seeds 0 to 99: mean 148 final
-policies (124 to 169), 19% dead rules (10 to 33%). Personas: two seniors in
+Medium values were measured in session 10 (simulator 0.3.0) over seeds 0 to
+99: mean 156 final policies (125 to 194), 20.5% dead rules (10 to 37%). Personas: two seniors in
 turn, one hurried operator for the whole period, and an automation account
 (`svc-ansible`, `via netconf`) from about mid-period, which deploys 60% of new
 applications. `comment_rate`, `description_rate` and `log_rate` are weighted
@@ -613,9 +617,13 @@ styles only (repoint produces `TRAP-STALE-NAME`, a v2 trap).
 
 ### 7.2 Trap coverage rule
 
-v1: every v1 trap (seven, decision 0012) appears at least once in every
-Medium scenario. Easy
-scenarios contain no deliberate traps. v2: every trap appears at least once in
+v1 (decision 0018, replacing the session 9 rule "every v1 trap in every
+Medium scenario"): the number of instances of TRAP-LIVE-NOLOG,
+TRAP-RARE-JOB, TRAP-EMERGENCY-LOADBEARING, TRAP-MISLEADING-COMMENT and
+TRAP-BATCH-COMMIT is drawn per scenario; over seeds 0 to 99 each appears in
+60 to 90% of Medium scenarios, with a count that varies. TRAP-HISTORY-HORIZON
+and TRAP-DEACTIVATED follow from the timeline and appear in every Medium
+scenario. Easy scenarios contain no deliberate traps. v2: every trap appears at least once in
 every Hard and Adversarial scenario. Each trap id is recorded on the rules it
 affects, so metrics can be reported per trap.
 
@@ -642,20 +650,35 @@ affects, so metrics can be reported per trap.
 
 ### 7.4 How Medium builds the v1 traps
 
-Session 9 (`simulator/src/palimp_sim/medium.py`). The timeline records what it
-did on purpose (`TrapFacts`); `truth.py` tags a rule only if the trap condition
-holds on the final state. Coverage over seeds 0 to 99: every v1 trap in 100 of
-100 scenarios (test `test_every_v1_trap_in_every_medium_scenario`).
+Session 9, counts drawn per scenario since session 10
+(`simulator/src/palimp_sim/medium.py`, weights in `levels.TRAP_COUNT_WEIGHTS`,
+decision 0018). The timeline records what it did on purpose (`TrapFacts`);
+`truth.py` tags a rule only if the trap condition holds on the final state.
+
+Measured over seeds 0 to 99 (simulator 0.3.0; rules tagged per scenario):
+
+| Trap | Scenarios with it | Min | Max | Mean |
+|---|---|---|---|---|
+| `TRAP-LIVE-NOLOG` | 73% | 0 | 2 | 1.0 |
+| `TRAP-RARE-JOB` | 68% | 0 | 2 | 1.0 |
+| `TRAP-EMERGENCY-LOADBEARING` | 83% | 0 | 3 | 1.5 |
+| `TRAP-MISLEADING-COMMENT` | 72% | 0 | 15 | 2.1 |
+| `TRAP-BATCH-COMMIT` | 71% | 0 | 25 | 8.4 |
+| `TRAP-HISTORY-HORIZON` | 100% | 40 | 105 | 68.8 |
+| `TRAP-DEACTIVATED` | 100% | 1 | 25 | 13.0 |
+
+Tests: `test_drawn_trap_distribution_over_seeds_0_to_99` (with `--runslow`)
+and `test_timeline_traps_in_every_medium_scenario` (seeds 0 to 9, CI).
 
 | Trap | Mechanism | Ground truth |
 |---|---|---|
-| `TRAP-LIVE-NOLOG` | a weekly job (application tier to a partner, SSH) without logging; its zone pair (servers to internet) is cleared 2 to 5 days before the snapshot, the day after the last run | live; verdict `keep`, best `verify`; hit count and log evidence marked misleading |
-| `TRAP-RARE-JOB` | two jobs per scenario: one yearly whose last run is 200 to 350 days before the snapshot (before the hit count reset), one quarterly or yearly; cleanups keep job rules (their owners object, S2) | tagged when live with zero hits and no log line; verdict `keep`, best `verify`; hit count and log evidence misleading |
-| `TRAP-EMERGENCY-LOADBEARING` | four emergency events (night or week-end, on-call comment and names such as `temp-fix`): `users-all` to `<app>-net` (/24), application `any`, inserted on top of users to servers; the proper rules lose all hits and the cleanup 90 to 150 days later removes them | intent `emergency_temporary` with the flows it was for; verdict and best `verify`; a "marked temporary" item (supports `not_live`) misleading; removal of the proper rules listed as T3 evidence when retained |
-| `TRAP-MISLEADING-COMMENT` | after the timeline, one retained human commit (go-live, migration or access request) whose rules survive to the snapshot, plus others at rate 0.03, gets the comment of an earlier commit about an application none of its rules serve; the automation account never copies | comment (and the other application's ticket, if exported) misleading |
-| `TRAP-BATCH-COMMIT` | the hurried operator commits the go-live of 2 or 3 applications at once, 40 to 110 days before the snapshot, with a comment naming the first one | "created together" evidence misleading for every rule; comment misleading for rules of the other applications |
+| `TRAP-LIVE-NOLOG` | 0 to 2 weekly jobs (SSH) without logging, placed in the cleared zone pair: application tier to a partner (servers to internet), application to the backup server (servers to management) or backup server to the application (management to servers); last run 3 to 6 days before the snapshot and before the clear | live; verdict `keep`, best `verify`; hit count and log evidence marked misleading |
+| `TRAP-RARE-JOB` | 0 to 2 yearly jobs (application to partner) whose last run is 200 to 350 days before the snapshot (before the hit count reset); 0 or 1 quarterly job, last run 1 to 91 days before the snapshot, which is a trap only when the clear happens to hit its zone pair after that run; cleanups keep job rules (their owners object, S2) | tagged when live with zero hits and no log line; verdict `keep`, best `verify`; hit count and log evidence misleading |
+| `TRAP-EMERGENCY-LOADBEARING` | 0 to 3 emergency events (night or week-end, on-call comment and names such as `temp-fix`): `users-all` to `<app>-net` (/24), application `any`, inserted on top of users to servers; the proper rules lose all hits and the next yearly cleanup, 90 to 150 days later, removes them | intent `emergency_temporary` with the flows it was for; verdict and best `verify`; a "marked temporary" item (supports `not_live`) misleading; removal of the proper rules listed as T3 evidence when retained |
+| `TRAP-MISLEADING-COMMENT` | after the timeline, 0 to 3 retained human commits (go-live, migration or access request) whose rules survive to the snapshot get the comment of an earlier commit about an application none of their rules serve; the automation account never copies | comment (and the other application's ticket, if exported) misleading |
+| `TRAP-BATCH-COMMIT` | 0 to 2 times, the hurried operator commits the go-live of 2 or 3 applications at once, 40 to 110 days before the snapshot, with a comment naming the first one | "created together" evidence misleading for every rule; comment misleading for rules of the other applications |
 | `TRAP-HISTORY-HORIZON` | about 60 commits a year leave only the last ten months in the 50 retained commits | tagged when the creating commit is not retained and no T1 evidence remains; confidence therefore at most `MEDIUM` |
-| `TRAP-DEACTIVATED` | each cleanup removes unused rules with `cleanup_rate`, deactivates them with 0.3, keeps the rest; at least one deactivation per cleanup | `deactivated: true`; verdict and best `removal_candidate`; the `then permit` statements count as misleading `live` evidence; no hit count row |
+| `TRAP-DEACTIVATED` | one cleanup a year (plus one for an emergency no yearly cleanup follows); each removes unused rules with `cleanup_rate`, deactivates them with 0.3, keeps the rest; at least one deactivation per cleanup | `deactivated: true`; verdict and best `removal_candidate`; the `then permit` statements count as misleading `live` evidence; no hit count row |
 
 Trap verdict rule: a live rule whose liveness the artifacts cannot show (zero
 hits in its counting window and no log line) gets best achievable verdict

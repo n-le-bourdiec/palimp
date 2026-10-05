@@ -55,6 +55,9 @@ realistic firewall history plus a ground-truth file (true intent of every rule).
   `docs/simulator-spec.md`, only the ground truth JSON Schema
   (`simulator/src/palimp_sim/schema/ground_truth.schema.json`). Simulator
   sessions do not read `src/palimp`.
+- Any change to the ground truth JSON Schema, even additive, needs its own
+  decision file and a note in `HANDOFF.md` addressed to analyzer sessions
+  (decision 0017).
 - Scenarios are split into a dev set and a held-out test set. Never look at
   held-out results while tuning the analyzer.
 - Real Junos output formats come from samples copied from Juniper's official
