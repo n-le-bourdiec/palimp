@@ -1,61 +1,78 @@
 # Handoff
 
-## Last session: 16 (2026-10-05), analyzer: report and questions commands
+## Last session: 17 (2026-10-06), analyzer: questionnaire fixes and the LLM writer (fake backend)
 
 ### Note for analyzer sessions
 
 - No ground truth schema change.
-- CLAUDE.md working rule 2 (new): initiative outside the mission only in the
-  safe direction (toward keep or verify), flagged in the report; anything
-  toward removal_candidate needs the project lead's approval first.
-- Decision 0024 amended: `V-TRAFFIC-STOPPED` is an approved extension; an old
-  destination silent in every log is a removal signal only together with an
-  observed migration (TRAP-RARE-JOB). The decision 0020 example "destination
-  never seen in any log" alone stays not implemented and would need approval.
-- Decision 0025: report citations `[E3]` in a rule section, `[R12.E3]`
-  elsewhere, `[G1]` for facts about the whole artifact set; rules numbered
-  R1.. in configuration order; yes/no questions where yes = still needed.
-- New modules `palimp.report` (model, Markdown, JSON) and
-  `palimp.questions` (questionnaires, `answers.csv`). New commands
-  `palimp report -a DIR -o OUT` and `palimp questions -a DIR -o OUT` (OUT is a
-  directory). `report.build` raises on a removal_candidate without a
-  not-live item.
+- CLAUDE.md: every commit must pass the tests on its own (no commit importing
+  a module added later).
+- Decision 0026 (supersedes the grouping part of 0025): a question is sent
+  only if its answer can change the action. Deactivated rules go to the
+  firewall team cleanup list (report section, `00-firewall-team-cleanup.txt`,
+  question "kept on purpose, as a rollback switch?"). One email per person:
+  "Rules for your applications", then "Rules you may own, please forward if
+  not" (a rule with several candidates is in each candidate's email, with
+  "Also asked:"). Keep rules with LOW confidence or counter-only traffic are
+  listed under "Worth a look" in the report, never in emails. `answers.csv`
+  has one row per rule. `Questionnaire.rules` is now `owned + may_own`.
+- Decision 0027: `palimp.llm` (Ollama backend, localhost only, no proxy, no
+  redirect; deterministic `FakeBackend`) and `palimp.prose` (facts in,
+  paragraph per rule and executive summary out, per sentence validation,
+  deterministic fallback, `LLMRun` with every rejection). Report citations
+  gain `[S1]` for summary facts. `--no-llm` is the default of `explain` and
+  `report`; `--llm --llm-model M [--llm-url U]` turns it on. Hidden
+  `--llm-backend fake` for CLI tests.
 
 ### Done
 
-- Part A: session 15 metrics finalized (81 calls, 5.14 USD). CLAUDE.md rule,
-  decision 0024 amendment (challenge recorded).
-- Part B: `report` and `questions`, tests (`tests/test_report.py`: Easy
-  scenario fast, Medium dev seeds 0 to 4 slow): every cited ID resolves,
-  every rule exactly once, no removal_candidate without a cited not-live
-  item, every non-keep rule asked exactly once.
-- Readability check on Medium seed 0: 170 policies, 20 removal_candidate,
-  7 verify, 143 keep (47 of them on counters only), 18 questionnaires for 27
-  rules. No verdict changed (the report only reads the findings).
+- Part A: session 16 metrics finalized (62 calls, 3.71 USD). CLAUDE.md rule.
+- Part B: decision 0026 implemented and tested (`tests/test_report.py`:
+  cleanup rules only in the firewall team file, one email per person, owned
+  rules asked once, worth-a-look list exact). Medium seed 0: 8 files instead
+  of 18 (cleanup list of 20 deactivated rules, 6 personal emails, 1 with no
+  name) for 27 rules; largest personal email Quentin Gallo, 3 rules, all in
+  "you may own". No verdict changed.
+- Part C: LLM writer built and tested with the fake backend only
+  (`tests/test_llm.py`, `tests/test_prose.py`): correct sentence passes; no
+  citation, wrong ID, fact from an uncited item, invented IP, person (unknown
+  or real but uncited), date, month, number, application, changed verdict
+  and changed confidence are rejected; rejections counted, logged, replaced
+  by the deterministic text; judgments unchanged after `add_prose`; non-local
+  URLs refused; a local HTTP stand-in for Ollama checks the request and that
+  a redirect is refused. Default fake on Medium seed 0: 1148 sentences kept,
+  9 rejected (all "no evidence ID cited", multi-sentence claims).
 
 ### Next
 
-- Project lead: read a generated report and questionnaire (session report
-  has excerpts); held-out run for a release including sessions 14 to 16.
-- LLM prose for `explain` and the report (cited sentences, validation pass).
-- Questionnaires: many candidate groups with a single name ("not sure",
-  one candidate); maybe merge per person with a clear "you may not be the
-  owner" section (decision 0025 rejected merging for now).
+- Measure a real local model (Ollama): rejection rate per check, prose
+  quality, time per rule; then decide whether `--llm` can become the
+  default. Expect over-rejection from application names that are ordinary
+  words (`internet`, `backup`, `files`, `monitoring`), see decision 0027.
+- Project lead: read the new questionnaires and cleanup list; held-out run
+  for a release including sessions 14 to 17.
 - Carried over: remaining dead rules at verify (mostly no logging), owners
   of applications with no ticket.
 
 ### Open questions
 
-- Should keep rules with LOW confidence or counters-only traffic also get a
-  question (today only verify and removal_candidate are asked)?
-- Carried over: decision 0020 example without a migration (now needs
-  approval, see above); held-out level and count; 90% vs best trade; HIGH
-  with an open ticket; decision 0019 blind items; per trap metric; Hard trap
-  weights; on_call persona; decision 0015; `commit activate`;
-  CONFIRMED-TEXT; scenario names.
+- Should `palimp questions` also write the cleanup list into the report
+  output directory (today only the report section and the questions file)?
+- Should the "Worth a look" list be capped or sorted by risk (today
+  configuration order; 47+ rules on Medium seed 0)?
+- Carried over: decision 0020 example without a migration (needs
+  approval); held-out level and count; 90% vs best trade; HIGH with an open
+  ticket; decision 0019 blind items; per trap metric; Hard trap weights;
+  on_call persona; decision 0015; `commit activate`; CONFIRMED-TEXT;
+  scenario names.
 
 ### Known issues
 
+- Prose validation does not detect a negated verdict ("should not be kept")
+  or a lowercase application name palimp never saw outside the
+  "before app/server/..." pattern (decision 0027).
+- The default fake backend cites only the last sentence of a multi-sentence
+  claim, so those sentences are rejected (harmless, test backend only).
 - The report prints the artifact path as given on the command line.
 - 3 MISLEADING-COMMENT rules on 20 to 99 show no conflict (not inspected).
 - `vendor-arch-109` still does not name `archive`.
@@ -105,9 +122,10 @@ has transcript `427d7108-6479-4578-a3a6-f699f1889575` (finalized in session
 14). Session 14 has transcript `22237df9-50f6-42f3-9347-a937849aa44c` (finalized
 in session 15). Session 15 has transcript
 `f3652112-9922-44ff-96a9-e1ce452c6128` (finalized in session 16). Session 16
-has transcript `b14ba40d-eb4c-4ee4-bc69-02b4a94d38bb`. Finalize it at the
-start of session 17 with:
+has transcript `b14ba40d-eb4c-4ee4-bc69-02b4a94d38bb` (finalized in session
+17). Session 17 has transcript `052aad46-2e12-4fa9-99c9-54d4730081ee`.
+Finalize it at the start of session 18 with:
 
-    uv run python metrics/session_tokens.py b14ba40d-eb4c-4ee4-bc69-02b4a94d38bb
+    uv run python metrics/session_tokens.py 052aad46-2e12-4fa9-99c9-54d4730081ee
 
 Cost is API-equivalent (decision 0006), not a billed amount.
