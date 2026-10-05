@@ -69,6 +69,25 @@ def recurrence(days: list[date], start: date | None, end: date | None) -> str | 
     return f"irregular ({count} active days in a {window}-day window)" + edges
 
 
+# A flow that stops: active on at least STOP_MIN_DAYS days, on half the days of its
+# span or more, then silent for STOP_DAYS days or more until the window ends,
+# a silence longer than twice any earlier gap.
+STOP_MIN_DAYS = 5
+STOP_DAYS = 14
+
+
+def stopped(days: list[date], end: date) -> int | None:
+    """Days of silence at the end of the window after dense activity, else None."""
+    if len(days) < STOP_MIN_DAYS:
+        return None
+    span = (days[-1] - days[0]).days + 1
+    silence = (end - days[-1]).days
+    gaps = [(b - a).days for a, b in zip(days, days[1:], strict=False)]
+    if len(days) >= 0.5 * span and silence >= STOP_DAYS and silence > 2 * max(gaps):
+        return silence
+    return None
+
+
 def _edges(days: list[date], start: date, end: date) -> str:
     """Say when activity starts late or stops early in the window."""
     notes = []

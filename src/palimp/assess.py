@@ -7,9 +7,16 @@ Verdict rules, first match wins:
 - V-NOTLIVE (removal_candidate): a positive not-live signal, no traffic seen.
 - V-TEMPORARY-IN-USE (verify): traffic seen on a policy marked temporary that
   permits any application (the shape of an emergency opening). A narrow
-  policy with a "temp" label is judged like any other.
+  policy with a "temp" label is judged like any other. Policies it took over
+  (removed or deactivated while it existed, covered by its match) are cited.
+- V-TAKEOVER-IN-USE (verify): the same shape without the label: a policy that
+  permits any application, carries traffic and took over removed or
+  deactivated policies is load-bearing for flows it was not written for.
 - V-TRAFFIC-NOT-RECENT (verify): hits on the counters, but a logging policy
-  logged no session in the log window.
+  logged no session in the log window: the hits are older than the window.
+  Never removal_candidate: old hits are still hits.
+- V-TRAFFIC-STOPPED (verify): logged traffic was dense, then stopped well
+  before the end of the log window.
 - V-TRAFFIC (keep): traffic seen.
 - V-NO-TRAFFIC-SEEN (verify): artifacts could show traffic and show none.
   Absence is never evidence of absence: this never gives removal_candidate.
@@ -32,7 +39,7 @@ from palimp.models import Assessment, Conflict, Dataset, Evidence, Finding
 from palimp.owners import find_owner
 
 # Evidence kinds that say a policy is unused (decision 0020), not that nothing is known.
-NOT_LIVE_KINDS = frozenset({"deactivated", "decommission"})
+NOT_LIVE_KINDS = frozenset({"deactivated", "decommission", "migration_leftover"})
 LEVELS = ("LOW", "MEDIUM", "HIGH")
 # T1 kinds that state why a policy exists (a decommission states why it ended).
 INTENT_KINDS = frozenset({"description", "commit_comment", "ticket"})
@@ -63,23 +70,47 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
             _ids(not_live + absent),
         )
     broad = [e for e in evidence if e.kind == "services" and "any" in finding.policy.applications]
+    took = [e for e in evidence if e.kind == "takeover"]
     if present and temporary and broad:
+        reason = (
+            "a policy marked temporary that permits any application carries traffic: "
+            "it may now be load-bearing"
+        )
+        if took:
+            reason += ", and it took over the match of removed or deactivated policies"
+        return "verify", "V-TEMPORARY-IN-USE", reason, _ids(temporary + broad + took + present)
+    if present and took and broad:
         return (
             "verify",
-            "V-TEMPORARY-IN-USE",
-            "a policy marked temporary that permits any application carries traffic: "
-            "it may now be load-bearing",
-            _ids(temporary + broad + present),
+            "V-TAKEOVER-IN-USE",
+            "a policy that permits any application carries traffic and took over the match "
+            "of removed or deactivated policies: it is load-bearing for flows it was not "
+            "written for",
+            _ids(took + broad + present),
         )
     hits = [e for e in present if e.kind == "hit_count"]
     quiet_log = [e for e in absent if e.kind == "session_log"]
     if hits and quiet_log and not [e for e in present if e.kind == "session_log"]:
+        cleared = [e for e in evidence if e.kind == "counter_clear"]
+        reason = (
+            "hits on the counters, but no session logged in the log window although the "
+            "policy logs: the hits are older than the window, the traffic may have stopped"
+        )
+        if cleared:
+            reason = (
+                "hits on the counters, no session logged in the log window although the "
+                "policy logs, and counters of this zone pair were cleared inside the window: "
+                "either this counter was not cleared and the hits are old, or logging misses "
+                "this traffic"
+            )
+        return "verify", "V-TRAFFIC-NOT-RECENT", reason, _ids(hits + quiet_log + cleared)
+    stop = [e for e in absent if e.kind == "log_stopped"]
+    if stop:
         return (
             "verify",
-            "V-TRAFFIC-NOT-RECENT",
-            "hits on the counters, but no session logged in the log window: "
-            "the traffic may have stopped",
-            _ids(hits + quiet_log),
+            "V-TRAFFIC-STOPPED",
+            "logged traffic stopped well before the end of the log window: the flow may have ended",
+            _ids(stop),
         )
     if present:
         return "keep", "V-TRAFFIC", "traffic seen", _ids(present)
@@ -166,6 +197,11 @@ QUESTIONS = {
     "V-NOTLIVE": "Can this policy be removed? Confirm nothing still depends on it.",
     "V-TEMPORARY-IN-USE": "This policy was labeled temporary and still carries traffic. "
     "Is it still needed, and should it be replaced by a narrower permanent rule?",
+    "V-TAKEOVER-IN-USE": "This policy permits any application and now carries the traffic of "
+    "policies that were removed or deactivated. Which flows does it serve, and should they get "
+    "narrower rules?",
+    "V-TRAFFIC-STOPPED": "Traffic on this policy stopped some weeks ago. Has the flow ended "
+    "(migration, retirement), or is it paused?",
     "V-TRAFFIC-NOT-RECENT": "Traffic matched this policy in the past but none was logged "
     "recently. Has the flow stopped, or does it run rarely (monthly, quarterly, yearly)?",
     "V-NO-TRAFFIC-SEEN": "No traffic was seen on this policy. Is it a rare or seasonal flow "

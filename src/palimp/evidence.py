@@ -10,7 +10,12 @@ the artifact shows traffic ("present"), could show it and shows none
 deactivated, artifact missing), see decision 0019.
 T3 structural: address object names, policies created in the same commit,
 deactivation, a name or description that marks the policy as temporary, the
-requesters of the tickets for each application named above (palimp.owners).
+requesters of the tickets for each application named above (palimp.owners),
+history lineage from the rollbacks (palimp.lineage): removed or deactivated
+policies whose traffic this one took over, and a migration that left this
+policy pointing to a silent old host.
+T2 also says when logged traffic stopped well before the end of the log
+window, and when counters were cleared inside it (palimp.counters).
 T4 contextual: plain service names of the applications the policy matches.
 
 Each item has a stable `kind` and the applications it names (`apps`).
@@ -21,7 +26,9 @@ from typing import NamedTuple
 
 from palimp.apps import Vocabulary, vocabulary
 from palimp.assess import assess
-from palimp.behavior import recurrence, time_of_day
+from palimp.behavior import recurrence, stopped, time_of_day
+from palimp.counters import Clear, clears, meaning
+from palimp.lineage import Migration, leftover_items, migrations, takeover_claim, takeovers
 from palimp.models import Dataset, Evidence, Finding, LogSummary, Policy, PolicyKey, Signal
 from palimp.notlive import Marker, decommission_items, markers
 from palimp.owners import requester_items
@@ -61,7 +68,7 @@ def _some(values: list[str], count: int) -> str:
     return f"{count} ({shown}{', ...' if count > LIST_SHOWN else ''})" if count else "0"
 
 
-def hit_count_items(dataset: Dataset, policy: Policy) -> list[Item]:
+def hit_count_items(dataset: Dataset, policy: Policy, clear: Clear | None = None) -> list[Item]:
     artifact = "hitcount.txt"
     if dataset.hit_count_stats is None:
         claim = "no hit counts were provided: use of this policy is unknown from counters"
@@ -82,9 +89,19 @@ def hit_count_items(dataset: Dataset, policy: Policy) -> list[Item]:
             claim = "no row for this policy: its use is unknown from counters"
         return [Item("T2", artifact, locator, claim, "blind", "hit_count")]
     since = "since the counters were last cleared (the clear date is not in hitcount.txt)"
-    if row.count:
-        return [Item("T2", artifact, locator, f"{row.count} hits {since}", "present", "hit_count")]
-    return [Item("T2", artifact, locator, f"0 hits {since}", "absent", "hit_count")]
+    pair = (policy.from_zone, policy.to_zone)
+    since += meaning(clear, policy.name, row.count, pair)
+    signal: Signal = "present" if row.count else "absent"
+    items = [Item("T2", artifact, locator, f"{row.count} hits {since}", signal, "hit_count")]
+    if clear is not None and clear.after:
+        name, when = clear.latest or ("", None)
+        claim = (
+            f"counters from {pair[0]} to {pair[1]} were cleared inside the log window, after "
+            f"{when:%Y-%m-%d %H:%M} (policy {name} logged sessions until then and shows 0)"
+        )
+        locator = f"hitcount.txt and logs/rt_flow.log, zone pair {pair[0]} -> {pair[1]}"
+        items.append(Item("T2", artifact, locator, claim, "blind", "counter_clear"))
+    return items
 
 
 def log_summary(dataset: Dataset, policy: Policy) -> LogSummary | None:
@@ -110,9 +127,18 @@ def log_items(dataset: Dataset, policy: Policy) -> list[Item]:
     summary = log_summary(dataset, policy)
     locator = f'policy-name="{policy.name}"'
     if summary is not None and (summary.sessions or summary.deny):
-        return [
+        items = [
             Item("T2", artifact, locator, _describe(dataset, summary), "present", "session_log")
         ]
+        end = dataset.log_window.end
+        if end and (silence := stopped(summary.days, end.date())):
+            claim = (
+                f"logged sessions on {len(summary.days)} days up to {summary.days[-1]:%Y-%m-%d}, "
+                f"then none in the last {silence} days of the log window although the policy "
+                "still logs: the traffic seen is older than that, the flow may have stopped"
+            )
+            items.append(Item("T2", artifact, locator, claim, "absent", "log_stopped"))
+        return items
     if policy.deactivated:
         claim = f"no session in {_span(dataset)}: the policy is deactivated, it matches no traffic"
         return [Item("T2", artifact, locator, claim, "blind", "session_log")]
@@ -177,12 +203,16 @@ def collect(
     key: PolicyKey,
     vocab: Vocabulary | None = None,
     found: list[Marker] | None = None,
+    moves: list[Migration] | None = None,
+    cleared: dict[tuple[str, str], Clear] | None = None,
 ) -> Finding:
     policy = dataset.config.policy(key)
     if policy is None:
         raise KeyError(f"policy {key} not found in config.set")
     vocab = vocab or vocabulary(dataset)
     found = markers(dataset, vocab) if found is None else found
+    moves = migrations(dataset, vocab) if moves is None else moves
+    cleared = clears(dataset) if cleared is None else cleared
     history = dataset.history.get(str(key))
     created = history.created_in_commit if history else None
     commit = next((c for c in dataset.commits if c.index == created), None)
@@ -244,6 +274,10 @@ def collect(
     ):
         items.append(Item("T1", artifact, locator, claim, None, "decommission", apps))
 
+    for locator, claim, objects in leftover_items(dataset, policy, created, moves):
+        apps = list(dict.fromkeys(a for o in objects for a in vocab.in_object(o)))
+        items.append(Item("T3", "rollbacks", locator, claim, None, "migration_leftover", apps))
+
     named = [n for n in policy.sources + policy.destinations if n != "any"]
     if named:
         claim = "; ".join(_resolve(dataset, n) for n in named)
@@ -275,11 +309,22 @@ def collect(
             claim = "created together with " + ", ".join(siblings)
             items.append(Item("T3", "rollbacks", locator, claim, None, "created_together"))
 
+    if took := takeovers(dataset, policy, created):
+        commits = sorted({t.commit for t in took})
+        locator = ("commit " if len(commits) == 1 else "commits ") + ", ".join(
+            str(i) for i in commits
+        )
+        locator += " (rollbacks)"
+        items.append(
+            Item("T3", "rollbacks", locator, takeover_claim(dataset, took), None, "takeover")
+        )
+
     named_apps = list(dict.fromkeys(a for item in items for a in item.apps))
     for locator, claim, apps in requester_items(dataset, named_apps):
         items.append(Item("T3", "tickets.csv", locator, claim, None, "app_requesters", apps))
 
-    items += hit_count_items(dataset, policy) + log_items(dataset, policy)
+    clear = cleared.get((policy.from_zone, policy.to_zone))
+    items += hit_count_items(dataset, policy, clear) + log_items(dataset, policy)
     if policy.applications:
         services = [
             line
@@ -310,4 +355,6 @@ def collect(
 def collect_all(dataset: Dataset) -> list[Finding]:
     vocab = vocabulary(dataset)
     found = markers(dataset, vocab)
-    return [collect(dataset, p.key, vocab, found) for p in dataset.config.policies]
+    moves = migrations(dataset, vocab)
+    cleared = clears(dataset)
+    return [collect(dataset, p.key, vocab, found, moves, cleared) for p in dataset.config.policies]
