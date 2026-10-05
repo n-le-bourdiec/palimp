@@ -1,89 +1,93 @@
 # Handoff
 
-## Last session: 11 (2026-10-05), analyzer: Medium ingest, T2 and T4 evidence
+## Last session: 12 (2026-10-05), analyzer: verdicts, confidence, first real evaluation
 
 ### Note for simulator sessions
 
-- No ground truth schema change. The analyzer now reads every T2 and T4
-  item; the eval harness reads `manifest.json` (`format_draw`) only to break
-  results down per format variant. palimp itself never reads the manifest.
+- No ground truth schema change. The new harness `eval/verdicts.py` reads
+  `expected`, `status.live`, `intent.app_id`, `people`, `traps` and
+  `created.event_id`; the slow test `tests/test_medium_verdicts.py` reads
+  `status.live`. palimp itself never reads ground truth or manifest.
+- Observation, not a request: `expected.verdict` is `removal_candidate` for
+  many dead rules whose only not-live evidence is zero hits and no log lines
+  (193 rules over seeds 0 to 19 have T2-only not-live evidence). Decision 0020
+  makes palimp answer `verify` there on purpose.
 
 ### Done
 
-- Session 10 metrics row finalized (57 calls, 3.72 USD API-equivalent);
-  session 10 commits pushed, CI green.
-- CLAUDE.md: every session pushes its commits and reports the CI status of
-  the last push in the session report.
-- Ingest on Medium seeds 0 to 9: zero unknown lines in every artifact, before
-  and after (config, commits, hit counts, logs, tickets, 49 rollbacks each).
-  Checked beyond unknown counts: every log event has a timestamp, every hit
-  count row names a configured policy. Locked in by `tests/test_medium_ingest.py`
-  (slow, CI). Seeds 0 to 9 contain no standard (unstructured) RT_FLOW lines.
-- Log year: an undated syslog timestamp takes its year from an ISO server
-  stamp on the same line, from `--log-year` (year of the first undated line,
-  on `ingest` and `explain`), or is inferred from the newest commit (then
-  ticket dates); December to January rollover handled; inferred year printed
-  as a warning. Unit tests in `tests/test_log_year.py`.
-- Log reader keeps per policy (keyed FROM/TO/NAME): sessions, first and last
-  seen, sources, destinations, ports, services, sessions per hour and weekday,
-  active days. Log window start and end in `Dataset.log_window`.
-- T2 collectors (`evidence.py`, `behavior.py`): hit count row (any layout,
-  any row order), log summary with time-of-day pattern (nightly, business
-  hours, daytime, around the clock) and recurrence hint (daily, weekly,
-  monthly, quarterly, single day, irregular; late start or early stop in the
-  window called out). Decision 0019: each T2 item has `signal` present,
-  absent or blind; no logging, deactivated and missing artifacts are blind.
-- T4 collector (`services.py`): one item per policy naming each application's
-  service (Junos predefined, well-known port, application sets expanded,
-  `any` stated as nothing to infer).
-- Eval (`eval/evidence_recall.py`) now scores T1 to T4, per trap (per rule
-  and per instance), per format variant, T2 direction, and "absent" signals
-  on live rules. `eval/trap_rules.py` lists rules of a trap (harness only).
-- Medium seeds 0 to 9 (1542 rules): T1 99.9%, T2 100.0% (direction agrees
-  100.0%), T3 84.2%, T4 100.0%. No format variant below 81.9% on any tier.
-  Per trap instance mean recall: BATCH 100%, LIVE-NOLOG 100%, MISLEADING
-  100%, RARE-JOB 100%, HISTORY-HORIZON 88.5%, EMERGENCY 59.3%, DEACTIVATED
-  53.2% (the gaps are all T3).
+- Session 11 metrics row finalized (67 calls, 4.54 USD API-equivalent).
+- Decision 0020: absence of evidence is never evidence of absence.
+  `removal_candidate` needs a positive not-live signal; zero hits and no log
+  lines alone give `verify`. Refinements recorded in the same file.
+- Evidence items carry `kind` and `apps` (applications they name). App
+  vocabulary (`apps.py`) learned from the artifacts: ticket related CI,
+  object name first segments (role words like `pc`, `users` skipped), ticket
+  short names (`Decom ESHOP` + related CI `webshop` gives `eshop`).
+- New evidence: T3 deactivated policy, T3 temporary label (temp, test,
+  urgent, typos of temp), T1 decommission leftover (`notlive.py`): a commit
+  comment or ticket retiring an app, linked to its commit (ticket ID in the
+  comment, else close date), that deleted policies on the same objects, and
+  every app the policy names is the retired one.
+- Ingest records `removed_by_commit` (policies each commit deleted).
+- `assess.py`: verdict rules V-CONTRADICTION, V-NOTLIVE, V-TEMPORARY-IN-USE,
+  V-TRAFFIC-NOT-RECENT, V-TRAFFIC, V-NO-TRAFFIC-SEEN, V-NO-VISIBILITY;
+  confidence rules C-T1-T3-CONFLICT, C-T1-T3-AGREE (HIGH, needs traffic
+  seen), C-T1-T3-AGREE-NO-TRAFFIC, C-T1-ONLY, C-T3, C-WEAK. Conflict findings
+  cite both evidence IDs. Question and who to ask on every non-keep verdict.
+- `explain` shows the assessment; `explain --all` text collapses blind T2
+  items into numbered global notes (the JSON keeps every item).
+- `eval/verdicts.py`: verdict accuracy (expected and best achievable),
+  dangerous errors listed, overconfidence, calibration, per trap (rule and
+  instance), per format variant, naive baseline (zero hits gives removal).
+- Medium dev seeds 0 to 19 (3099 rules), final:
+  palimp 90.0% vs best achievable (naive 90.1%), 85.3% vs expected (naive
+  90.2%), dangerous errors 0 (naive 44), overconfidence 0.0%, HIGH: intent
+  app right 96.7%, verdict = best 97.0%. Before the new not-live evidence and
+  refinements: 86.5% vs best, 0 dangerous, 2.4% overconfident.
+- Conflicts flagged on all 44 TRAP-MISLEADING-COMMENT rules, 68 BATCH-COMMIT
+  rules and 5 untrapped rules.
+- Slow test: zero removal candidates on live rules, Medium seeds 0 to 9.
 
 ### Next
 
-- Confidence scoring and verdicts (not started, by mission). Inputs to use:
-  blind T2 items never count as support; 32 "absent" T2 items fall on live
-  rules in seeds 0 to 9 (22 zero hit counts, 10 empty logs, all on
-  RARE-JOB, LIVE-NOLOG or HISTORY-HORIZON rules): absent alone must never
-  give "removal candidate".
-- Hit count clear detection: zero hits on a policy whose logs show sessions
-  in the window means the counters were cleared; zero hits on every rule of a
-  zone pair is the same hint. Not implemented.
-- T3 recall gaps: DEACTIVATED (33.6% T3 per rule) and EMERGENCY-LOADBEARING
-  (22.1%), mostly config.set and rollbacks items. Look at what the ground
-  truth expects there.
-- The recurrence hint is tested on synthetic days only: Medium log windows
-  are 60 days, so weekly, monthly and quarterly patterns never show in them.
-- `report` and `questions` commands.
+- 183 dead rules stay at `verify` (best achievable `removal_candidate`):
+  mostly decommissions with no comment and no exported ticket. Candidate
+  positive signals: the destination never seen in any log while logging
+  rules to neighboring hosts are (decision 0020 lists it), decommission
+  commit found without a marker (a commit that deletes most rules of one
+  application).
+- 126 not-live rules with hits get `keep` (best `verify`): hits since an
+  unknown clear date on a retired app. Hit count clear detection (session 11
+  next list) and the retired-app signal on rules with traffic would help.
+- `ask` names the ground truth owner only 18.5% of the time: palimp names
+  the ticket requester, or the latest requester for the app. Look at who the
+  owner is in the artifacts.
+- `report` and `questions` commands (the questions are now in the JSON).
+- Held-out seeds were not run (by mission). Run them only after the next
+  tuning round is frozen.
 
 ### Open questions
 
-- Should a blind T2 item be emitted for every policy without logging (988
-  blind items over seeds 0 to 9), or only in `explain` text? Kept in the
-  evidence list so the LLM writer can cite the gap (decision 0019).
-- Per trap metrics counted per rule are dominated by large instances
-  (HISTORY-HORIZON 616 rules, BATCH 125): per instance figures are printed
-  next to them. Which one should be the headline metric?
-- Carried over from session 10: Hard trap weights; Medium size (8 MB per
-  scenario); TRAP-HISTORY-HORIZON tagging; on_call persona; decision 0015;
-  `commit activate`; CONFIRMED-TEXT; scenario directory names.
+- Is 90.0% vs best achievable with 0 dangerous errors the right trade, given
+  that the ground truth `expected.verdict` rewards removal on absence alone?
+- Should deactivated rules always be removal candidates (all 238 match the
+  ground truth today)? A deactivated rule kept as a fallback is a real case.
+- HIGH now needs traffic seen. Should a T1 that names a ticket still open
+  also allow HIGH?
+- Carried over: blind T2 items per policy (decision 0019); per trap headline
+  metric (per rule or per instance); Hard trap weights; Medium size; on_call
+  persona; decision 0015; `commit activate`; CONFIRMED-TEXT; scenario names.
 
 ### Known issues
 
-- Session counts are those logged: the simulator samples about one log line
-  per policy and day, so "sessions" undercount real traffic.
-- Time of day uses the logged time (UTC in Medium); a device in another time
-  zone would shift "nightly".
-- Junos predefined applications beyond the five documented ones in
-  `junos_defaults_applications_13.2.txt` are from general knowledge (VSRX-12).
-- Carried over: VSRX-2b unverified; ticket assignee `svc-ansible`; S2 and S5;
-  git identity in repository config only; session 2 Part C checks not done.
+- App vocabulary misses names with no ticket and no object prefix
+  (`vendor-arch-109` does not name `archive`: prefix matching was dropped
+  because `web` named `webshop`).
+- Five conflicts on untrapped rules (not inspected).
+- Carried over: logged sessions undercount traffic; time of day in logged
+  time zone; Junos predefined applications from general knowledge (VSRX-12);
+  VSRX-2b; ticket assignee `svc-ansible`; S2 and S5; git identity in repo
+  config only; session 2 Part C checks.
 
 ## Measuring tokens and cost
 
@@ -109,10 +113,11 @@ Session 6 has its own transcript `72beb9ef-54f4-42f0-8f55-6f97aafd613c`
 transcript `f5449cc1-ac4a-4d11-aab3-d77d2bc207ee` (finalized in session 9).
 Session 9 has transcript `60a6f3c8-c28b-457e-8a93-e9da7abb4439` (finalized in
 session 10). Session 10 has transcript `3649919e-84f0-4cd3-8b8d-c49cc31eff22` (finalized
-in session 11). Session 11 has transcript
-`0d141375-db8e-4e9e-8979-0100e197eb49`. Finalize it at the start of session
-12 with:
+in session 11). Session 11 has transcript `0d141375-db8e-4e9e-8979-0100e197eb49`
+(finalized in session 12). Session 12 has transcript
+`8ed29a6f-73ed-4fd4-b799-5bcf0a8290c4`. Finalize it at the start of session
+13 with:
 
-    uv run python metrics/session_tokens.py 0d141375-db8e-4e9e-8979-0100e197eb49
+    uv run python metrics/session_tokens.py 8ed29a6f-73ed-4fd4-b799-5bcf0a8290c4
 
 Cost is API-equivalent (decision 0006), not a billed amount.
