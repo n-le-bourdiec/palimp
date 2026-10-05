@@ -1,4 +1,4 @@
-"""Verdict and confidence evaluation of palimp against simulator ground truth, dev seeds only.
+"""Verdict and confidence evaluation of palimp against simulator ground truth.
 
 Runs both tools as black boxes (see evidence_recall.py), then compares, rule
 by rule, palimp's assessment with the ground truth `expected` block
@@ -18,14 +18,20 @@ by rule, palimp's assessment with the ground truth `expected` block
   otherwise keep. It reads palimp's hit count signal (present means hits; an
   absent signal or no hit count row means zero hits).
 
-Dev seeds only. This script never reads a held-out salt (decision 0007).
+Dev seeds by default. `--holdout N` scores held-out scenarios 0 to N-1
+instead: the simulator reads the salt from HOLDOUT_SALT, which exists only in
+the held-out GitHub Actions workflow (decisions 0007 and 0021). In that mode
+the script prints aggregate tables only (headline, per trap, per format
+variant, calibration), never a per-rule line, and hides failure details.
 
 Usage:
     uv run python eval/verdicts.py --level medium --seeds 0-19
+    uv run python eval/verdicts.py --level medium --holdout 50   (workflow only)
 """
 
 import argparse
 import json
+import os
 import sys
 import tempfile
 from collections import Counter, defaultdict
@@ -178,13 +184,7 @@ def calibration(rows: list[dict]) -> None:
         )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--level", default="medium")
-    parser.add_argument("--seeds", default="0-19", help="dev seeds, for example 0-19 or 1,4,7")
-    parser.add_argument("--json", type=Path, help="also write per-rule rows to this file")
-    args = parser.parse_args()
-
+def dev_rows(args: argparse.Namespace) -> list[dict]:
     rows: list[dict] = []
     with tempfile.TemporaryDirectory() as tmp:
         for seed in seed_range(args.seeds):
@@ -192,6 +192,44 @@ def main() -> int:
             if manifest.get("split") not in (None, "dev"):
                 sys.exit(f"seed {seed} is not a dev scenario")
             rows += evaluate(truth, findings, manifest)
+    return rows
+
+
+def holdout_rows(level: str, count: int) -> list[dict]:
+    """Rows of held-out scenarios 0 to count-1. Any failure hides its details."""
+    rows: list[dict] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for index in range(count):
+            try:
+                truth, findings, manifest = run_seed(level, index, Path(tmp), holdout=True)
+                if manifest.get("split") != "held-out":
+                    raise ValueError("not a held-out scenario")
+                rows += evaluate(truth, findings, manifest)
+            except (Exception, SystemExit):
+                sys.exit(f"held-out scenario {index} failed (details hidden, decision 0007)")
+    return rows
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--level", default="medium")
+    parser.add_argument("--seeds", default="0-19", help="dev seeds, for example 0-19 or 1,4,7")
+    parser.add_argument("--json", type=Path, help="also write per-rule rows to this file")
+    parser.add_argument(
+        "--holdout",
+        type=int,
+        metavar="N",
+        help="score held-out scenarios 0 to N-1, aggregate output only (workflow only)",
+    )
+    args = parser.parse_args()
+    if args.holdout is not None and args.holdout < 1:
+        parser.error("--holdout needs at least one scenario")
+    if args.holdout is not None and not os.environ.get("HOLDOUT_SALT"):
+        parser.error("--holdout needs the HOLDOUT_SALT environment variable (workflow only)")
+    if args.holdout is not None and args.json:
+        parser.error("--json writes per-rule rows, never allowed with --holdout")
+
+    rows = holdout_rows(args.level, args.holdout) if args.holdout else dev_rows(args)
 
     scores: dict[str, Score] = defaultdict(Score)
     instances: dict[str, dict] = defaultdict(lambda: defaultdict(lambda: [0, 0]))
@@ -204,11 +242,16 @@ def main() -> int:
             instances[trap][row["instance"]][0] += row["palimp"] == row["best"]
             instances[trap][row["instance"]][1] += 1
 
-    print(f"level {args.level}, dev seeds {args.seeds}")
+    if args.holdout:
+        print(f"level {args.level}, held-out scenarios {args.holdout} (aggregate only)")
+    else:
+        print(f"level {args.level}, dev seeds {args.seeds}")
     headline(scores)
     table("Per trap (verdict accuracy)", scores, "trap ", instances)
     table("Per format variant", scores, "format ", None)
     calibration(rows)
+    if args.holdout:
+        return 0
 
     rules = Counter((r["rule"], r["palimp"]) for r in rows)
     print("\nVerdict rules used: " + ", ".join(f"{k[0]} {v}" for k, v in sorted(rules.items())))

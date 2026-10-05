@@ -1,0 +1,65 @@
+# Held-out evaluation (decisions 0007 and 0021). Started by hand only, by the
+# project lead, from the Actions tab. It prints aggregate tables only: never the
+# salt, a seed, a per-rule line or a scenario file, and it uploads nothing.
+name: Held-out evaluation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: holdout
+  cancel-in-progress: false
+
+jobs:
+  holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      LEVEL: medium
+      SCENARIOS: "50"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          uv sync --locked --all-packages
+          # Scenarios are generated under this directory only, deleted at the end.
+          mkdir -p "$RUNNER_TEMP/holdout"
+          echo "TMPDIR=$RUNNER_TEMP/holdout" >> "$GITHUB_ENV"
+      - name: Evaluate held-out scenarios (aggregate tables only)
+        env:
+          HOLDOUT_SALT: ${{ secrets.HOLDOUT_SALT }}
+        run: |
+          uv run python eval/verdicts.py --level "$LEVEL" --holdout "$SCENARIOS" \
+            > "$RUNNER_TEMP/holdout-report.md"
+          cat "$RUNNER_TEMP/holdout-report.md"
+      - name: Write the run record
+        if: always()
+        run: |
+          {
+            echo "## Held-out run record"
+            echo
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| date (UTC) | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
+            echo "| palimp commit | $(git rev-parse HEAD) |"
+            echo "| palimp version | $(uv run palimp --version 2>/dev/null || echo n/a) |"
+            echo "| simulator version | $(uv run palimp-sim --version) |"
+            echo "| level | $LEVEL |"
+            echo "| scenarios | $SCENARIOS |"
+            echo "| started by | $GITHUB_ACTOR |"
+            echo
+            if [ -s "$RUNNER_TEMP/holdout-report.md" ]; then
+              cat "$RUNNER_TEMP/holdout-report.md"
+            else
+              echo "Evaluation failed: no aggregate tables (details hidden, decision 0007)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Delete generated scenarios
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/holdout" "$RUNNER_TEMP/holdout-report.md"

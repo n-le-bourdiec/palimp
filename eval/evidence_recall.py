@@ -60,14 +60,22 @@ def tool(name: str) -> str:
     return path
 
 
-def run_seed(level: str, seed: int, workdir: Path) -> tuple[dict, list[dict], dict]:
+def run_seed(
+    level: str, seed: int, workdir: Path, holdout: bool = False
+) -> tuple[dict, list[dict], dict]:
+    """Generate one scenario and run palimp on it.
+
+    With `holdout`, `seed` is a held-out index: the simulator reads the salt
+    from HOLDOUT_SALT (decision 0021), and the scenario never carries the seed.
+    """
+    which, prefix = ("--holdout", "holdout-") if holdout else ("--seed", "")
     subprocess.run(
         [
             tool("palimp-sim"),
             "generate",
             "--level",
             level,
-            "--seed",
+            which,
             str(seed),
             "--out",
             str(workdir),
@@ -76,7 +84,7 @@ def run_seed(level: str, seed: int, workdir: Path) -> tuple[dict, list[dict], di
         check=True,
         capture_output=True,
     )
-    scenario = next(workdir.glob(f"scenario-{level}-{seed:06d}"))
+    scenario = next(workdir.glob(f"scenario-{prefix}{level}-{seed:06d}"))
     result = subprocess.run(
         [
             tool("palimp"),
