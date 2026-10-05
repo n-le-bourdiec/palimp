@@ -150,6 +150,7 @@ def _render(finding: Finding, dataset: Dataset, notes: dict[str, int] | None = N
             lines.append(f"  conflict:     {conflict.text} {_cite(conflict.evidence)}")
         if assessment.question:
             lines.append(f"  question:     {assessment.question}")
+        if assessment.ask:
             lines.append(f"  ask:          {assessment.ask}")
     return "\n".join(lines)
 

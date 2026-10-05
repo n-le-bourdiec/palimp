@@ -106,8 +106,9 @@ def test_conflict_lowers_confidence_and_cites_both() -> None:
     assert result.confidence == "MEDIUM" and result.intent_apps == ["crm"]
 
 
-def test_question_and_owner_only_when_not_keep() -> None:
-    assert assess(finding(OBJECTS, HITS, LOG), DATASET).question is None
+def test_question_only_when_not_keep_owner_always() -> None:
+    kept = assess(finding(OBJECTS, HITS, LOG), DATASET)
+    assert kept.question is None and kept.ask
     ticket = ("T1", "ticket", None, ["crm"])
     result = assess(finding(ticket, OBJECTS, HITS_ZERO), DATASET)
     assert result.question and "Ann Example" in result.ask

@@ -29,6 +29,7 @@ T4 alone can never exceed LOW.
 """
 
 from palimp.models import Assessment, Conflict, Dataset, Evidence, Finding
+from palimp.owners import find_owner
 
 # Evidence kinds that say a policy is unused (decision 0020), not that nothing is known.
 NOT_LIVE_KINDS = frozenset({"deactivated", "decommission"})
@@ -159,34 +160,6 @@ def _order(evidence_id: str) -> int:
     return int(evidence_id.removeprefix("E"))
 
 
-def _who(finding: Finding, dataset: Dataset, apps: list[str]) -> str:
-    tickets = [e for e in finding.evidence if e.kind == "ticket"]
-    for item in tickets:
-        ticket_id = item.locator.split()[1]
-        ticket = dataset.tickets.get(ticket_id)
-        if ticket and ticket.requester:
-            return f"{ticket.requester}, requester of {ticket_id} [{item.id}]"
-    for app in apps:
-        related = [
-            t
-            for t in dataset.tickets.values()
-            if t.related_ci and t.related_ci.lower().removeprefix("shared-") == app and t.requester
-        ]
-        if related:
-            latest = max(related, key=lambda t: t.opened or "")
-            return (
-                f"the owner of application {app}; latest requester for it in tickets.csv: "
-                f"{latest.requester} ({latest.ticket_id})"
-            )
-    if apps:
-        return f"the owner of application {', '.join(apps)} (no name in the artifacts)"
-    commit = next((c for c in dataset.commits if c.index == finding.created_in_commit), None)
-    if commit:
-        return f"{commit.user}, who created the policy in commit {commit.index}"
-    targets = ", ".join(finding.policy.destinations) or "the destination"
-    return f"the team that runs {targets}"
-
-
 QUESTIONS = {
     "V-CONTRADICTION": "The artifacts say this policy is unused, yet traffic matches it. "
     "Which systems still use it, and is that traffic expected?",
@@ -205,10 +178,11 @@ QUESTIONS = {
 def assess(finding: Finding, dataset: Dataset) -> Assessment:
     verdict, v_rule, v_reason, v_evidence = _verdict(finding)
     level, c_rule, c_reason, c_evidence, apps, conflicts = _confidence(finding)
-    question = ask = None
-    if verdict != "keep":
-        question = QUESTIONS[v_rule]
-        ask = _who(finding, dataset, apps)
+    question = QUESTIONS[v_rule] if verdict != "keep" else None
+    # A flow between two applications may belong to either side: every application
+    # the objects name is an owner candidate, not only the one the intent names.
+    objects = [a for e in finding.evidence if e.kind == "address_objects" for a in e.apps]
+    owner = find_owner(finding, dataset, list(dict.fromkeys(apps + objects)), bool(conflicts))
     return Assessment(
         verdict=verdict,
         verdict_rule=v_rule,
@@ -221,5 +195,7 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
         intent_apps=apps,
         conflicts=conflicts,
         question=question,
-        ask=ask,
+        ask=owner.text,
+        owner=owner.owner,
+        owner_candidates=owner.candidates,
     )

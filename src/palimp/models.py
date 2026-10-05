@@ -213,7 +213,9 @@ class Assessment(BaseModel):
     intent_apps: list[str] = Field([], description="applications the intent evidence names")
     conflicts: list[Conflict] = []
     question: str | None = None
-    ask: str | None = None
+    ask: str | None = Field(None, description="who to ask about the policy, with the reasons")
+    owner: str | None = Field(None, description="application owner, only when the artifacts agree")
+    owner_candidates: list[str] = Field([], description="people who may own it, most likely first")
 
 
 class Finding(BaseModel):

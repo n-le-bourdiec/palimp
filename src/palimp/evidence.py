@@ -9,7 +9,8 @@ the artifact shows traffic ("present"), could show it and shows none
 ("absent"), or cannot show it for this policy ("blind": no logging,
 deactivated, artifact missing), see decision 0019.
 T3 structural: address object names, policies created in the same commit,
-deactivation, a name or description that marks the policy as temporary.
+deactivation, a name or description that marks the policy as temporary, the
+requesters of the tickets for each application named above (palimp.owners).
 T4 contextual: plain service names of the applications the policy matches.
 
 Each item has a stable `kind` and the applications it names (`apps`).
@@ -23,6 +24,7 @@ from palimp.assess import assess
 from palimp.behavior import recurrence, time_of_day
 from palimp.models import Dataset, Evidence, Finding, LogSummary, Policy, PolicyKey, Signal
 from palimp.notlive import Marker, decommission_items, markers
+from palimp.owners import requester_items
 from palimp.services import describe
 
 TICKET_REF = re.compile(r"\b(?:CHG|INC|RITM|REQ|CR|SR|TASK)[-_]?\d{4,}\b", re.IGNORECASE)
@@ -272,6 +274,10 @@ def collect(
             )
             claim = "created together with " + ", ".join(siblings)
             items.append(Item("T3", "rollbacks", locator, claim, None, "created_together"))
+
+    named_apps = list(dict.fromkeys(a for item in items for a in item.apps))
+    for locator, claim, apps in requester_items(dataset, named_apps):
+        items.append(Item("T3", "tickets.csv", locator, claim, None, "app_requesters", apps))
 
     items += hit_count_items(dataset, policy) + log_items(dataset, policy)
     if policy.applications:
