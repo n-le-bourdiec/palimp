@@ -133,3 +133,25 @@ def test_vocabulary_learns_aliases_from_tickets() -> None:
     assert vocab.in_object("webshop-app-01") == ["webshop"]
     assert vocab.in_object("pc-kc-111") == []
     assert PolicyKey.parse("a/b/c").name == "c"
+
+
+def test_vocabulary_learns_abbreviations_and_skips_role_words() -> None:
+    config = parse_set(
+        "set security address-book global address mon-01 10.0.0.1/32\n"
+        "set security address-book global address servers-net 10.0.0.0/16\n"
+        "set security address-book global address bkp-01 10.0.0.2/32\n"
+        "set security address-book global address bi-db-01 10.0.0.3/32\n"
+        "set security address-book global address mgmt-net 10.0.1.0/24\n"
+    )
+    tickets = {
+        "CHG1": Ticket(ticket_id="CHG1", summary="FW request NMS", related_ci="shared-monitoring"),
+        "CHG2": Ticket(ticket_id="CHG2", summary="BKP - open flows", related_ci="shared-backup"),
+        "CHG3": Ticket(ticket_id="CHG3", summary="BILL access", related_ci="billing"),
+    }
+    vocab = vocabulary(Dataset(source="t", config=config, tickets=tickets))
+    assert vocab.in_object("mon-01") == ["monitoring"]
+    assert vocab.in_object("servers-net") == []
+    assert vocab.in_object("mgmt-net") == []
+    assert vocab.in_object("bkp-01") == ["backup"]
+    assert vocab.in_object("bi-db-01") == ["bi"]  # too short to abbreviate billing
+    assert vocab.in_text("monitoring of all servers") == ["monitoring"]

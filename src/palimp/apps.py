@@ -2,14 +2,19 @@
 
 Plain rules, no scoring. Applications are learned from the input itself:
 - the related CI column of tickets.csv (for example `webshop`);
-- the first segment of address object names (`crm-db-01` gives `crm`), unless
-  it is a role word such as `pc` or `users`;
 - short names used in ticket summaries, mapped to the related CI of the same
   ticket (`Decom ESHOP` with related CI `webshop` gives `eshop` -> `webshop`).
-  A short name seen with two different related CIs is ambiguous and dropped.
+  A short name seen with two different related CIs is ambiguous and dropped;
+- the first segment of address object names (`crm-db-01` gives `crm`), unless
+  it is a role word such as `pc`, `users` or `servers`. A segment that is
+  already a ticket alias (`bkp-01` with tickets `BKP ...` for `backup`) names
+  that application. A segment of at least 3 letters that is the start of
+  exactly one related CI is an abbreviation of it (`mon-01` with related CI
+  `shared-monitoring` gives `mon` -> `monitoring`). Shorter segments are never
+  read as abbreviations (`bi` must not name `billing`).
 
 A token names an application when it is one of the learned names or aliases.
-No prefix matching: `web` must not name `webshop`.
+Free text gets no prefix matching: `web` must not name `webshop`.
 """
 
 import re
@@ -17,10 +22,16 @@ from dataclasses import dataclass, field
 
 from palimp.models import Dataset
 
-# First segments of object names that say who or what kind of host, not which application.
+# Words that say who or what kind of host or network, not which application.
 ROLE_WORDS = frozenset(
     {
         "pc",
+        "server",
+        "servers",
+        "srv",
+        "mgmt",
+        "lan",
+        "subnet",
         "ws",
         "user",
         "users",
@@ -29,6 +40,7 @@ ROLE_WORDS = frozenset(
         "host",
         "hosts",
         "net",
+        "network",
         "any",
         "all",
         "grp",
@@ -89,15 +101,16 @@ def _ci(value: str | None) -> str | None:
     return value.removeprefix("shared-") or None
 
 
+# Shortest object name segment read as an abbreviation of a related CI.
+MIN_ABBREVIATION = 3
+
+
 def vocabulary(dataset: Dataset) -> Vocabulary:
     vocab = Vocabulary()
     for ticket in dataset.tickets.values():
         if app := _ci(ticket.related_ci):
             vocab.names.add(app)
-    for name in dataset.config.addresses:
-        first = re.split(r"[-_.]", name.lower())[0]
-        if first.isalpha() and len(first) >= 2 and first not in ROLE_WORDS:
-            vocab.names.add(first)
+    cis = sorted(vocab.names)
     seen: dict[str, set[str]] = {}
     for ticket in dataset.tickets.values():
         app = _ci(ticket.related_ci)
@@ -109,4 +122,15 @@ def vocabulary(dataset: Dataset) -> Vocabulary:
     for short, apps in seen.items():
         if len(apps) == 1 and short not in vocab.names and short not in ROLE_WORDS:
             vocab.aliases[short] = next(iter(apps))
+    for name in dataset.config.addresses:
+        first = re.split(r"[-_.]", name.lower())[0]
+        if not first.isalpha() or len(first) < 2 or first in ROLE_WORDS:
+            continue
+        if first in vocab.names or first in vocab.aliases:
+            continue
+        expanded = [ci for ci in cis if ci.startswith(first)]
+        if len(first) >= MIN_ABBREVIATION and len(expanded) == 1:
+            vocab.aliases[first] = expanded[0]
+        else:
+            vocab.names.add(first)
     return vocab
