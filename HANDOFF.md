@@ -1,74 +1,80 @@
 # Handoff
 
-## Last session: 8 (2026-10-05), simulator: formats S1 to S6
+## Last session: 9 (2026-10-05), simulator: Medium level and the 7 v1 traps
 
 ### Done
 
-- Session 7 metrics row finalized (52 calls, 2.97 USD API-equivalent).
-- Simulator 0.2.0 (`simulator/src/palimp_sim/`), formats aligned with the
-  fixtures in `tests/fixtures/junos_docs/`:
-  - S1: hit counts use the documentation column positions, rows shuffled
-    with the seed, `Index` a line number; knob `hitcount_layout=legacy`.
-  - S3: knob `log_release` (`12.x`, `pre-22.2` default, `22.2`). Fixed a
-    drift: CLOSE attribute order now follows the templates (`application
-    nested-application` before `username roles packet-incoming-interface`).
-  - S4: knob `log_collection=syslog-server` (server timestamp and device
-    address prefix, no `<PRI>`); spec default for Medium, Easy keeps `device`.
-  - S5 (in part): knob `rescue_line` (`rescue ... by root via other`, last
-    line); spec default for Medium.
-  - S2 (spec only) and S6 (flag): stored-file paths and `## Last commit:`
-    header stated in spec 5.3; `junos-ntp` flagged unverified.
-  - Commit comments: already on the next line, 4 spaces (no change needed).
-- Knob overrides: `generate(level, seed, overrides)` and
-  `palimp-sim generate --knob NAME=VALUE`; values validated, recorded in the
-  manifest.
-- `simulator/tests/test_formats.py` (20 tests): each line shape must match the
-  fixture lines first, then every simulator line, for 4 knob combinations;
-  RT_FLOW attribute names compared with the 12.1X47 sample and the 22.2R1
-  template fixtures; hit-count headers compared with the fixture headers.
-- Golden hashes updated (seeds 1 and 7). Changed files for seed 1:
-  `hitcount.txt` (layout and row order), `logs/rt_flow.log` (CLOSE attribute
-  order), `ground_truth.json` (only `simulator_version`), `manifest.json`
-  (four new knobs). Config, commits, rollbacks and tickets are unchanged for
-  Easy defaults.
-- Spec: `TRAP-PREPROVISIONED` marked v2 (decision 0012), v1 has seven traps;
-  sections 5.2 to 5.5, 7.1, 11 and 12.3 updated.
-- `docs/format-assumptions.md`: status of S1 to S6.
+- Session 8 metrics row finalized (52 calls, 3.48 USD API-equivalent).
+- Medium level (`simulator/src/palimp_sim/medium.py`, `levels.MEDIUM`), spec
+  7.1 values: 4 years, 25 applications (7 Medium-only templates in
+  `catalog.EXTRA_APPS`), 5 zones (management zone `mgmt`/`admin` with
+  monitoring, backup, jump hosts), personas senior x2, hurried operator,
+  automation (`svc-ansible via netconf`). Volume comes from integrations
+  between applications and ad hoc access requests (spec 4.9).
+- Seven v1 traps built by the timeline and checked on the final state in
+  `truth.py` (spec 7.4): LIVE-NOLOG, RARE-JOB, EMERGENCY-LOADBEARING,
+  MISLEADING-COMMENT, BATCH-COMMIT, HISTORY-HORIZON, DEACTIVATED. Each sets
+  `expected.verdict`, `best_achievable_verdict`, `max_justified_confidence`
+  and misleading evidence items.
+- Format knobs drawn per Medium scenario from the seed, recorded in
+  `manifest.json` (`format_draw`); 22.2 never drawn; overrides win
+  (decision 0016). Medium syslog-server lines carry a constant clock skew of
+  1 to 6 seconds (`syslog_clock_skew_seconds`).
+- Easy outputs byte-identical: all files of seeds 0 to 99 (plus legacy and
+  12.x variants every tenth seed) hashed before and after; golden hashes
+  unchanged. Medium-only knobs are left out of the manifest at their
+  defaults; simulator version stays 0.2.0 (decision 0016).
+- Tests: `simulator/tests/test_medium.py` (coverage of the 7 traps in every
+  scenario, seeds 0 to 99 in slow mode; format draw; skew; one "naive reading
+  is wrong" test per trap); existing tests extended to Medium seeds; Medium
+  golden hash (seed 0).
+- Measured over Medium seeds 0 to 99: 148 policies on average (124 to 169),
+  19.1% dead rules (10.4 to 32.7%), every v1 trap in 100 of 100 scenarios,
+  no shadowed dead rule (a v2 trap) left, 2.6 s and 8.0 MB per scenario.
+- Schema: event kind `access_request` added (additive change to the shared
+  contract).
+- Spec: 4.9, 5.4, 5.5, 7.1, 7.4, VSRX-2b. Decision 0016.
 
 ### Next
 
-- Analyzer session: run the readers on simulator output with the new knobs
-  (`--knob log_collection=syslog-server`, `log_release=12.x` and `22.2`,
-  `hitcount_layout=legacy`, `rescue_line=true`); the black-box test only
-  covers Easy defaults today.
-- Analyzer plan from session 5: T2 collectors (hit counts, logs) and T4,
-  confidence scoring and verdicts, `report` and `questions`.
-- Simulator: implement Medium (spec 7.1), with its format defaults; standard
-  (unstructured) RT_FLOW format as a knob; DENY messages once deny policies
-  exist.
+- Analyzer session: run the readers on Medium scenarios (all format
+  combinations, deactivate lines, `via netconf`, `match application any`,
+  skewed syslog-server prefixes); the black-box test only covers Easy.
+- Analyzer plan from session 5: T2 collectors, T4, confidence scoring and
+  verdicts, `report` and `questions`; then a first Medium evaluation.
+- Simulator: standard (unstructured) RT_FLOW format as a knob; DENY messages;
+  stored rollback files (S2).
 
 ### Open questions
 
-- Medium defaults chosen in this session: `log_collection=syslog-server`
-  (asked), `rescue_line=yes` (my choice), `log_release=pre-22.2` and
-  `hitcount_layout=standard`. Confirm or change.
-- 22.2 attributes after `encrypted` are written `N/A`: no published line shows
-  their values. Acceptable, or keep `22.2` out of default levels (it is now)?
-- Scenario directory names do not include overrides (`scenario-easy-000001`
-  with or without `--knob`); the manifest records the knobs. Fine for now?
-- Carried over from session 7: decision 0015 as a separate decision;
-  `commit activate` read as a commit type; CONFIRMED-TEXT acceptance; Easy
-  100% recall says little.
+- Version: Medium is new in 0.2.0 and Easy did not change, so no bump. The
+  next Medium change needs a bump, which changes every Easy file (version
+  string). Per-level output versions, or accept the Easy hash change then?
+- Schema change `access_request` (event kind) made in a simulator session;
+  analyzer sessions read the schema. Acceptable as an additive change?
+- Medium is about 8 MB per scenario (logs 60 days, rollbacks 49 x 150
+  policies); 100 scenarios are 0.8 GB. Reduce `log_samples_per_policy_day`
+  or keep?
+- TRAP-HISTORY-HORIZON tags about 62 rules per scenario (40% of rules) and
+  TRAP-DEACTIVATED about 15: per-trap metrics will be dominated by them.
+  Fine, or tag HISTORY-HORIZON only on rules with no other trap?
+- Emergency rules are committed by whichever human admin is on call (senior
+  or operator), with on-call voice; the `on_call` persona is not a separate
+  admin at Medium (spec lists senior, operator, automation).
+- Carried over: decision 0015 as a separate decision; `commit activate` as a
+  commit type; CONFIRMED-TEXT acceptance; Easy 100% recall says little;
+  scenario directory names without overrides.
 
 ### Known issues
 
-- S2: stored rollback files are not emitted (spec only). S5: no system
-  commits other than the rescue line; `via netconf` unverified.
-- Server clock equals the device clock in syslog-server lines (no skew, no
-  delay); the device timestamp keeps `Z` and milliseconds.
-- Open analyzer format gaps unchanged (see `docs/format-assumptions.md`).
-- Most documentation samples are old (12.x, 13.x) or state no release.
-- Session 8 metrics row is provisional (measured before the final commit).
+- VSRX-2b unverified: deactivated policies are left out of hit counts.
+- The LIVE-NOLOG zone pair clear is also on the rare jobs' zone pair
+  (servers to internet), so a quarterly job can lose its hits to the clear
+  rather than to its schedule.
+- Ticket assignee can be `svc-ansible` (automation deploys an application);
+  realistic for a pipeline, but unusual in a ticket export.
+- S2: stored rollback files not emitted. S5: no system commits besides the
+  rescue line; `via netconf` unverified.
 - Git identity is set in the repository config only (`n-le-bourdiec`).
 - Session 2 Part C checks (WSL, KVM, Docker) are still not done.
 
@@ -93,9 +99,10 @@ timestamps of the opening prompts:
 Session 6 has its own transcript `72beb9ef-54f4-42f0-8f55-6f97aafd613c`
 (finalized in session 7). Session 7 has transcript
 `cd397e63-3f27-4583-ab2d-1855580dff63` (finalized in session 8). Session 8 has
-transcript `f5449cc1-ac4a-4d11-aab3-d77d2bc207ee`. Finalize it at the start of
-session 9 with:
+transcript `f5449cc1-ac4a-4d11-aab3-d77d2bc207ee` (finalized in session 9).
+Session 9 has transcript `60a6f3c8-c28b-457e-8a93-e9da7abb4439`. Finalize it at
+the start of session 10 with:
 
-    uv run python metrics/session_tokens.py f5449cc1-ac4a-4d11-aab3-d77d2bc207ee
+    uv run python metrics/session_tokens.py 60a6f3c8-c28b-457e-8a93-e9da7abb4439
 
 Cost is API-equivalent (decision 0006), not a billed amount.
