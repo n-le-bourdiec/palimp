@@ -58,7 +58,7 @@ def test_unknown_level_is_rejected() -> None:
 
 # 0.2.0 (session 9): Medium added; Easy output unchanged.
 GOLDEN_MEDIUM = {
-    0: "1e480c52bf5ff07158d24b5c95b54a4698a09d62c3dc250ddccc25c814864e87",
+    0: "c6690e6c57b35c4e06abf14dd574efc9a7c9c5343070dbe5780dc4bcdbfecae9",
 }
 
 

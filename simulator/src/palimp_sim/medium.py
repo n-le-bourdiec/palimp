@@ -226,7 +226,7 @@ class MediumSimulation(Simulation):
                     rng.choice(("business", "always")),
                     rng.randint(50, 400),
                     "app_dependency",
-                    f"{app.name} integration with {other.name}",
+                    f"{app.name} exchanges data with another application",
                 )
             )
         return flows
@@ -309,7 +309,7 @@ class MediumSimulation(Simulation):
             name, ip = token.split(":")[1], f"203.0.113.{150 + vendors}"  # .150 to .254
             endpoint = Endpoint("internet", name, [f"{ip}/32"], name)
             kind = "partner_access"
-            summary = f"External support company maintains the {app.name} servers"
+            summary = "An outside support company maintains these servers remotely"
             service = "junos-ssh"
         else:
             person = rng.choice(self.people)
@@ -320,7 +320,7 @@ class MediumSimulation(Simulation):
             ip = f"10.10.{site}.{20 + pcs}"  # .20 to .254, distinct across sites too
             endpoint = Endpoint("users", name, [f"{ip}/32"], name)
             kind = "app_access"
-            summary = f"One named workstation reaches the {app.name} {tier} tier directly"
+            summary = "A named person's workstation reaches a back-end server directly"
         self._ensure_address(name, f"{ip}/32")
         self._hosts[token] = endpoint
         template = FlowTemplate(
@@ -676,24 +676,36 @@ class MediumSimulation(Simulation):
 
         def app_of(commit) -> str | None:
             event = events[commit.event_id]
-            return event.app_id if event.kind in ("new_app", "migration") else None
+            kinds = ("new_app", "migration", "access_request")
+            return event.app_id if event.kind in kinds else None
 
         creating = [c for c in self.commits if c.created and app_of(c)]
-        candidates = [
-            c for c in creating if c.seq >= first_retained and c.seq not in self.traps.batch_commits
-        ]
-        if not candidates:
-            return
-        forced = rng.choice(candidates)
-        for commit in candidates:
-            if commit is not forced and not rng.chance(self.level.misleading_comment_rate):
-                continue
+        final = {p.uid for p in self.config.policies}
+
+        def source_of(commit):
             # The copied comment names an application none of its rules serve.
             served = {self.policy_meta[uid].app_id for uid in commit.created}
             earlier = [c for c in creating if c.seq < commit.seq and app_of(c) not in served]
-            if not earlier:
+            return earlier[-1] if earlier else None
+
+        # People copy comments; the automation account writes its own template.
+        candidates = [
+            c
+            for c in creating
+            if c.seq >= first_retained
+            and c.seq not in self.traps.batch_commits
+            and self.admin(c.admin_id).persona != AUTOMATION
+            and source_of(c) is not None
+        ]
+        # The forced one must leave a rule in the final config to carry the tag.
+        visible = [c for c in candidates if any(uid in final for uid in c.created)]
+        if not visible:
+            return
+        forced = rng.choice(visible)
+        for commit in candidates:
+            if commit is not forced and not rng.chance(self.level.misleading_comment_rate):
                 continue
-            source = earlier[-1]
+            source = source_of(commit)
             other = app_of(source)
             if source.comment and voice.code(other) in source.comment:
                 text = source.comment

@@ -880,7 +880,7 @@ SHARED_MEDIUM = (
                 "business",
                 60,
                 "management",
-                "IT staff open sessions on the jump hosts",
+                "Administrators open interactive sessions on the admin gateways",
             ),
             _f(
                 "jump",

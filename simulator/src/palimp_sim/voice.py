@@ -136,7 +136,8 @@ def description(persona: str, flow, ticket_id: str | None, requester: str, rng: 
             text += f" req {initials(requester)}"
         return text
     if persona == "hurried_operator":
-        return typo(rng.choice((f"{code(flow.app_id)} acess", f"for {dst}", "temp")), rng, 0.4)
+        options = (f"{code(flow.app_id)} acess", f"for {dst} ({ports})", "temp")
+        return typo(rng.choice(options), rng, 0.4)
     if persona == "contractor":
         return f"{code(flow.app_id)} lot {rng.randint(1, 4)}"
     if persona == "automation":
@@ -168,7 +169,7 @@ def commit_comment(
             "syslog_add": ("syslog: add collector",),
             "syslog_remove": ("syslog: remove old collector",),
             "cleanup": ("rule cleanup", "remove unused rules", "cleanup zero hit rules"),
-            "access": (f"{app} access request", f"access to {app}", f"{app} user access"),
+            "access": (f"{app} access request", f"access to {app}", f"{app} acl req"),
             "access_end": (f"{app} access removed", f"remove {app} access"),
         }[kind]
         text = rng.choice(options)
