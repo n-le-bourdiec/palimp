@@ -18,13 +18,29 @@ def main(argv: list[str] | None = None) -> int:
     gen.add_argument("--seed", type=int, required=True)
     gen.add_argument("--out", type=Path, default=Path("scenarios"))
     gen.add_argument("--force", action="store_true", help="overwrite an existing scenario")
+    gen.add_argument(
+        "--knob",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="override one knob of the level, for example log_collection=syslog-server",
+    )
     args = parser.parse_args(argv)
+    overrides = {}
+    for item in args.knob:
+        name, sep, value = item.partition("=")
+        if not sep:
+            parser.error(f"--knob expects NAME=VALUE, got {item!r}")
+        overrides[name] = value
 
     directory = args.out / f"scenario-{scenario_id(args.level, args.seed)}"
     if directory.exists() and any(directory.iterdir()) and not args.force:
         print(f"{directory} already exists, use --force to overwrite", file=sys.stderr)
         return 1
-    files = generate(args.level, args.seed)
+    try:
+        files = generate(args.level, args.seed, overrides)
+    except ValueError as error:
+        parser.error(str(error))
     write_scenario(files, directory)
     print(directory)
     return 0

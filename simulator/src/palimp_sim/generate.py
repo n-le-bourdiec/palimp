@@ -22,19 +22,23 @@ def _json(document: dict) -> str:
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
 
 
-def generate(level: str, seed: int) -> dict[str, bytes]:
-    """Return every file of the scenario as {relative path: content}."""
+def generate(level: str, seed: int, overrides: dict | None = None) -> dict[str, bytes]:
+    """Return every file of the scenario as {relative path: content}.
+
+    `overrides` replaces individual knobs of the level (spec section 7.1).
+    """
     if level not in LEVELS:
         raise ValueError(f"level {level!r} is not implemented (available: {sorted(LEVELS)})")
     if seed < 0:
         raise ValueError("seed must be zero or positive")
-    sim = Simulation(LEVELS[level], seed).run()
-    traffic = simulate(sim, Rng(f"palimp-sim:{level}:{seed}").derive("traffic"))
+    sim = Simulation(LEVELS[level].with_overrides(overrides or {}), seed).run()
+    rng = Rng(f"palimp-sim:{level}:{seed}")
+    traffic = simulate(sim, rng.derive("traffic"))
     log_text, log_lines = rt_flow_log(sim, traffic)
     texts = {
         "artifacts/config.set": render_set(sim.config),
         "artifacts/commits.txt": commits_txt(sim),
-        "artifacts/hitcount.txt": hitcount_txt(sim, traffic),
+        "artifacts/hitcount.txt": hitcount_txt(sim, traffic, rng.derive("hitcount")),
         "artifacts/logs/rt_flow.log": log_text,
         "artifacts/tickets.csv": tickets_csv(sim),
     }

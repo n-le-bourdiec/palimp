@@ -42,12 +42,14 @@ def test_policy_names_are_unique(scenario) -> None:
 
 def test_hitcount_lists_every_policy(scenario) -> None:
     rows = scenario["artifacts/hitcount.txt"].splitlines()[2:]
-    names = [row.split()[3] for row in rows]
-    assert names == [key[2] for key in config_policies(scenario["artifacts/config.set"])]
+    keys = [tuple(row.split()[1:4]) for row in rows]
+    # Rows are in random order (VSRX-7b), so only the set of policies counts.
+    assert sorted(keys) == sorted(config_policies(scenario["artifacts/config.set"]))
+    assert [int(row.split()[0]) for row in rows] == list(range(1, len(rows) + 1))
 
 
 def test_commit_history_matches_rollbacks(scenario) -> None:
-    entries = [x for x in scenario["artifacts/commits.txt"].splitlines() if x[:1] != " "]
+    entries = [x for x in scenario["artifacts/commits.txt"].splitlines() if x[:1].isdigit()]
     rollbacks = [p for p in scenario if p.startswith("artifacts/rollbacks/")]
     assert len(entries) == len(rollbacks) + 1
     assert len(entries) <= 50

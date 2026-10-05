@@ -12,7 +12,8 @@ import pytest
 from palimp_sim.generate import generate
 
 COMMIT = re.compile(r"^(\d+)\s+(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) ")
-LINE = re.compile(r"^<14>1 (\S+) \S+ RT_FLOW - RT_FLOW_SESSION_(CREATE|CLOSE) ")
+# Device lines start with `<14>1`, syslog server lines with the server prefix.
+LINE = re.compile(r" ?1 (\S+) \S+ RT_FLOW - RT_FLOW_SESSION_(CREATE|CLOSE) ")
 
 
 def log_options(config: str) -> dict[str, set[str]]:
@@ -41,10 +42,12 @@ def configs_by_time(files: dict[str, str]) -> list[tuple[datetime, dict[str, set
 
 @pytest.mark.parametrize("seed", range(10))
 def test_log_lines_follow_policy_log_options(seed: int) -> None:
-    files = {path: data.decode("utf-8") for path, data in generate("easy", seed).items()}
+    overrides = {"log_collection": "syslog-server"} if seed % 2 else {}
+    generated = generate("easy", seed, overrides)
+    files = {path: data.decode("utf-8") for path, data in generated.items()}
     timeline = configs_by_time(files)
     for line in files["artifacts/logs/rt_flow.log"].splitlines():
-        stamp, kind = LINE.match(line).groups()
+        stamp, kind = LINE.search(line).groups()
         moment = datetime.strptime(stamp[:19], "%Y-%m-%dT%H:%M:%S")
         if kind == "CLOSE":
             moment -= timedelta(seconds=int(re.search(r'elapsed-time="(\d+)"', line).group(1)))

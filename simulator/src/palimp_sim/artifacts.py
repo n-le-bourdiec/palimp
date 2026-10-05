@@ -1,14 +1,21 @@
-"""Artifact writers (spec section 5). Layouts are VSRX assumptions until confirmed."""
+"""Artifact writers (spec section 5).
+
+Layouts follow the samples in tests/fixtures/junos_docs/ (see
+docs/format-assumptions.md); simulator/tests/test_formats.py checks them.
+"""
 
 import csv
 import io
+import ipaddress
 from datetime import datetime, time, timedelta
 
 from palimp_sim.junos import Policy, render_set
+from palimp_sim.rng import Rng
 from palimp_sim.traffic import TrafficResult
 
 RETAINED = 50  # rollback 0 to 49 (VSRX-6)
-SD_ID = "junos@2636.1.1.1.2.129"  # VSRX-9
+SD_ID = "junos@2636.1.1.1.2.129"  # VSRX-9b, unverified: samples show .34 and .39
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 def commit_index(sim, seq: int) -> int:
@@ -30,6 +37,13 @@ def commits_txt(sim) -> str:
         )
         if commit.comment:
             lines.append(f"    {commit.comment}")
+    if sim.level.rescue_line:
+        # Rescue configuration saved after the first commit of the history,
+        # printed last as in the documentation sample (VSRX-4b).
+        first = sim.commits[0]
+        moment = timestamp(sim, first.day, first.second + 600)
+        zone = sim.level.device_time_zone
+        lines.append(f"rescue  {moment:%Y-%m-%d %H:%M:%S} {zone} by root via other")
     return "\n".join(lines) + "\n"
 
 
@@ -41,19 +55,43 @@ def rollback_files(sim) -> dict[str, str]:
     return files
 
 
-def hitcount_txt(sim, traffic: TrafficResult) -> str:
-    policies = sim.config.ordered_policies()
-    width = max([24] + [len(p.name) + 2 for p in policies])
+def hitcount_txt(sim, traffic: TrafficResult, rng: Rng) -> str:
+    """`show security policies hit-count` (VSRX-7).
+
+    Without options the device lists rows in random order and `Index` is a
+    line number (VSRX-7b), so rows are shuffled and numbered from 1.
+    """
+    policies = rng.shuffled(sim.config.ordered_policies())
+    counts = []
+    for policy in policies:
+        stats = traffic.policies.get(policy.uid)
+        counts.append(stats.hits_since_reset if stats else 0)
+    zones = max([len(p.from_zone) for p in policies] + [len(p.to_zone) for p in policies])
+    names = max(len(p.name) for p in policies)
+    if sim.level.hitcount_layout == "legacy":
+        # hitcount_legacy.txt: lowercase header, no Action column, footer.
+        zone_width = max(13, zones + 2)
+        name_width = max(16, names + 2)
+        lines = ["index   from zone    to zone       name       policy count"]
+        for index, (policy, count) in enumerate(zip(policies, counts, strict=True), start=1):
+            lines.append(
+                f" {index:<8}{policy.from_zone:<{zone_width}}{policy.to_zone:<{zone_width}}"
+                f"{policy.name:<{name_width}}{count}"
+            )
+        lines += ["", f"Number of policy: {len(policies)}"]
+        return "\n".join(lines) + "\n"
+    # hitcount_logical_system.txt: column widths of the documentation header.
+    zone_width = max(17, zones + 2)
+    name_width = max(22, names + 2)
     lines = [
         "Logical system: root-logical-system",
-        f" {'Index':<8}{'From zone':<17}{'To zone':<18}{'Name':<{width}}{'Policy count':<14}Action",
+        f"{'Index':<7}{'From zone':<{zone_width}}{'To zone':<{zone_width}}"
+        f"{'Name':<{name_width}}{'Policy count':<14}Action",
     ]
-    for index, policy in enumerate(policies, start=1):
-        stats = traffic.policies.get(policy.uid)
-        count = stats.hits_since_reset if stats else 0
+    for index, (policy, count) in enumerate(zip(policies, counts, strict=True), start=1):
         lines.append(
-            f" {index:<8}{policy.from_zone:<17}{policy.to_zone:<18}"
-            f"{policy.name:<{width}}{count:<14}Permit"
+            f"{index:<7}{policy.from_zone:<{zone_width}}{policy.to_zone:<{zone_width}}"
+            f"{policy.name:<{name_width}}{count:<14}Permit"
         )
     return "\n".join(lines) + "\n"
 
@@ -70,60 +108,145 @@ def _iso(moment: datetime, millis: int) -> str:
     return f"{moment:%Y-%m-%dT%H:%M:%S}.{millis:03d}Z"
 
 
+def _bsd(moment: datetime) -> str:
+    """Syslog server timestamp, `Sep 06 16:54:22` (rt_flow_structured_12.3_remote.txt)."""
+    return f"{MONTHS[moment.month - 1]} {moment:%d %H:%M:%S}"
+
+
+# Attributes after `encrypted` in the 22.2R1 templates (VSRX-9c,
+# syslog_explorer_rt_flow_session_*.txt). No published line shows their
+# values: "N/A" is an assumption.
+EXTRA_22_2 = {
+    "CREATE": (
+        "application-category application-sub-category application-risk "
+        "application-characteristics src-vrf-grp dst-vrf-grp tunnel-inspection "
+        "tunnel-inspection-policy-set source-tenant destination-service"
+    ).split(),
+    "CLOSE": (
+        "application-category application-sub-category application-risk "
+        "application-characteristics secure-web-proxy-session-type peer-session-id "
+        "peer-source-address peer-source-port peer-destination-address "
+        "peer-destination-port hostname src-vrf-grp dst-vrf-grp tunnel-inspection "
+        "tunnel-inspection-policy-set session-flag source-tenant destination-service"
+    ).split(),
+}
+
+
+def _attributes(kind: str, release: str, values: dict[str, str]) -> list[tuple[str, str]]:
+    """Ordered RT_FLOW attributes of one message for a release (VSRX-9c).
+
+    "12.x" follows rt_flow_structured_12.1x47.txt; "pre-22.2" and "22.2"
+    follow the 22.2R1 templates (the first one stops at `encrypted`).
+    """
+    old = release == "12.x"
+    names = ["reason"] if kind == "CLOSE" else []
+    names += "source-address source-port destination-address destination-port".split()
+    names += [] if old else ["connection-tag"]
+    names += "service-name nat-source-address nat-source-port".split()
+    names += "nat-destination-address nat-destination-port".split()
+    if old:
+        names += "src-nat-rule-name dst-nat-rule-name".split()
+    else:
+        names += "nat-connection-tag src-nat-rule-type src-nat-rule-name".split()
+        names += "dst-nat-rule-type dst-nat-rule-name".split()
+    names += "protocol-id policy-name source-zone-name destination-zone-name".split()
+    names += ["session-id-32" if old else "session-id"]
+    if kind == "CREATE":
+        names += "username roles packet-incoming-interface".split()
+        names += [] if old else "application nested-application encrypted".split()
+    else:
+        names += "packets-from-client bytes-from-client packets-from-server".split()
+        names += "bytes-from-server elapsed-time application nested-application".split()
+        names += "username roles packet-incoming-interface".split()
+        names += [] if old else ["encrypted"]
+    if release == "22.2":
+        names += EXTRA_22_2[kind]
+    rule = "None" if old else "N/A"
+    defaults = {
+        "connection-tag": "0",
+        "nat-connection-tag": "0",
+        "src-nat-rule-name": rule,
+        "dst-nat-rule-name": rule,
+        "session-id-32": values.get("session-id", ""),
+        "application": "UNKNOWN",
+        "nested-application": "UNKNOWN",
+        "encrypted": "UNKNOWN",
+    }
+    return [(name, values.get(name, defaults.get(name, "N/A"))) for name in names]
+
+
+def _source_address(sim) -> str:
+    """Address the device sends logs from: its interface toward the collector."""
+    collector = ipaddress.IPv4Address(sim.config.log_stream_host)
+    for zone in sim.config.zones:
+        interface = ipaddress.IPv4Interface(zone.address)
+        if collector in interface.network:
+            return str(interface.ip)
+    return str(ipaddress.IPv4Interface(sim.config.zones[0].address).ip)
+
+
 def rt_flow_log(sim, traffic: TrafficResult) -> tuple[str, dict[str, int]]:
-    """Structured syslog RT_FLOW lines, and the number of lines per policy uid."""
+    """Structured syslog RT_FLOW lines, and the number of lines per policy uid.
+
+    `log_collection="device"` writes lines as `show security log file` prints
+    them (`<14>1 ...`, rt_flow_structured_12.1x47.txt). "syslog-server" writes
+    them as a remote server stores them: server timestamp and device address
+    first, no `<PRI>` (rt_flow_structured_12.3_remote.txt, VSRX-9d). The
+    server clock is taken equal to the device clock.
+    """
     policies = _all_policies(sim)
     interface_of = {zone.name: f"{zone.interface}.0" for zone in sim.config.zones}
     host = sim.host_name
+    release = sim.level.log_release
+    server = sim.level.log_collection == "syslog-server"
+    source = _source_address(sim)
     sessions = sorted(
         traffic.sessions, key=lambda s: (s.day, s.second, s.policy_uid, s.flow_id, s.src_port)
     )
     entries: list[tuple[datetime, int, str]] = []
     counts: dict[str, int] = {}
+
+    def emit(kind: str, moment: datetime, millis: int, values: dict[str, str]) -> None:
+        pairs = " ".join(f'{k}="{v}"' for k, v in _attributes(kind, release, values))
+        body = f"{_iso(moment, millis)} {host} RT_FLOW - RT_FLOW_SESSION_{kind} [{SD_ID} {pairs}]"
+        prefix = f"{_bsd(moment)} {source} 1" if server else "<14>1"
+        entries.append((moment, millis, f"{prefix} {body}"))
+
     for number, session in enumerate(sessions):
         policy = policies[session.policy_uid]
         session_id = 40000 + number
-        protocol_id = 6 if session.protocol == "tcp" else 17
-        common = (
-            f'source-address="{session.src_ip}" source-port="{session.src_port}" '
-            f'destination-address="{session.dst_ip}" destination-port="{session.dst_port}" '
-            f'connection-tag="0" service-name="{session.service}" '
-            f'nat-source-address="{session.src_ip}" nat-source-port="{session.src_port}" '
-            f'nat-destination-address="{session.dst_ip}" '
-            f'nat-destination-port="{session.dst_port}" nat-connection-tag="0" '
-            f'src-nat-rule-type="N/A" src-nat-rule-name="N/A" dst-nat-rule-type="N/A" '
-            f'dst-nat-rule-name="N/A" protocol-id="{protocol_id}" '
-            f'policy-name="{policy.name}" source-zone-name="{policy.from_zone}" '
-            f'destination-zone-name="{policy.to_zone}" session-id="{session_id}"'
-        )
-        tail = (
-            f'username="N/A" roles="N/A" '
-            f'packet-incoming-interface="{interface_of[policy.from_zone]}" '
-            f'application="UNKNOWN" nested-application="UNKNOWN" encrypted="UNKNOWN"'
-        )
+        values = {
+            "source-address": session.src_ip,
+            "source-port": str(session.src_port),
+            "destination-address": session.dst_ip,
+            "destination-port": str(session.dst_port),
+            "service-name": session.service,
+            "nat-source-address": session.src_ip,
+            "nat-source-port": str(session.src_port),
+            "nat-destination-address": session.dst_ip,
+            "nat-destination-port": str(session.dst_port),
+            "protocol-id": "6" if session.protocol == "tcp" else "17",
+            "policy-name": policy.name,
+            "source-zone-name": policy.from_zone,
+            "destination-zone-name": policy.to_zone,
+            "session-id": str(session_id),
+            "packet-incoming-interface": interface_of[policy.from_zone],
+        }
         start = timestamp(sim, session.day, session.second)
         millis = (session_id * 37) % 1000
         if session.log_init:
-            text = (
-                f"<14>1 {_iso(start, millis)} {host} RT_FLOW - RT_FLOW_SESSION_CREATE "
-                f"[{SD_ID} {common} {tail}]"
-            )
-            entries.append((start, millis, text))
+            emit("CREATE", start, millis, values)
             counts[session.policy_uid] = counts.get(session.policy_uid, 0) + 1
         if session.log_close:
-            end = start + timedelta(seconds=session.elapsed)
-            reason = "TCP FIN" if session.protocol == "tcp" else "idle Timeout"
-            stats = (
-                f'packets-from-client="{session.packets_in}" '
-                f'bytes-from-client="{session.bytes_in}" '
-                f'packets-from-server="{session.packets_out}" '
-                f'bytes-from-server="{session.bytes_out}" elapsed-time="{session.elapsed}"'
-            )
-            text = (
-                f"<14>1 {_iso(end, millis)} {host} RT_FLOW - RT_FLOW_SESSION_CLOSE "
-                f'[{SD_ID} reason="{reason}" {common} {stats} {tail}]'
-            )
-            entries.append((end, millis, text))
+            values |= {
+                "reason": "TCP FIN" if session.protocol == "tcp" else "idle Timeout",
+                "packets-from-client": str(session.packets_in),
+                "bytes-from-client": str(session.bytes_in),
+                "packets-from-server": str(session.packets_out),
+                "bytes-from-server": str(session.bytes_out),
+                "elapsed-time": str(session.elapsed),
+            }
+            emit("CLOSE", start + timedelta(seconds=session.elapsed), millis, values)
             counts[session.policy_uid] = counts.get(session.policy_uid, 0) + 1
     entries.sort(key=lambda e: (e[0], e[1], e[2]))
     return "".join(text + "\n" for _, _, text in entries), counts

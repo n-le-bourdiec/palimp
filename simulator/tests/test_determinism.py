@@ -9,9 +9,12 @@ from palimp_sim.generate import generate
 # SHA-256 of manifest.json, which holds the SHA-256 of every other file.
 # Computed on Windows; CI checks the same values on Linux. Update only with a
 # simulator version bump.
+# 0.2.0 (session 8): hitcount.txt follows the documentation layout and lists
+# rows in random order; RT_FLOW CLOSE attributes follow the template order;
+# four format knobs added to the manifest; simulator_version in ground truth.
 GOLDEN = {
-    1: "3d11d5bfc55873b8d89c38cb5945b8a72f674a977bee79ac5d17cf58c3628757",
-    7: "5623ae2da1042de2c7e7aa183691ee21f3576ac36f7ab3c5365fe6f42f857d8c",
+    1: "7b1b31876f097896ea3a7cd5f332d3a2d469cfb2a84b94a003e9da99152d5c9a",
+    7: "e4e8c9fb36c9560fc3a153a460b760a7fb919230e35942e8e54c14f40a736872",
 }
 
 
@@ -32,6 +35,20 @@ def test_golden_manifest(seed: int) -> None:
 def test_no_carriage_returns() -> None:
     for path, data in generate("easy", 1).items():
         assert b"\r" not in data, path
+
+
+def test_overrides_are_deterministic_and_recorded() -> None:
+    overrides = {"log_collection": "syslog-server", "rescue_line": "true"}
+    first = generate("easy", 3, overrides)
+    assert first == generate("easy", 3, overrides)
+    assert b'"log_collection": "syslog-server"' in first["manifest.json"]
+
+
+def test_unknown_knob_or_value_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        generate("easy", 1, {"no_such_knob": "1"})
+    with pytest.raises(ValueError):
+        generate("easy", 1, {"log_collection": "carrier-pigeon"})
 
 
 def test_unknown_level_is_rejected() -> None:
