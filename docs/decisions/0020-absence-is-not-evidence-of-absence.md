@@ -78,3 +78,24 @@ Yes, in the session 12 prompt: build the evaluation with a naive baseline
 first (zero hits gives removal candidate, otherwise keep), then improve the
 evidence. Outcome: adopted; the session reports palimp before and after the
 new not-live evidence collectors, next to the baseline.
+
+## Refinements after the first evaluation (same session)
+
+Recorded the same day, before the decision was pushed, after the first run on
+Medium dev seeds 0 to 19. Both are scoring rules, stated here so that the
+decision stays the single place that describes them:
+
+- HIGH also needs traffic seen (a `present` T2 item). Without it, agreeing T1
+  and T3 give MEDIUM (`C-T1-T3-AGREE-NO-TRAFFIC`): a documented intent on a
+  deactivated, rare or unlogged policy may be stale. Every overconfident rule
+  of the first run (74 of 3099) was in that case.
+- A temporary label (`temp`, `test`, `urgent`, typos of `temp`) gives
+  `verify` on a policy that carries traffic only when the policy permits any
+  application (`V-TEMPORARY-IN-USE`), the shape of an emergency opening. A
+  narrow policy with a "temp" label is judged like any other: in the first
+  run, 91 such policies carried needed traffic.
+- The cleanup leftover signal (a later commit deleted other policies on the
+  same object) was prototyped and not kept: it mostly fired on migrations,
+  where the old policy is deleted and a new one replaces it. Only the
+  decommission leftover is implemented (`palimp.notlive`), and only when every
+  application the policy names is the retired one.

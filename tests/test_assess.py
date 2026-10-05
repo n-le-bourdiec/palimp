@@ -65,7 +65,20 @@ def test_traffic_rules() -> None:
     assert verdict(HITS, NO_LOG) == ("keep", "V-TRAFFIC")
     assert verdict(HITS, LOG_ZERO) == ("verify", "V-TRAFFIC-NOT-RECENT")
     temporary = ("T3", "temporary_marker", None, [])
-    assert verdict(temporary, HITS) == ("verify", "V-TEMPORARY-IN-USE")
+    assert verdict(temporary, HITS) == ("keep", "V-TRAFFIC")
+    broad = assess(
+        finding(temporary, ("T4", "services", None, []), HITS),
+        DATASET,
+    )
+    assert broad.verdict == "keep"  # POLICY does not permit any application
+    POLICY.applications = ["any"]
+    try:
+        assert verdict(temporary, ("T4", "services", None, []), HITS) == (
+            "verify",
+            "V-TEMPORARY-IN-USE",
+        )
+    finally:
+        POLICY.applications = []
 
 
 def test_confidence_levels() -> None:
@@ -75,6 +88,7 @@ def test_confidence_levels() -> None:
 
     t1_crm = ("T1", "description", None, ["crm"])
     assert level(t1_crm, OBJECTS, HITS) == ("HIGH", "C-T1-T3-AGREE")
+    assert level(t1_crm, OBJECTS, HITS_ZERO) == ("MEDIUM", "C-T1-T3-AGREE-NO-TRAFFIC")
     assert level(t1_crm, HITS) == ("MEDIUM", "C-T1-ONLY")
     assert level(OBJECTS, HITS) == ("MEDIUM", "C-T3")
     assert level(("T4", "services", None, []), HITS) == ("LOW", "C-WEAK")

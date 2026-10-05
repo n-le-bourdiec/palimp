@@ -5,7 +5,9 @@ Every output names the rule that produced it and cites evidence IDs.
 Verdict rules, first match wins:
 - V-CONTRADICTION (verify): a positive not-live signal, but traffic is seen.
 - V-NOTLIVE (removal_candidate): a positive not-live signal, no traffic seen.
-- V-TEMPORARY-IN-USE (verify): traffic seen on a policy marked temporary.
+- V-TEMPORARY-IN-USE (verify): traffic seen on a policy marked temporary that
+  permits any application (the shape of an emergency opening). A narrow
+  policy with a "temp" label is judged like any other.
 - V-TRAFFIC-NOT-RECENT (verify): hits on the counters, but a logging policy
   logged no session in the log window.
 - V-TRAFFIC (keep): traffic seen.
@@ -16,7 +18,10 @@ Verdict rules, first match wins:
 Confidence rules (about the intent), first match wins:
 - C-T1-T3-CONFLICT: a T1 item names applications that the address objects do
   not name. One level below what the agreeing evidence alone would give.
-- C-T1-T3-AGREE (HIGH): T1 names an application the address objects name.
+- C-T1-T3-AGREE (HIGH): T1 names an application the address objects name,
+  and traffic is seen (T2 present).
+- C-T1-T3-AGREE-NO-TRAFFIC (MEDIUM): the same without traffic seen: the
+  documented intent may be stale (deactivated, rare or unlogged policy).
 - C-T1-ONLY (MEDIUM): T1 names an application, the objects name none.
 - C-T3 (MEDIUM): the address objects name an application.
 - C-WEAK (LOW): nothing names an application (T1 without one, T4 only).
@@ -56,12 +61,14 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
             "a positive not-live signal, and no traffic seen",
             _ids(not_live + absent),
         )
-    if present and temporary:
+    broad = [e for e in evidence if e.kind == "services" and "any" in finding.policy.applications]
+    if present and temporary and broad:
         return (
             "verify",
             "V-TEMPORARY-IN-USE",
-            "a policy marked temporary carries traffic: it may now be load-bearing",
-            _ids(temporary + present),
+            "a policy marked temporary that permits any application carries traffic: "
+            "it may now be load-bearing",
+            _ids(temporary + broad + present),
         )
     hits = [e for e in present if e.kind == "hit_count"]
     quiet_log = [e for e in absent if e.kind == "session_log"]
@@ -119,14 +126,24 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
         apps = list(dict.fromkeys(a for e in direct for a in e.apps))
 
     if conflicts:
-        base = "HIGH" if agree else "MEDIUM"
+        in_use = any(e.tier == "T2" and e.signal == "present" for e in evidence)
+        base = "HIGH" if agree and in_use else "MEDIUM"
         level = LEVELS[LEVELS.index(base) - 1]
         cited = sorted({i for c in conflicts for i in c.evidence} | set(_ids(agree)), key=_order)
         reason = "tiers contradict each other on the application, confidence lowered"
         return level, "C-T1-T3-CONFLICT", reason, cited, apps, conflicts
+    present = [e for e in evidence if e.tier == "T2" and e.signal == "present"]
+    if agree and present:
+        reason = "direct evidence names the same application as the address objects, in use"
+        cited = _ids(agree) + [objects.id] + _ids(present)
+        return "HIGH", "C-T1-T3-AGREE", reason, cited, apps, []
     if agree:
-        reason = "direct evidence names the same application as the address objects"
-        return "HIGH", "C-T1-T3-AGREE", reason, _ids(agree) + [objects.id], apps, []
+        reason = (
+            "direct evidence names the same application as the address objects, "
+            "but no traffic is seen to confirm it is current"
+        )
+        cited = _ids(agree) + [objects.id]
+        return "MEDIUM", "C-T1-T3-AGREE-NO-TRAFFIC", reason, cited, apps, []
     if direct:
         reason = "direct evidence names an application, the address objects do not confirm it"
         return "MEDIUM", "C-T1-ONLY", reason, _ids(direct), apps, []
