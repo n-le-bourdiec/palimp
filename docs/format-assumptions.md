@@ -139,21 +139,44 @@ Still open:
 - The DENY and current-release CREATE tests use lines built from the System
   Log Explorer templates, not published log lines.
 
-Simulator (docs/simulator-spec.md and simulator/):
+Simulator (docs/simulator-spec.md and simulator/), session 8, simulator
+0.2.0. `simulator/tests/test_formats.py` now checks simulator output against
+the fixture line shapes and field names (each shape must first match the
+fixture lines), for every format knob:
 
-- **S1** hit-count rows: index is a line number and rows are not in evaluation
-  order (VSRX-7b); consider emitting the legacy layout as a knob.
-- **S2** rollback storage paths and header (VSRX-8): `/config` for 1 to 3,
-  `/var/db/config` for 4 to 49, header `## Last commit:` in `show
-  configuration` output.
-- **S3** RT_FLOW attribute list (VSRX-9c): current releases emit more
-  attributes after `encrypted`; consider a release knob, including the
-  `session-id-32` era.
-- **S4** collected-log shapes (VSRX-9d): collector prefix without `<PRI>`, as a
-  knob.
-- **S5** commit methods (VSRX-4b): `via other` for system commits, optional
-  `rescue` line; `via netconf` is unverified.
-- **S6** `junos-ntp` (VSRX-12b) is unverified; keep it but flag it.
+- **S1** fixed: hit-count rows use the column positions of
+  `hitcount_logical_system.txt`, are shuffled with the scenario seed and
+  numbered from 1 (VSRX-7b). Knob `hitcount_layout=legacy` writes the
+  `hitcount_legacy.txt` layout (no Action column, footer). The `detail`
+  layout (Redirect column) is not emitted.
+- **S2** fixed in the spec only: stored-file paths (`/config` for 1 to 3,
+  `/var/db/config` for 4 to 49) and the `## Last commit:` header are now
+  stated in spec section 5.3. The stored-file knob itself is not implemented
+  (the simulator writes `display set` rollbacks only), and the header of the
+  stored files stays unverified.
+- **S3** fixed: knob `log_release` (`12.x`, `pre-22.2`, `22.2`) with attribute
+  lists taken from the 12.1X47 sample and the 22.2R1 templates. Also fixed a
+  drift: CLOSE messages listed `username roles packet-incoming-interface`
+  before `application nested-application`; they now follow the template
+  order. Open: values of the 22.2 attributes after `encrypted` are written
+  `N/A` (no published line shows them); 26.2R1 extras and `_LS` messages are
+  not emitted; DENY is not emitted (no deny policies in Easy).
+- **S4** fixed: knob `log_collection=syslog-server` writes
+  `Sep 06 16:54:22 <device address> 1 <ISO time> <host> RT_FLOW - ...` with no
+  `<PRI>`. Default for Medium in the spec (Medium itself is not generated
+  yet); Easy keeps `device`. The standard (unstructured) RT_FLOW format is
+  still not emitted.
+- **S5** fixed in part: knob `rescue_line` adds `rescue ... by root via other`
+  as the last line (default for Medium in the spec). Other system commits
+  (`via other`, `button`, `autoinstall`) are not modeled: no simulator event
+  produces them. `via netconf` stays unverified and unused by Easy; the test
+  allows it explicitly.
+- **S6** flagged: `junos-ntp` stays in the catalog with an "unverified"
+  comment (VSRX-12b), and the spec notes it.
+
+The vMX capture (VSRX-4d) needed no simulator change: comments were already
+written on the next line, indented 4 spaces, with the index padded to four
+columns.
 
 ## Open points that need a real device
 
