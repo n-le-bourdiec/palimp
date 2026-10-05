@@ -1,6 +1,6 @@
 # 0025 Report and questionnaires: citations, blind spots, grouping
 
-- Status: Accepted; questionnaire grouping superseded by 0026
+- Status: Accepted; questionnaire grouping superseded by 0026; citations extended with [S1] by 0027
 - Date: 2026-10-05
 
 ## Context
