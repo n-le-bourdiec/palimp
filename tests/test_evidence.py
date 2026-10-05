@@ -87,6 +87,8 @@ def test_explain_cli_json(artifacts: Path) -> None:
         "locator": "policy crm-web description",
         "claim": "CRM FE 443",
         "signal": None,
+        "kind": "description",
+        "apps": ["crm"],
     }
 
 

@@ -181,6 +181,39 @@ class Evidence(BaseModel):
     # show traffic for this policy (no logging, deactivated, artifact missing).
     # A blind item is a stated gap, never evidence of use or non-use.
     signal: Signal | None = None
+    # Stable label of what the item is (for example "deactivated"), so that
+    # scoring never parses claim text.
+    kind: str = ""
+    # Applications the item names (see palimp.apps), used to check agreement.
+    apps: list[str] = []
+
+
+Verdict = Literal["keep", "verify", "removal_candidate"]
+Confidence = Literal["LOW", "MEDIUM", "HIGH"]
+
+
+class Conflict(BaseModel):
+    """Two evidence items that name different applications for the same policy."""
+
+    evidence: list[str]
+    text: str
+
+
+class Assessment(BaseModel):
+    """Deterministic verdict and confidence, each with the named rule that produced it."""
+
+    verdict: Verdict
+    verdict_rule: str
+    verdict_reason: str
+    verdict_evidence: list[str] = []
+    confidence: Confidence
+    confidence_rule: str
+    confidence_reason: str
+    confidence_evidence: list[str] = []
+    intent_apps: list[str] = Field([], description="applications the intent evidence names")
+    conflicts: list[Conflict] = []
+    question: str | None = None
+    ask: str | None = None
 
 
 class Finding(BaseModel):
@@ -188,6 +221,7 @@ class Finding(BaseModel):
     policy: Policy
     created_in_commit: int | None
     evidence: list[Evidence] = []
+    assessment: Assessment | None = None
 
 
 class Dataset(BaseModel):

@@ -7,12 +7,18 @@ T2 behavioral: hit count row, RT_FLOW log summary. Each T2 item says whether
 the artifact shows traffic ("present"), could show it and shows none
 ("absent"), or cannot show it for this policy ("blind": no logging,
 deactivated, artifact missing), see decision 0019.
-T3 structural: address object names, policies created in the same commit.
+T3 structural: address object names, policies created in the same commit,
+deactivation, a name or description that marks the policy as temporary.
 T4 contextual: plain service names of the applications the policy matches.
+
+Each item has a stable `kind` and the applications it names (`apps`).
 """
 
 import re
+from typing import NamedTuple
 
+from palimp.apps import Vocabulary, vocabulary
+from palimp.assess import assess
 from palimp.behavior import recurrence, time_of_day
 from palimp.models import Dataset, Evidence, Finding, LogSummary, Policy, PolicyKey, Signal
 from palimp.services import describe
@@ -29,8 +35,21 @@ def _resolve(dataset: Dataset, name: str) -> str:
     return f"{name} = {obj.value}"
 
 
-Item = tuple[str, str, str, str, Signal | None]
+class Item(NamedTuple):
+    tier: str
+    artifact: str
+    locator: str
+    claim: str
+    signal: Signal | None = None
+    kind: str = ""
+    apps: list[str] = []
+
+
 LIST_SHOWN = 5
+# Words that mark a policy as temporary: a label, not a sign that it is unused.
+TEMPORARY_WORDS = frozenset(
+    {"temp", "tmp", "temporary", "test", "testing", "urgent", "emergency", "incident", "hotfix"}
+)
 
 
 def _some(values: list[str], count: int) -> str:
@@ -41,15 +60,8 @@ def _some(values: list[str], count: int) -> str:
 def hit_count_items(dataset: Dataset, policy: Policy) -> list[Item]:
     artifact = "hitcount.txt"
     if dataset.hit_count_stats is None:
-        return [
-            (
-                "T2",
-                artifact,
-                "hitcount.txt missing",
-                "no hit counts were provided: use of this policy is unknown from counters",
-                "blind",
-            )
-        ]
+        claim = "no hit counts were provided: use of this policy is unknown from counters"
+        return [Item("T2", artifact, "hitcount.txt missing", claim, "blind", "hit_count")]
     row = next(
         (
             h
@@ -64,11 +76,11 @@ def hit_count_items(dataset: Dataset, policy: Policy) -> list[Item]:
             claim = "no row: deactivated policies match no traffic and are not listed"
         else:
             claim = "no row for this policy: its use is unknown from counters"
-        return [("T2", artifact, locator, claim, "blind")]
+        return [Item("T2", artifact, locator, claim, "blind", "hit_count")]
     since = "since the counters were last cleared (the clear date is not in hitcount.txt)"
     if row.count:
-        return [("T2", artifact, locator, f"{row.count} hits {since}", "present")]
-    return [("T2", artifact, locator, f"0 hits {since}", "absent")]
+        return [Item("T2", artifact, locator, f"{row.count} hits {since}", "present", "hit_count")]
+    return [Item("T2", artifact, locator, f"0 hits {since}", "absent", "hit_count")]
 
 
 def log_summary(dataset: Dataset, policy: Policy) -> LogSummary | None:
@@ -90,20 +102,23 @@ def log_items(dataset: Dataset, policy: Policy) -> list[Item]:
     artifact = "logs/rt_flow.log"
     if dataset.log_stats is None:
         claim = "no session log was provided: traffic of this policy is unknown from logs"
-        return [("T2", artifact, "logs/rt_flow.log missing", claim, "blind")]
+        return [Item("T2", artifact, "logs/rt_flow.log missing", claim, "blind", "session_log")]
     summary = log_summary(dataset, policy)
     locator = f'policy-name="{policy.name}"'
     if summary is not None and (summary.sessions or summary.deny):
-        return [("T2", artifact, locator, _describe(dataset, summary), "present")]
+        return [
+            Item("T2", artifact, locator, _describe(dataset, summary), "present", "session_log")
+        ]
     if policy.deactivated:
         claim = f"no session in {_span(dataset)}: the policy is deactivated, it matches no traffic"
-        return [("T2", artifact, locator, claim, "blind")]
+        return [Item("T2", artifact, locator, claim, "blind", "session_log")]
     if not (policy.log_init or policy.log_close):
         claim = (
             "the policy has no `then log` statement, so the log cannot show its traffic: "
             "no log line here says nothing about use (not the same as no traffic)"
         )
-        return [("T2", artifact, f"policy {policy.name} has no logging", claim, "blind")]
+        locator = f"policy {policy.name} has no logging"
+        return [Item("T2", artifact, locator, claim, "blind", "session_log")]
     options = " and ".join(
         o
         for o, on in (("session-init", policy.log_init), ("session-close", policy.log_close))
@@ -114,7 +129,7 @@ def log_items(dataset: Dataset, policy: Policy) -> list[Item]:
     if window.start and window.end:
         days = (window.end.date() - window.start.date()).days + 1
         claim += f"; a job that runs less often than every {days} days would not show in it"
-    return [("T2", artifact, locator, claim, "absent")]
+    return [Item("T2", artifact, locator, claim, "absent", "session_log")]
 
 
 def _describe(dataset: Dataset, summary: LogSummary) -> str:
@@ -145,22 +160,37 @@ def _describe(dataset: Dataset, summary: LogSummary) -> str:
     return "; ".join(parts)
 
 
-def collect(dataset: Dataset, key: PolicyKey) -> Finding:
+def _temporary_words(policy: Policy) -> list[str]:
+    """Words of the name or description that mark the policy as temporary (typos included)."""
+    words = re.findall(r"[a-z]+", f"{policy.name} {policy.description or ''}".lower())
+    return sorted(
+        {w for w in words if w in TEMPORARY_WORDS or (len(w) == 4 and sorted(w) == list("empt"))}
+    )
+
+
+def collect(dataset: Dataset, key: PolicyKey, vocab: Vocabulary | None = None) -> Finding:
     policy = dataset.config.policy(key)
     if policy is None:
         raise KeyError(f"policy {key} not found in config.set")
+    vocab = vocab or vocabulary(dataset)
     history = dataset.history.get(str(key))
     created = history.created_in_commit if history else None
     commit = next((c for c in dataset.commits if c.index == created), None)
     items: list[Item] = []
 
     if policy.description:
+        locator = f"policy {policy.name} description"
+        apps = vocab.in_text(policy.description)
         items.append(
-            ("T1", "config.set", f"policy {policy.name} description", policy.description, None)
+            Item("T1", "config.set", locator, policy.description, None, "description", apps)
         )
     if commit and commit.comment:
         when = f"{commit.timestamp:%Y-%m-%d %H:%M:%S} {commit.time_zone} by {commit.user}"
-        items.append(("T1", "commits.txt", f"commit {commit.index} ({when})", commit.comment, None))
+        locator = f"commit {commit.index} ({when})"
+        apps = vocab.in_text(commit.comment)
+        items.append(
+            Item("T1", "commits.txt", locator, commit.comment, None, "commit_comment", apps)
+        )
 
     places = [("name", policy.name), ("description", policy.description or "")]
     if commit:
@@ -180,44 +210,55 @@ def collect(dataset: Dataset, key: PolicyKey) -> Finding:
                         ("requester", ticket.requester),
                         ("status", ticket.status),
                         ("opened", ticket.opened),
+                        ("related CI", ticket.related_ci),
                     )
                     if value
                 )
                 claim = f"{ticket.summary or ''} ({details})".strip()
-                items.append(
-                    ("T1", "tickets.csv", f"ticket {ref} (referenced in {place})", claim, None)
-                )
+                apps = vocab.in_text(ticket.summary or "")
+                if ticket.related_ci and (
+                    ci := vocab.lookup(ticket.related_ci.removeprefix("shared-"))
+                ):
+                    apps = [ci] + [a for a in apps if a != ci]
+                locator = f"ticket {ref} (referenced in {place})"
+                items.append(Item("T1", "tickets.csv", locator, claim, None, "ticket", apps))
             else:
                 artifact = "commits.txt" if place.startswith("commit") else "config.set"
+                locator = f"ticket reference {ref} in {place}"
                 items.append(
-                    (
-                        "T1",
-                        artifact,
-                        f"ticket reference {ref} in {place}",
-                        "not in tickets.csv",
-                        None,
-                    )
+                    Item("T1", artifact, locator, "not in tickets.csv", None, "ticket_reference")
                 )
 
     named = [n for n in policy.sources + policy.destinations if n != "any"]
     if named:
         claim = "; ".join(_resolve(dataset, n) for n in named)
-        items.append(("T3", "config.set", "address objects " + ", ".join(named), claim, None))
+        apps = [a for n in named for a in vocab.in_object(n)]
+        apps = list(dict.fromkeys(apps))
+        locator = "address objects " + ", ".join(named)
+        items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps))
+    if policy.deactivated:
+        statements = "; ".join(policy.deactivated_statements) or "deactivate statement"
+        claim = (
+            "the policy is deactivated: it is kept in the configuration but matches no traffic"
+            f" ({statements})"
+        )
+        locator = f"policy {policy.name} deactivated"
+        items.append(Item("T3", "config.set", locator, claim, None, "deactivated"))
+    if words := _temporary_words(policy):
+        claim = (
+            f"the name or description marks the policy as temporary ({', '.join(words)}): "
+            "a label, not a sign that the policy is unused"
+        )
+        locator = f"policy {policy.name} name and description"
+        items.append(Item("T3", "config.set", locator, claim, None, "temporary_marker"))
     if created is not None:
         siblings = [k for k in dataset.created_by_commit.get(created, []) if k != str(key)]
         if siblings:
             locator = f"commit {created}: rollback-{created + 1:02d} vs " + (
                 "config.set" if created == 0 else f"rollback-{created:02d}"
             )
-            items.append(
-                (
-                    "T3",
-                    "rollbacks",
-                    locator,
-                    "created together with " + ", ".join(siblings),
-                    None,
-                )
-            )
+            claim = "created together with " + ", ".join(siblings)
+            items.append(Item("T3", "rollbacks", locator, claim, None, "created_together"))
 
     items += hit_count_items(dataset, policy) + log_items(dataset, policy)
     if policy.applications:
@@ -227,16 +268,26 @@ def collect(dataset: Dataset, key: PolicyKey) -> Finding:
             for line in describe(name, dataset.config.applications)
         ]
         locator = "applications " + ", ".join(policy.applications)
-        items.append(("T4", "config.set", locator, "; ".join(services), None))
+        items.append(Item("T4", "config.set", locator, "; ".join(services), None, "services"))
 
     evidence = [
         Evidence(
-            id=f"E{i}", tier=tier, artifact=artifact, locator=locator, claim=claim, signal=signal
+            id=f"E{i}",
+            tier=item.tier,
+            artifact=item.artifact,
+            locator=item.locator,
+            claim=item.claim,
+            signal=item.signal,
+            kind=item.kind,
+            apps=item.apps,
         )
-        for i, (tier, artifact, locator, claim, signal) in enumerate(items, start=1)
+        for i, item in enumerate(items, start=1)
     ]
-    return Finding(key=key, policy=policy, created_in_commit=created, evidence=evidence)
+    finding = Finding(key=key, policy=policy, created_in_commit=created, evidence=evidence)
+    finding.assessment = assess(finding, dataset)
+    return finding
 
 
 def collect_all(dataset: Dataset) -> list[Finding]:
-    return [collect(dataset, p.key) for p in dataset.config.policies]
+    vocab = vocabulary(dataset)
+    return [collect(dataset, p.key, vocab) for p in dataset.config.policies]
