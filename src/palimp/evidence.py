@@ -110,6 +110,10 @@ def log_items(dataset: Dataset, policy: Policy) -> list[Item]:
         if on
     )
     claim = f"the policy logs {options}, and no session was logged in {_span(dataset)}"
+    window = dataset.log_window
+    if window.start and window.end:
+        days = (window.end.date() - window.start.date()).days + 1
+        claim += f"; a job that runs less often than every {days} days would not show in it"
     return [("T2", artifact, locator, claim, "absent")]
 
 
