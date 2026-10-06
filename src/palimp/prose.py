@@ -180,6 +180,19 @@ def _has_literal(text: str, value: str) -> bool:
     return re.search(rf"(?<![\w.]){re.escape(value)}(?![\w]|\.\d)", text) is not None
 
 
+MONTH_ABBREVIATIONS = "jan feb mar apr may jun jul aug sep oct nov dec".split()
+ISO_DATE = re.compile(r"\b\d{4}-(\d{2})-\d{2}\b")
+
+
+def _months_of_dates(text: str) -> set[str]:
+    """Month names a cited ISO date licenses (2026-03-14 licenses March)."""
+    found = set()
+    for month in ISO_DATE.findall(text):
+        if 1 <= int(month) <= 12:
+            found.add(MONTH_ABBREVIATIONS[int(month) - 1])
+    return found
+
+
 def _has_number(text: str, number: str) -> bool:
     return re.search(rf"(?<![\d]){re.escape(number)}(?![\d])", text) is not None
 
@@ -234,10 +247,11 @@ def check(
             if not _has_literal(source, value.lower()):
                 return f"{kind} {value} not in the cited evidence"
         text = pattern.sub(" ", text)
+    months = _months_of_dates(source)
     for value in MONTH.findall(text):
         if value == "may":
             continue  # the modal verb; the month is written "May"
-        if not _has(source, value.lower()):
+        if value.lower()[:3] not in months and not _has(source, value.lower()):
             return f"month {value} not in the cited evidence"
     for value in NUMBER.findall(text):
         if not _has_number(source, value):

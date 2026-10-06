@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_TIMEOUT = 120.0
+MAX_TOKENS = 400
 
 
 class Request(BaseModel):
@@ -111,7 +112,8 @@ class OllamaBackend:
                 "stream": False,
                 # Thinking models (qwen3.5) would spend minutes on hidden reasoning.
                 "think": False,
-                "options": {"temperature": 0, "seed": 0},
+                # A paragraph needs far less: the cap stops a model that never ends.
+                "options": {"temperature": 0, "seed": 0, "num_predict": MAX_TOKENS},
             }
         ).encode("utf-8")
         http = urllib.request.Request(

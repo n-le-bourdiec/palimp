@@ -7,6 +7,7 @@ its artifacts.
 
 import json
 import logging
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -252,3 +253,16 @@ def test_modal_may_and_own_policy_name_are_not_rejected(report: Report, names: N
     assert judge(entry, f"Policy {name} may serve this flow [{objects}].", names) is None
     reason = judge(entry, f"It was opened in May [{objects}].", names)
     assert reason == "month May not in the cited evidence"
+
+
+def test_month_of_a_cited_date_is_licensed(report: Report, names: Names) -> None:
+    entry = with_kinds(report, "session_log")
+    log = item(entry, "session_log")
+    dates = re.findall(r"\b(\d{4})-(\d{2})-\d{2}\b", log.claim)
+    assert dates
+    months = "January February March April May June July August September October November December"
+    month = months.split()[int(dates[0][1]) - 1]
+    other = months.split()[int(dates[0][1]) % 12]
+    if not any(int(m) == months.split().index(other) + 1 for _, m in dates):
+        assert judge(entry, f"Logs start in {other} [{log.id}].", names) is not None
+    assert judge(entry, f"Logs start in {month} [{log.id}].", names) is None
