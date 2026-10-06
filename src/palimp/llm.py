@@ -91,7 +91,7 @@ def _opener() -> urllib.request.OpenerDirector:
 
 
 class OllamaBackend:
-    """A local Ollama server, `POST /api/generate`, temperature 0 and a fixed seed."""
+    """A local Ollama server, `POST /api/generate`, temperature 0, a fixed seed, no thinking."""
 
     name = "ollama"
 
@@ -109,6 +109,8 @@ class OllamaBackend:
                 "system": request.system,
                 "prompt": request.prompt,
                 "stream": False,
+                # Thinking models (qwen3.5) would spend minutes on hidden reasoning.
+                "think": False,
                 "options": {"temperature": 0, "seed": 0},
             }
         ).encode("utf-8")

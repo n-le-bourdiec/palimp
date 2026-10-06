@@ -83,5 +83,6 @@ def test_ollama_backend_talks_to_localhost_only(redirect: bool) -> None:
         assert handler.seen[0]["model"] == "tiny"
         assert handler.seen[0]["stream"] is False
         assert handler.seen[0]["options"]["temperature"] == 0
+        assert handler.seen[0]["think"] is False
     finally:
         server.shutdown()
