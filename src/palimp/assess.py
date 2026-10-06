@@ -42,7 +42,7 @@ from palimp.owners import find_owner
 NOT_LIVE_KINDS = frozenset({"deactivated", "decommission", "migration_leftover"})
 LEVELS = ("LOW", "MEDIUM", "HIGH")
 # T1 kinds that state why a policy exists (a decommission states why it ended).
-INTENT_KINDS = frozenset({"description", "commit_comment", "ticket"})
+INTENT_KINDS = frozenset({"description", "annotation", "commit_comment", "ticket"})
 
 
 def _ids(items: list[Evidence]) -> list[str]:

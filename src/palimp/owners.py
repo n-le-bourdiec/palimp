@@ -1,11 +1,11 @@
 """Who to ask about a policy: application owners found in the artifacts.
 
 Plain rules, no scoring weights. Candidates come from:
-- the requester of a ticket the policy references (name, description or the
-  comment of the commit that created it);
+- the requester of a ticket the policy references (name, description,
+  annotations or the comment of the commit that created it);
 - the requesters of the tickets whose related CI is an application the
   intent names (`app_requesters` evidence items);
-- initials after "req" in the description or the commit comment
+- initials after "req" in the description, annotations or the commit comment
   (`req FP`), resolved to the one ticket requester with those initials.
 
 Administrators (commit users, ticket assignees) are kept apart: they made the
@@ -122,7 +122,7 @@ def find_owner(finding: Finding, dataset: Dataset, apps: list[str], conflict: bo
             solid_app = True
 
     known = {t.requester for t in dataset.tickets.values() if t.requester} - staff
-    for item in [e for e in evidence if e.kind in ("description", "commit_comment")]:
+    for item in [e for e in evidence if e.kind in ("description", "annotation", "commit_comment")]:
         for letters in INITIALS_REF.findall(item.claim):
             matches = sorted(n for n in known if initials(n) == letters)
             if len(matches) == 1:

@@ -1,16 +1,17 @@
 """Deterministic evidence collectors. No scoring here.
 
-T1 direct: policy description, comment of the commit that created the policy,
-ticket references found in the name, description or that comment (matched
-against tickets.csv when present), a decommission the policy was left behind
-by (palimp.notlive).
+T1 direct: policy description, annotations of the policy (`/* ... */`, an
+admin's note, hierarchical format only), comment of the commit that created
+the policy, ticket references found in the name, description, annotations or
+that comment (matched against tickets.csv when present), a decommission the
+policy was left behind by (palimp.notlive).
 T2 behavioral: hit count row, RT_FLOW log summary. Each T2 item says whether
 the artifact shows traffic ("present"), could show it and shows none
 ("absent"), or cannot show it for this policy ("blind": no logging,
 deactivated, artifact missing), see decision 0019.
 T3 structural: address object names, policies created in the same commit,
-deactivation, a name or description that marks the policy as temporary, the
-requesters of the tickets for each application named above (palimp.owners),
+deactivation, a name, description or annotation that marks the policy as
+temporary, the requesters of the tickets for each application named above (palimp.owners),
 history lineage from the rollbacks (palimp.lineage): removed or deactivated
 policies whose traffic this one took over, and a migration that left this
 policy pointing to a silent old host.
@@ -191,8 +192,10 @@ def _describe(dataset: Dataset, summary: LogSummary) -> str:
 
 
 def _temporary_words(policy: Policy) -> list[str]:
-    """Words of the name or description that mark the policy as temporary (typos included)."""
-    words = re.findall(r"[a-z]+", f"{policy.name} {policy.description or ''}".lower())
+    """Words of the name, description or annotations that mark the policy as temporary
+    (typos included)."""
+    text = " ".join([policy.name, policy.description or "", *policy.annotations])
+    words = re.findall(r"[a-z]+", text.lower())
     return sorted(
         {w for w in words if w in TEMPORARY_WORDS or (len(w) == 4 and sorted(w) == list("empt"))}
     )
@@ -224,6 +227,12 @@ def collect(
         items.append(
             Item("T1", "config.set", locator, policy.description, None, "description", apps)
         )
+    for number, note in enumerate(policy.annotations, start=1):
+        locator = f"policy {policy.name} annotation" + (
+            f" {number}" if len(policy.annotations) > 1 else ""
+        )
+        apps = vocab.in_text(note)
+        items.append(Item("T1", "config.set", locator, note, None, "annotation", apps))
     if commit and commit.comment:
         when = f"{commit.timestamp:%Y-%m-%d %H:%M:%S} {commit.time_zone} by {commit.user}"
         locator = f"commit {commit.index} ({when})"
@@ -233,6 +242,7 @@ def collect(
         )
 
     places = [("name", policy.name), ("description", policy.description or "")]
+    places += [("annotation", note) for note in policy.annotations]
     if commit:
         places.append((f"commit {commit.index} comment", commit.comment))
     seen: set[str] = set()
@@ -294,11 +304,14 @@ def collect(
         locator = f"policy {policy.name} deactivated"
         items.append(Item("T3", "config.set", locator, claim, None, "deactivated"))
     if words := _temporary_words(policy):
+        where = "name, description or annotation" if policy.annotations else "name or description"
         claim = (
-            f"the name or description marks the policy as temporary ({', '.join(words)}): "
+            f"the {where} marks the policy as temporary ({', '.join(words)}): "
             "a label, not a sign that the policy is unused"
         )
         locator = f"policy {policy.name} name and description"
+        if policy.annotations:
+            locator += " and annotations"
         items.append(Item("T3", "config.set", locator, claim, None, "temporary_marker"))
     if created is not None:
         siblings = [k for k in dataset.created_by_commit.get(created, []) if k != str(key)]
