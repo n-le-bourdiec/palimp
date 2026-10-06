@@ -18,6 +18,15 @@ machine: no network egress, no telemetry, and the optional LLM runs locally.
 adds a prose paragraph per rule and an executive summary written by a local Ollama
 server (`--llm-url`, localhost only). The LLM never decides anything: every sentence
 must cite evidence and may state only facts found in it, otherwise it is replaced by
-the deterministic text. No real model has been measured yet.
+the deterministic text. Text from the artifacts (descriptions, commit comments,
+tickets) is passed to the model as untrusted data and never counts as proof.
+
+Why `--no-llm` is the default: on a 4 GB laptop GPU, the best small model measured
+(qwen3.5:4b) wrote 58% of the rule paragraphs without a rejected sentence, about 8%
+of the sentences that passed the checks were still misleading (true facts wrongly
+related, which the checks cannot see), its paragraphs often left out the intent,
+confidence and verdict reason, and a 170-rule report went from 2 seconds to 26 minutes.
+The deterministic text is the assessment itself. If you want the prose anyway, use
+`--llm --llm-model qwen3.5:4b-q4_K_M`. Details in `docs/llm-writer-measure.md`.
 
 Licensed under the Apache License 2.0.
