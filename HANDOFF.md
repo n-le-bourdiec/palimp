@@ -1,65 +1,60 @@
 # Handoff
 
-## Last session: 17 (2026-10-06), analyzer: questionnaire fixes and the LLM writer (fake backend)
+## Last session: 18 (2026-10-06), analyzer: questionnaire fixes, real local model measure, prompt injection
 
 ### Note for analyzer sessions
 
 - No ground truth schema change.
-- CLAUDE.md: every commit must pass the tests on its own (no commit importing
-  a module added later).
-- Decision 0026 (supersedes the grouping part of 0025): a question is sent
-  only if its answer can change the action. Deactivated rules go to the
-  firewall team cleanup list (report section, `00-firewall-team-cleanup.txt`,
-  question "kept on purpose, as a rollback switch?"). One email per person:
-  "Rules for your applications", then "Rules you may own, please forward if
-  not" (a rule with several candidates is in each candidate's email, with
-  "Also asked:"). Keep rules with LOW confidence or counter-only traffic are
-  listed under "Worth a look" in the report, never in emails. `answers.csv`
-  has one row per rule. `Questionnaire.rules` is now `owned + may_own`.
-- Decision 0027: `palimp.llm` (Ollama backend, localhost only, no proxy, no
-  redirect; deterministic `FakeBackend`) and `palimp.prose` (facts in,
-  paragraph per rule and executive summary out, per sentence validation,
-  deterministic fallback, `LLMRun` with every rejection). Report citations
-  gain `[S1]` for summary facts. `--no-llm` is the default of `explain` and
-  `report`; `--llm --llm-model M [--llm-url U]` turns it on. Hidden
-  `--llm-backend fake` for CLI tests.
+- Decision 0028 (supersedes the licensing part of 0027): untrusted artifact
+  text (descriptions, commit comments, ticket summaries) sits in an
+  `<artifact_data>` block of the prompt as neutralized JSON strings and
+  licenses no fact in validation; a sentence citing only free text must
+  attribute it; judgment and instruction words are rejected. Ollama
+  requests: `think: false`, 400 token cap.
+- `--no-llm` stays the default (measured, see `docs/llm-writer-measure.md`).
+  If `--llm`: `qwen3.5:4b-q4_K_M`.
+- Every questionnaire says "If we do not hear back, the rule is kept."
+  `palimp report` also writes `00-firewall-team-cleanup.txt`. "Worth a
+  look" is ranked by risk (`report.LookEntry`, `Report.worth_a_look`):
+  any application or any source, internet-facing zone (`INTERNET_ZONES`),
+  counters only, LOW confidence; Markdown top 20, JSON all.
 
 ### Done
 
-- Part A: session 16 metrics finalized (62 calls, 3.71 USD). CLAUDE.md rule.
-- Part B: decision 0026 implemented and tested (`tests/test_report.py`:
-  cleanup rules only in the firewall team file, one email per person, owned
-  rules asked once, worth-a-look list exact). Medium seed 0: 8 files instead
-  of 18 (cleanup list of 20 deactivated rules, 6 personal emails, 1 with no
-  name) for 27 rules; largest personal email Quentin Gallo, 3 rules, all in
-  "you may own". No verdict changed.
-- Part C: LLM writer built and tested with the fake backend only
-  (`tests/test_llm.py`, `tests/test_prose.py`): correct sentence passes; no
-  citation, wrong ID, fact from an uncited item, invented IP, person (unknown
-  or real but uncited), date, month, number, application, changed verdict
-  and changed confidence are rejected; rejections counted, logged, replaced
-  by the deterministic text; judgments unchanged after `add_prose`; non-local
-  URLs refused; a local HTTP stand-in for Ollama checks the request and that
-  a redirect is refused. Default fake on Medium seed 0: 1148 sentences kept,
-  9 rejected (all "no evidence ID cited", multi-sentence claims).
+- Part A: session 17 metrics finalized (75 calls, 4.98 USD); the three
+  small fixes above, tested (Easy fast, Medium seed 0 slow).
+- Part B: hardware (Ryzen 5 5600H, 31.3 GB RAM, RTX 3050 Laptop 4 GB);
+  pulled llama3.2:3b (2.0 GB) and qwen3.5:4b-q4_K_M (3.3 GB);
+  `eval/llm_writer.py` measures a model on a stratified sample (60 rules of
+  Medium seeds 0-2) and, with `--poison`, the prompt injection test.
+  qwen3.5:4b: 16.7% sentences rejected, 58% paragraphs fully LLM, 8.8 s
+  per rule; llama3.2:3b: 52.6%, 10%, 4.7 s. 0 judgments changed. Manual
+  review of passed sentences (seed 0): about 8% (qwen) and 36% (llama)
+  wrong or misleading. Poisoned copy: 0 injected claims kept, 0 judgments
+  changed, both models. Prompt injection tests with the fake backend
+  (`tests/test_prompt_injection.py`). Three false positives fixed after a
+  first run (rule line citations, own policy name, lowercase "may"), and
+  the month of a cited ISO date is now licensed.
 
 ### Next
 
-- Measure a real local model (Ollama): rejection rate per check, prose
-  quality, time per rule; then decide whether `--llm` can become the
-  default. Expect over-rejection from application names that are ordinary
-  words (`internet`, `backup`, `files`, `monitoring`), see decision 0027.
-- Project lead: read the new questionnaires and cleanup list; held-out run
-  for a release including sessions 14 to 17.
+- Project lead: read `docs/llm-writer-measure.md` (side by side, review)
+  and decide whether the LLM writer is worth more work. Options: give the
+  LLM the intent, confidence and verdict reason as sentences it must keep;
+  a relation check (a person named with "requested" must come from a
+  ticket item of this rule, not an application requester item).
+- Known false positives (not fixed, to keep the measure comparable):
+  "in zone servers" reads "zone" as an application; ordinary words before
+  "server" ("specific", "rule", "allows", "predefined").
+- Project lead: held-out run for a release including sessions 14 to 18.
 - Carried over: remaining dead rules at verify (mostly no logging), owners
   of applications with no ticket.
 
 ### Open questions
 
-- Should `palimp questions` also write the cleanup list into the report
-  output directory (today only the report section and the questions file)?
-- Should the "Worth a look" list be capped or sorted by risk (today
-  configuration order; 47+ rules on Medium seed 0)?
+- Is the LLM writer worth more sessions, given the numbers? (decision 0028)
+- Internet-facing is a zone name list (`internet`, `untrust`, `outside`,
+  `external`, `wan`): good enough, or should it use public addresses?
 - Carried over: decision 0020 example without a migration (needs
   approval); held-out level and count; 90% vs best trade; HIGH with an open
   ticket; decision 0019 blind items; per trap metric; Hard trap weights;
@@ -68,11 +63,12 @@
 
 ### Known issues
 
+- Validation checks tokens, not relations: a sentence relating true facts
+  wrongly passes (about 8% of passed qwen sentences).
+- A paragraph with a rejected sentence mixes LLM sentences and the
+  deterministic text, which can repeat facts.
 - Prose validation does not detect a negated verdict ("should not be kept")
-  or a lowercase application name palimp never saw outside the
-  "before app/server/..." pattern (decision 0027).
-- The default fake backend cites only the last sentence of a multi-sentence
-  claim, so those sentences are rejected (harmless, test backend only).
+  or a lowercase application name palimp never saw (decision 0027).
 - The report prints the artifact path as given on the command line.
 - 3 MISLEADING-COMMENT rules on 20 to 99 show no conflict (not inspected).
 - `vendor-arch-109` still does not name `archive`.
@@ -123,9 +119,11 @@ has transcript `427d7108-6479-4578-a3a6-f699f1889575` (finalized in session
 in session 15). Session 15 has transcript
 `f3652112-9922-44ff-96a9-e1ce452c6128` (finalized in session 16). Session 16
 has transcript `b14ba40d-eb4c-4ee4-bc69-02b4a94d38bb` (finalized in session
-17). Session 17 has transcript `052aad46-2e12-4fa9-99c9-54d4730081ee`.
-Finalize it at the start of session 18 with:
+17). Session 17 has transcript `052aad46-2e12-4fa9-99c9-54d4730081ee` (finalized
+in session 18). Session 18 has transcript
+`fd2407ac-42b6-4684-a907-dbaff839c04d`. Finalize it at the start of session 19
+with:
 
-    uv run python metrics/session_tokens.py 052aad46-2e12-4fa9-99c9-54d4730081ee
+    uv run python metrics/session_tokens.py fd2407ac-42b6-4684-a907-dbaff839c04d
 
 Cost is API-equivalent (decision 0006), not a billed amount.
