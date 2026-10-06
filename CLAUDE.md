@@ -79,6 +79,10 @@ realistic firewall history plus a ground-truth file (true intent of every rule).
 - Never use em dashes or en dashes in any text (docs, README, comments, commits).
   Use commas, parentheses or a simple hyphen.
 - Small, focused commits with clear messages.
+- Commits use the GitHub noreply identity, set in the repository config:
+  user.name "n-le-bourdiec", user.email
+  "240397139+n-le-bourdiec@users.noreply.github.com". Never a personal email
+  (GitHub refuses the push, see session 21).
 - Every commit passes the tests on its own: never commit code that imports
   a module, or uses a function, added only in a later commit.
 
