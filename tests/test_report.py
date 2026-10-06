@@ -19,15 +19,18 @@ from typer.testing import CliRunner
 from palimp.assess import NOT_LIVE_KINDS
 from palimp.cli import app
 from palimp.ingest import ingest
-from palimp.questions import answers_csv
+from palimp.questions import answers_csv, cleanup_list
 from palimp.questions import build as build_questions
 from palimp.report import (
     FIREWALL_TEAM,
+    LOOK_SHOWN,
+    RISKS,
     Report,
     build,
     cited_ids,
     counters_only,
     is_cleanup,
+    look_risk,
     markdown,
     worth_a_look,
 )
@@ -137,8 +140,40 @@ def check(report: Report) -> None:
         assert a is not None
         flagged = rule.section == "keep" and (a.confidence == "LOW" or counters_only(rule.finding))
         assert (rule.ref in look) == flagged
+    # Sorted by risk, then configuration order; the JSON keeps all, the Markdown the top 20.
+    ranked = report.worth_a_look
+    assert sorted(e.ref for e in ranked) == sorted(look)
+    ranks = [RISKS.index(e.risk) for e in ranked]
+    assert ranks == sorted(ranks)
+    for entry in ranked:
+        assert RISKS[look_risk(report.rule(entry.ref))] == entry.risk
     section = text.split("## Worth a look", 1)[1].split("\n## ", 1)[0]
-    assert [line.split(" ")[1] for line in section.splitlines() if line.startswith("- R")] == look
+    shown = [line.split(" ")[1] for line in section.splitlines() if line.startswith("- R")]
+    assert shown == [e.ref for e in ranked][:LOOK_SHOWN]
+    for q in questionnaires:
+        assert "If we do not hear back, the rule is kept." in q.text
+
+
+def test_worth_a_look_ranked_by_risk(easy: Path) -> None:
+    dataset = ingest(easy)
+    findings = [r.finding for r in build(dataset).rules]
+    keep = [f for f in findings if f.assessment and f.assessment.verdict == "keep"]
+    logged = [f for f in keep if not counters_only(f)]
+    counted = [f for f in keep if counters_only(f)]
+    low, counters, internet, broad = logged[0], counted[0], logged[1], logged[2]
+    for finding in (low, counters, internet, broad):
+        finding.assessment.confidence = "LOW"  # type: ignore[union-attr]
+        finding.policy.from_zone, finding.policy.to_zone = "trust", "servers"
+        finding.policy.sources, finding.policy.applications = ["host-a"], ["junos-ssh"]
+    internet.policy.to_zone = "untrust"
+    broad.policy.applications = ["any"]
+    report = build(dataset, findings)
+    ref = {id(r.finding): r.ref for r in report.rules}
+    order = [e.ref for e in report.worth_a_look]
+    mine = [ref[id(f)] for f in (broad, internet, counters, low)]
+    assert [r for r in order if r in mine] == mine
+    risk = {e.ref: e.risk for e in report.worth_a_look}
+    assert [risk[r] for r in mine] == list(RISKS)
 
 
 def test_easy_report(easy: Path) -> None:
@@ -171,6 +206,12 @@ def test_report_and_questions_cli(easy: Path, tmp_path: Path) -> None:
     payload = json.loads((tmp_path / "r" / "report.json").read_text(encoding="utf-8"))
     assert payload["summary"]["total"] == len(payload["rules"])
     assert (tmp_path / "r" / "report.md").read_text(encoding="utf-8").startswith("# palimp")
+    # The cleanup list is written next to the report when there is one.
+    cleanup = tmp_path / "r" / "00-firewall-team-cleanup.txt"
+    expected = cleanup_list(Report.model_validate(payload))
+    assert cleanup.is_file() == (expected is not None)
+    if expected is not None:
+        assert cleanup.read_text(encoding="utf-8") == expected.text
     result = runner.invoke(app, ["questions", "-a", str(easy), "-o", str(tmp_path / "q")])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "q" / "answers.csv").is_file()
@@ -180,3 +221,17 @@ def test_report_and_questions_cli(easy: Path, tmp_path: Path) -> None:
 @pytest.mark.parametrize("seed", range(5))
 def test_medium_report(seed: int, tmp_path: Path) -> None:
     check(build(ingest(generate(seed, tmp_path) / "artifacts")))
+
+
+@pytest.mark.slow
+def test_medium_report_writes_cleanup_list(tmp_path: Path) -> None:
+    artifacts = generate(0, tmp_path) / "artifacts"
+    result = CliRunner().invoke(app, ["report", "-a", str(artifacts), "-o", str(tmp_path / "r")])
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / "r" / "00-firewall-team-cleanup.txt").read_text(encoding="utf-8")
+    assert "Hello firewall team" in text
+    assert "If we do not hear back, the rule is kept." in text
+    payload = json.loads((tmp_path / "r" / "report.json").read_text(encoding="utf-8"))
+    look = (tmp_path / "r" / "report.md").read_text(encoding="utf-8").split("## Worth a look")[1]
+    shown = [line for line in look.split("\n## ")[0].splitlines() if line.startswith("- R")]
+    assert len(shown) == min(LOOK_SHOWN, len(payload["worth_a_look"]))

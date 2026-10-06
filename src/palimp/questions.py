@@ -8,6 +8,8 @@ application. A question is sent only if its answer can change the action:
 deactivated rules go to the firewall team cleanup list instead, and keep
 rules are never asked about. Removal candidates come first in each section.
 Each question is yes/no and "yes" always means the access is still needed.
+Every questionnaire states that silence keeps the rule (decision 0024: no
+removal signal from silence alone).
 References (R12, E3) point to the report, for the person who tracks the answers.
 """
 
@@ -146,7 +148,10 @@ INTRO = (
     "We are reviewing the firewall rules we inherited. For each rule below, please answer "
     "yes or no."
 )
-NO_REMOVAL = "A 'no' does not remove anything by itself: we confirm before any change."
+NO_REMOVAL = (
+    "A 'no' does not remove anything by itself: we confirm before any change. "
+    "If we do not hear back, the rule is kept."
+)
 CLOSING = [
     "Thank you.",
     "",
@@ -211,6 +216,11 @@ def _cleanup_letter(entries: list[RuleEntry]) -> str:
         *_items(entries, 1),
     ]
     return "\n".join(lines + CLOSING)
+
+
+def cleanup_list(report: Report) -> Questionnaire | None:
+    """The firewall team cleanup list alone, also written next to the report."""
+    return next((q for q in build(report) if q.name == CLEANUP_NAME), None)
 
 
 def build(report: Report) -> list[Questionnaire]:

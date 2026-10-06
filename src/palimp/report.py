@@ -77,6 +77,15 @@ class BlindSpot(BaseModel):
     rules: list[str] = []  # R12 or R12.E7 references
 
 
+class LookEntry(BaseModel):
+    """A keep rule worth a look by the firewall team, ranked by risk."""
+
+    ref: str
+    key: str
+    risk: str  # one of RISKS
+    reasons: list[Cited] = []
+
+
 class Summary(BaseModel):
     total: int
     keep: int
@@ -120,6 +129,7 @@ class Report(BaseModel):
     global_evidence: list[GlobalEvidence] = []
     notes: list[Note] = []
     rules: list[RuleEntry] = []
+    worth_a_look: list[LookEntry] = []  # all of them, most risky first
     executive_summary: str = ""  # LLM paragraph citing summary_facts, empty without --llm
     summary_facts: list[SummaryFact] = []
     llm: LLMRun | None = None
@@ -244,8 +254,45 @@ def counters_only(finding: Finding) -> bool:
     return not any(i.kind == "session_log" and i.signal == "present" for i in finding.evidence)
 
 
+INTERNET_ZONES = {"internet", "untrust", "outside", "external", "wan"}
+LOOK_SHOWN = 20
+RISKS = (
+    "any application or any source",
+    "internet-facing",
+    "traffic on the counters only",
+    "LOW confidence",
+)
+
+
+def is_broad(finding: Finding) -> bool:
+    """The rule matches any application or any source address."""
+    policy = finding.policy
+    return "any" in policy.applications or not policy.sources or "any" in policy.sources
+
+
+def is_internet_facing(finding: Finding) -> bool:
+    """One side of the rule is a zone named like the internet (untrust, internet, ...)."""
+    policy = finding.policy
+    return bool({policy.from_zone.lower(), policy.to_zone.lower()} & INTERNET_ZONES)
+
+
+def look_risk(entry: "RuleEntry") -> int:
+    """Rank of a worth-a-look rule, 0 most risky: an index into RISKS."""
+    if is_broad(entry.finding):
+        return 0
+    if is_internet_facing(entry.finding):
+        return 1
+    if counters_only(entry.finding):
+        return 2
+    return 3
+
+
 def worth_a_look(entry: "RuleEntry") -> list[Cited]:
-    """Why a keep rule deserves a look: LOW confidence, traffic on the counters only."""
+    """Why a keep rule deserves a look: LOW confidence, traffic on the counters only.
+
+    Broad and internet-facing rules are named first, as they rank the list, but
+    they never put a rule on the list by themselves.
+    """
     assessment = entry.finding.assessment
     assert assessment is not None
     if entry.section != "keep":
@@ -266,7 +313,26 @@ def worth_a_look(entry: "RuleEntry") -> list[Cited]:
                 evidence=list(assessment.verdict_evidence),
             )
         )
-    return reasons
+    if not reasons:
+        return []
+    risks = []
+    if is_broad(entry.finding):
+        risks.append(
+            Cited(text="matches any application or any source", evidence=entry.allows.evidence)
+        )
+    if is_internet_facing(entry.finding):
+        risks.append(Cited(text="internet-facing zone", evidence=entry.allows.evidence))
+    return risks + reasons
+
+
+def looks(rules: list["RuleEntry"]) -> list["LookEntry"]:
+    """Every worth-a-look rule, most risky first, then in configuration order."""
+    found = [
+        LookEntry(ref=r.ref, key=r.key, risk=RISKS[look_risk(r)], reasons=reasons)
+        for r in rules
+        if (reasons := worth_a_look(r))
+    ]
+    return sorted(found, key=lambda e: RISKS.index(e.risk))
 
 
 def why(finding: Finding, notes: dict[str, Note], ref: str) -> list[Cited]:
@@ -577,6 +643,7 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
         global_evidence=found,
         notes=list(notes.values()),
         rules=entries,
+        worth_a_look=looks(entries),
     )
 
 
@@ -713,17 +780,20 @@ def markdown(report: Report) -> str:
         )
     out.append("")
 
-    look = [(r, worth_a_look(r)) for r in report.rules]
-    look = [(r, reasons) for r, reasons in look if reasons]
+    look = report.worth_a_look
     out += [f"## Worth a look ({len(look)})", ""]
     out.append(
         "Keep rules with LOW confidence in the intent, or with traffic on the hit counters "
-        "only. Nothing to ask an owner: worth a look by the firewall team when time allows."
+        "only. Nothing to ask an owner: worth a look by the firewall team when time allows. "
+        "Most risky first: any application or any source, then internet-facing, then traffic "
+        "on the counters only, then LOW confidence."
     )
+    if len(look) > LOOK_SHOWN:
+        out.append(f"The {LOOK_SHOWN} most risky are shown; report.json lists all {len(look)}.")
     out.append("")
-    for entry, reasons in look:
-        text = "; ".join(_line(c, f"{entry.ref}.") for c in reasons)
-        out.append(f"- {entry.ref} `{entry.key}`: {text}")
+    for item in look[:LOOK_SHOWN]:
+        text = "; ".join(_line(c, f"{item.ref}.") for c in item.reasons)
+        out.append(f"- {item.ref} `{item.key}`: {text}")
     out.append("")
 
     keep = [r for r in report.rules if r.section == "keep"]

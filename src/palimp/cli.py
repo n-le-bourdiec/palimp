@@ -11,7 +11,7 @@ from palimp.ingest import ingest as ingest_directory
 from palimp.llm import DEFAULT_OLLAMA_URL, Backend, FakeBackend, NonLocalURLError, OllamaBackend
 from palimp.models import Dataset, Finding, ParseStats, PolicyKey
 from palimp.prose import Names, add_prose, write_rule
-from palimp.questions import answers_csv
+from palimp.questions import answers_csv, cleanup_list
 from palimp.questions import build as build_questions
 from palimp.report import LLMRun, Report, json_report, markdown
 from palimp.report import build as build_report
@@ -278,7 +278,10 @@ def report(
         Path("."), "--artifacts", "-a", help="Artifact directory or `palimp ingest` JSON."
     ),
     out: Path = typer.Option(
-        Path("palimp-report"), "--out", "-o", help="Output directory (report.md, report.json)."
+        Path("palimp-report"),
+        "--out",
+        "-o",
+        help="Output directory (report.md, report.json, firewall team cleanup list).",
     ),
     log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
     llm: bool = typer.Option(False, "--llm/--no-llm", help=LLM_HELP),
@@ -299,10 +302,15 @@ def report(
         typer.echo(_llm_line(run), err=True)
     (out / "report.md").write_text(markdown(built), encoding="utf-8")
     (out / "report.json").write_text(json_report(built), encoding="utf-8")
+    written = f"{out / 'report.md'} and {out / 'report.json'}"
+    cleanup = cleanup_list(built)
+    if cleanup is not None:
+        (out / f"{cleanup.name}.txt").write_text(cleanup.text, encoding="utf-8")
+        written = f"{out / 'report.md'}, {out / 'report.json'} and {out / cleanup.name}.txt"
     s = built.summary
     typer.echo(
         f"{s.total} policies: {s.removal_candidate} removal_candidate, {s.verify} verify, "
-        f"{s.keep} keep; written to {out / 'report.md'} and {out / 'report.json'}"
+        f"{s.keep} keep; written to {written}"
     )
 
 
