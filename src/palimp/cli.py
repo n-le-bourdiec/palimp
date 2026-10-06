@@ -49,9 +49,9 @@ LOG_YEAR_HELP = (
 
 
 LLM_HELP = (
-    "Add a prose paragraph written by a local LLM (Ollama). Off by default: verdicts, "
-    "confidence and owners never depend on it, and every sentence is checked against the "
-    "evidence it cites."
+    "Experimental: add a prose paragraph written by a local LLM (Ollama). Off by default: "
+    "verdicts, confidence and owners never depend on it, and every sentence is checked "
+    "against the evidence it cites."
 )
 LLM_URL_HELP = "Ollama URL. Only localhost or a loopback address is accepted."
 

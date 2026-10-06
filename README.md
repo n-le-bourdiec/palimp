@@ -14,7 +14,8 @@ machine: no network egress, no telemetry, and the optional LLM runs locally.
     palimp report -a ARTIFACTS -o OUT            # OUT/report.md and OUT/report.json
     palimp questions -a ARTIFACTS -o OUT         # one email per person, cleanup list, OUT/answers.csv
 
-`--no-llm` is the default. `--llm --llm-model MODEL` (on `explain` and `report`)
+`--no-llm` is the default. The LLM writer is experimental in v1 (decision 0029):
+`--llm --llm-model MODEL` (on `explain` and `report`)
 adds a prose paragraph per rule and an executive summary written by a local Ollama
 server (`--llm-url`, localhost only). The LLM never decides anything: every sentence
 must cite evidence and may state only facts found in it, otherwise it is replaced by
