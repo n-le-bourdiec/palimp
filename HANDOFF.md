@@ -1,58 +1,56 @@
 # Handoff
 
-## Last session: 21 (2026-10-06), analyzer: push unblocked (noreply identity), parser gaps before release (decision 0034)
+## Last session: 22 (2026-10-06), simulator: Hard level with four new traps (decision 0035)
 
 ### Note for analyzer sessions
 
-- No ground truth schema change.
-- Git identity: repository config `n-le-bourdiec` /
-  `240397139+n-le-bourdiec@users.noreply.github.com` (CLAUDE.md). The 11
-  session 20 commits were rewritten to it (author and committer only,
-  trees and messages unchanged) and pushed; CI green.
-- Decision 0034:
-  - a deactivated zone pair, `security policies global`, `security
-    policies` or `security` deactivates every policy under it
-    (`_Builder.deactivate_scope`, applied in `_Builder.config()` whatever
-    the line order); these follow the existing deactivated path
-    (V-NOTLIVE unless traffic is seen, cleanup list);
-  - global policies: zones `global`/`global` (`models.GLOBAL`), key
-    `global/NAME` (`PolicyKey` prints and parses it), `Policy.is_global`,
-    `match_from_zones`, `match_to_zones`, `zones_text()`; the log lookup is
-    `counters.log_summary` (moved from evidence) with
-    `rt_flow.merge_summaries` for global policies;
-  - `then permit application-services ...`: action permit,
-    `Policy.application_services`, one T3 item kind `application_services`
-    (no apps);
-  - `apply-groups` stays warn-only until the real public configs test.
-- Any new code that reads `policy.from_zone`/`to_zone` as real zones must
-  handle `policy.is_global` (see `report._zones`).
+- No ground truth schema change (decision 0017 does not apply). The schema
+  already had everything Hard uses. New in practice, in Hard ground truth
+  only: `status.still_needed` can be true while `status.live` is false;
+  `name_history` can hold several names (the last one is the key);
+  `hits_reason` takes `scanner`, `monitoring` and `ip_reuse`; global
+  policies are keyed `from_zone` `global`, `to_zone` `global`.
+- `palimp-sim generate --level hard --seed N` exists. Hard scenarios take
+  about 9 s and 14 MB each. About half are hierarchical (file names stay
+  `config.set` and `rollback-NN.set`, the active one starts with a
+  `## Last commit:` header) and about 4 in 10 have global policies. Read
+  only the ground truth schema and the artifacts, as before.
+- Easy and Medium output is byte-identical to session 21 (golden hashes and
+  seeds 0 to 9 of both levels compared): Medium dev scores and the second
+  held-out run on Medium stay comparable.
+- No Hard evaluation was run (simulator session). Before tuning anything on
+  Hard, the project lead decides the Hard dev seed range and whether Hard
+  joins the held-out run (decision 0021).
 
 ### Done
 
-- Part A: repo git identity set to the noreply address; 11 unpushed
-  commits rewritten (filter-branch on `origin/main..HEAD` only; dates,
-  messages, Co-Authored-By lines and trees identical); 650/650 tests with
-  `--runslow`; pushed, CI green. `docs/assets` committed as is, excluded
-  from ruff in `pyproject.toml`. Session 20 metrics finalized (11 commits,
-  124 calls, 8.00 USD). CLAUDE.md records the noreply identity rule.
-- Part B (decision 0034): deactivated scopes (both formats), global
-  policies (both formats, through evidence, verdict, report, explain,
-  anonymize), application-services permit as T3; 6 new documentation
-  fixtures (Global Security Policies page, Application Firewall page),
-  all parse with 0 unknown; GLOBAL-1, APPSVC-1, DEACT-1 in
-  `docs/format-assumptions.md`; README inputs updated.
-- Eval Medium seeds 20-99 before and after: 12553 rules, identical per-rule
-  rows (verdict, rule, confidence and every other field); dangerous errors
-  0 before and after (the simulator writes none of these constructs).
+- Part A: session 21 metrics finalized (124 calls, 6.53 USD); local branch
+  `backup-pre-rewrite-s21` deleted after checking its tree equals the
+  rewritten session 20 commit and every subject is on main.
+- Part B (decision 0035): `levels.HARD`, `hard.HardSimulation` (Medium
+  hooks that draw nothing in Medium), the seven v1 traps with larger drawn
+  counts and the four new traps, each drawn with zero possible, with ground
+  truth tags, verdicts, `max_justified_confidence` from non-misleading
+  evidence, misleading evidence marked, and a naive-reading test
+  (`simulator/tests/test_hard.py`). Format variants drawn and recorded in
+  `format_draw`: hierarchical config (`inactive:`, `/* */` annotations,
+  shapes checked against the `hier_*.txt` fixtures) and global policies.
+  Spec 5.1, 7.1 to 7.5, 11 (VSRX-13 to 15), 12 (S18 to S21) updated.
+- Speed (shared code, bytes unchanged): configuration snapshots without
+  deepcopy and integer address matching; Hard went from 21 s to about 8 s
+  per scenario, Medium from 2.6 s to 1.8 s.
+- Measured over Hard seeds 0 to 49: 415 policies on average (369 to 475),
+  33.7% dead (28 to 41%), 8.5 s (max 10.7 s), 13.9 MB (max 17.3 MB);
+  per-trap table in spec 7.5.
 
 ### Next
 
-- Decision 0032 item 2 (simulator sessions): Hard level with
-  TRAP-RENAME-CHAIN, TRAP-IP-REUSE, TRAP-SCANNER-HITS, TRAP-STALE-NAME.
-- Decision 0032 item 3: real public configs, local only, never committed.
-  Check there: `inactive:`, annotations and descriptions on real security
-  policies (HIER-1b to HIER-1d), global policies in hit counts and logs
-  (GLOBAL-1), how `apply-groups` is used on policies (decision 0034).
+- Decision 0032 item 3 (analyzer): real public configs, local only, never
+  committed. Check there: `inactive:`, annotations and descriptions on real
+  security policies (HIER-1b to HIER-1d), global policies in hit counts and
+  logs (GLOBAL-1), how `apply-groups` is used on policies (decision 0034).
+- Analyzer: first Hard dev evaluation once the project lead sets the seed
+  range; per-trap metrics for the four new traps.
 - Project lead: try `palimp anonymize` on a real config before
   recommending it in the issue template; review the limits in decision
   0031 and the capture issue below.
@@ -61,19 +59,41 @@
 
 ### Open questions
 
-- Other `then permit` options (`tunnel`, `firewall-authentication`,
-  `destination-address`): read them as permit too? The action shows as
-  `-` today; no verdict depends on it.
-- Should anonymize recognize prompts and banners in captures (known issue
-  below)?
+- Hard in the held-out run: which level and how many scenarios (decision
+  0021)? The salt rotation rule (spec 8.2) applies if Hard is added.
+- Hard policy count is 415 on average, under the spec's approximate 450:
+  acceptable, or raise access requests (needs a version bump, which moves
+  the Easy and Medium hashes through the version string)?
+- TRAP-SCANNER-HITS is also tagged on dead rules the scanner reaches by
+  accident (86% of scenarios have one, for 80% drawn): keep tagging by
+  condition, or only the drawn subjects?
+- The Medium column "v2" values of spec 7.1 (IP reuse 0.1, 1 rename a
+  year, cleanup errors 0.02, a contractor period) stay unapplied: applying
+  them changes Medium output. Leave Medium as is until after the release?
+- From the session 22 prompt challenges, still open on the analyzer side:
+  other `then permit` options (`tunnel`, `firewall-authentication`,
+  `destination-address`) read as permit or not; anonymize on terminal
+  captures (prompts and banners treated as names).
 - Should the issue template ask for `--strip-text` by default?
 - Carried over: decision 0020 example without a migration (needs
-  approval); held-out level and count; 90% vs best trade; HIGH with an open
-  ticket; decision 0019 blind items; per trap metric; Hard trap weights;
-  on_call persona; decision 0015; `commit activate`; CONFIRMED-TEXT;
-  scenario names.
+  approval); 90% vs best trade; HIGH with an open ticket; decision 0019
+  blind items; on_call persona; decision 0015; `commit activate`;
+  CONFIRMED-TEXT; scenario names.
 
 ### Known issues
+
+- Hard simulator assumptions, all unverified: a rename keeps the hit
+  counter and old log lines keep the old name (VSRX-13); global policies in
+  hit counts as `global global NAME`, logs with the real zones (VSRX-14);
+  sessions to an address with no live host count hits and close with
+  `idle Timeout`, nothing from the server (VSRX-15); descriptions quoted
+  only when needed in hierarchical output (HIER-1d); no header on
+  hierarchical rollbacks (HIER-1e).
+- Grounding of the new traps is partial (spec 12.3): TRAP-SCANNER-HITS has
+  a direct source (S18); TRAP-RENAME-CHAIN, TRAP-STALE-NAME and the
+  "flow already open, no rule" step of TRAP-IP-REUSE do not.
+- Contractor broad rules (spec 3) are not modeled, and CMDB export is not
+  generated at any level (spec 7.1 says yes).
 
 - Hierarchical: file names stay `config.set` and `rollback-NN.set` whatever
   the format. An `inactive:` leaf with a value is kept as `description x`
@@ -115,7 +135,7 @@
 
 1. Hierarchical config format (session 20).
 2. Hard level with 4 new traps: TRAP-RENAME-CHAIN, TRAP-IP-REUSE,
-   TRAP-SCANNER-HITS, TRAP-STALE-NAME (simulator sessions).
+   TRAP-SCANNER-HITS, TRAP-STALE-NAME (session 22, decision 0035).
 3. Robustness on real public configs: local only, never committed, never
    republished.
 4. End-to-end test on a real vSRX postponed until after release (no
@@ -175,9 +195,10 @@ in session 18). Session 18 has transcript
 has transcript `63a66e24-b7a2-43f0-9fe2-32d2c7b0b4af` (finalized in session 20).
 Session 20 has transcript `1561b174-b703-4305-b4b4-d9a8a844a436` (finalized
 in session 21). Session 21 has transcript
-`1787e2cd-2949-4e20-ab01-cde64c249ddc`. Finalize it at the start of session 22
-with:
+`1787e2cd-2949-4e20-ab01-cde64c249ddc` (finalized in session 22). Session 22
+has transcript `3dbc7b1c-2c24-4e93-9d78-317745861978`. Finalize it at the
+start of session 23 with:
 
-    uv run python metrics/session_tokens.py 1787e2cd-2949-4e20-ab01-cde64c249ddc
+    uv run python metrics/session_tokens.py 3dbc7b1c-2c24-4e93-9d78-317745861978
 
 Cost is API-equivalent (decision 0006), not a billed amount.
