@@ -1,6 +1,6 @@
 # 0027 LLM writer: local backends, facts in, cited sentences out, strict validation
 
-- Status: Accepted
+- Status: Accepted, partly superseded by 0028 (what licenses a fact, verdict words)
 - Date: 2026-10-06
 
 ## Context
