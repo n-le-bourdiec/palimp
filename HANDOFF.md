@@ -69,6 +69,12 @@
 
 ### Known issues
 
+- Session 20 commits are NOT pushed: `git push` failed with "push declined
+  due to email privacy restrictions" (GitHub refuses commits authored with
+  the private address in `.git/config`; session 19 pushed with the same
+  address). The project lead decides: allow it in GitHub email settings, or
+  set the noreply address and rewrite the 11 local commits, then push and
+  check CI.
 - Hierarchical: file names stay `config.set` and `rollback-NN.set` whatever
   the format. `global` policies (`security policies global`) are not read
   in either format (pre-existing). An `inactive:` leaf with a value is kept
