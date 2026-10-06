@@ -38,6 +38,9 @@ class Policy(BaseModel):
     log_close: bool = False
     deactivated: bool = False
     deactivated_statements: list[str] = []
+    # `/* ... */` notes an admin attached to the policy or to a statement inside
+    # it (`annotate`), shown only by the hierarchical format.
+    annotations: list[str] = []
 
     @property
     def key(self) -> PolicyKey:
@@ -69,6 +72,13 @@ class ParseStats(BaseModel):
     ignored: int = 0
     unknown: int = 0
     unknown_samples: list[str] = []
+    # Configuration files only: "set", "set relative" or "hierarchical".
+    format: str = ""
+    # Where `apply-groups` is used: statements inherited from configuration
+    # groups are not expanded, so they are missing from the model.
+    apply_groups: list[str] = []
+    # Constructs read but not applied, each stated once.
+    notes: list[str] = []
 
     def add_unknown(self, line: str) -> None:
         self.unknown += 1

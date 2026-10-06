@@ -95,9 +95,11 @@ def _load(source: Path, log_year: int | None = None) -> Dataset:
 def _stats_line(stats: ParseStats | None) -> str:
     if stats is None:
         return ""
+    unit = "statements" if stats.format == "hierarchical" else "lines"
     return (
-        f"{stats.file}: {stats.total} lines, {stats.parsed} parsed, "
+        f"{stats.file}: {stats.total} {unit}, {stats.parsed} parsed, "
         f"{stats.ignored} ignored, {stats.unknown} unknown"
+        + (f" ({stats.format} format)" if stats.format else "")
     )
 
 
@@ -121,7 +123,12 @@ def ingest(
         if stats:
             typer.echo(_stats_line(stats))
     unknown = sum(s.unknown for s in dataset.rollback_stats)
-    typer.echo(f"rollbacks: {len(dataset.rollback_stats)} files, {unknown} unknown lines")
+    formats = sorted({s.format for s in dataset.rollback_stats})
+    typer.echo(
+        f"rollbacks: {len(dataset.rollback_stats)} files"
+        + (f" ({', '.join(formats)} format)" if formats else "")
+        + f", {unknown} unknown"
+    )
     for stats in [s for s in all_stats + dataset.rollback_stats if s and s.unknown]:
         for sample in stats.unknown_samples[:3]:
             typer.echo(f"  unknown in {stats.file}: {sample[:120]}")

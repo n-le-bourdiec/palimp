@@ -1,5 +1,8 @@
 """Reader for `show configuration | display set` output (Junos "set" format).
 
+The model builder here is shared with the hierarchical reader
+(palimp.formats.junos_hier), so both formats give the same model.
+
 Only security policies, address books and applications are modeled. Lines from
 other hierarchies are counted as ignored. Lines that cannot be understood are
 counted as unknown and sampled in the stats; they never stop the parse.
@@ -36,7 +39,6 @@ IGNORED_TOP = {
     "class-of-service",
     "vlans",
     "groups",
-    "apply-groups",
     "access",
     "event-options",
     "routing-instances",
@@ -78,7 +80,52 @@ class _Builder:
         self.addresses: dict[str, AddressObject] = {}
         self.applications: dict[str, Application] = {}
 
+    def record(self, outcome: str, line: str) -> None:
+        if outcome == "parsed":
+            self.stats.parsed += 1
+        elif outcome == "ignored":
+            self.stats.ignored += 1
+        else:
+            self.stats.add_unknown(line)
+
+    def note(self, text: str) -> None:
+        if text not in self.stats.notes:
+            self.stats.notes.append(text)
+
+    def annotate(self, path: list[str], text: str) -> str:
+        """An admin's `/* ... */` note on the statement at PATH (hierarchical format only).
+
+        Kept when it is on a policy or on a statement inside one; other
+        annotations (zone pairs, objects, other hierarchies) are not used.
+        """
+        rest = path[2:]
+        if (
+            path[:2] == ["security", "policies"]
+            and len(rest) >= 6
+            and rest[0] == "from-zone"
+            and rest[2] == "to-zone"
+            and rest[4] == "policy"
+        ):
+            key = (rest[1], rest[3], rest[5])
+            policy = self.policies.get(key)
+            if policy is None:
+                policy = Policy(
+                    from_zone=key[0], to_zone=key[1], name=key[2], position=len(self.policies)
+                )
+                self.policies[key] = policy
+            policy.annotations.append(text)
+            return "parsed"
+        return "ignored"
+
     # Each handler returns "parsed", "ignored" or "unknown".
+
+    def config(self) -> Config:
+        return Config(
+            policies=list(self.policies.values()),
+            addresses=self.addresses,
+            applications=self.applications,
+            stats=self.stats,
+        )
 
     def policy(self, path: list[str], deactivate: bool) -> str:
         if len(path) < 6 or path[0] != "from-zone" or path[2] != "to-zone" or path[4] != "policy":
@@ -147,6 +194,8 @@ class _Builder:
             return "parsed"
         if len(path) >= 3 and path[0] == "address-set" and path[2] == "description":
             return "ignored"
+        if path[0] in ("attach", "description"):
+            return "ignored"
         return "unknown"
 
     def application(self, path: list[str]) -> str:
@@ -172,15 +221,32 @@ class _Builder:
     def statement(self, path: list[str], deactivate: bool) -> str:
         if not path:
             return "unknown"
+        for marker in ("apply-groups", "apply-groups-except"):
+            if marker in path and path[0] != "groups":
+                at = path.index(marker)
+                where = " ".join(path[:at]) or "top level"
+                use = f"{where}: {marker} {' '.join(path[at + 1 :])}".strip()
+                if use not in self.stats.apply_groups:
+                    self.stats.apply_groups.append(use)
+                return "ignored"
         top = path[0]
         if top in IGNORED_TOP:
             return "ignored"
         if top == "applications" and not deactivate:
             return self.application(path[1:])
+        if top == "security" and len(path) == 1 and deactivate:
+            self.note("deactivate security: not applied, the policies under it are read as active")
+            return "ignored"
         if top != "security" or len(path) < 2:
             return "ignored" if top == "applications" else "unknown"
         section = path[1]
         if section == "policies":
+            if deactivate and (len(path) <= 2 or (len(path) == 6 and path[2] == "from-zone")):
+                self.note(
+                    f"deactivate {' '.join(path)}: not applied, the policies under it are "
+                    "read as active"
+                )
+                return "ignored"
             if len(path) >= 3 and path[2] in (
                 "default-policy",
                 "policy-rematch",
@@ -205,6 +271,7 @@ def parse_set(text: str, file: str = "config.set") -> Config:
     builder = _Builder(file)
     stats = builder.stats
     level: list[str] = []
+    stats.format = "set"
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -224,19 +291,10 @@ def parse_set(text: str, file: str = "config.set") -> Config:
         path = tokens[1:]
         if level and path[: len(level)] != level:
             path = level + path
+            stats.format = "set relative"
         try:
             outcome = builder.statement(path, deactivate=verb == "deactivate")
         except (IndexError, ValueError):
             outcome = "unknown"
-        if outcome == "parsed":
-            stats.parsed += 1
-        elif outcome == "ignored":
-            stats.ignored += 1
-        else:
-            stats.add_unknown(line)
-    return Config(
-        policies=list(builder.policies.values()),
-        addresses=builder.addresses,
-        applications=builder.applications,
-        stats=stats,
-    )
+        builder.record(outcome, line)
+    return builder.config()

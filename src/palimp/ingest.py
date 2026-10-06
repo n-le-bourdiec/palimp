@@ -1,6 +1,8 @@
 """Read every artifact of one directory into a normalized Dataset.
 
 Only config.set is required. Missing optional inputs produce warnings.
+config.set and the rollback files may be in set or hierarchical format
+(palimp.formats.junos_config).
 """
 
 from datetime import date, datetime
@@ -9,7 +11,7 @@ from typing import NamedTuple
 
 from palimp.formats.commits import parse_commits
 from palimp.formats.hitcount import parse_hitcount
-from palimp.formats.junos_set import parse_set
+from palimp.formats.junos_config import parse_config
 from palimp.formats.rollbacks import read_rollbacks
 from palimp.formats.rt_flow import parse_rt_flow
 from palimp.formats.tickets import parse_tickets
@@ -109,8 +111,15 @@ def ingest(directory: Path, log_year: int | None = None) -> Dataset:
     config_text = _read(directory / "config.set")
     if config_text is None:
         raise FileNotFoundError(f"no config.set in {directory}")
-    config = parse_set(config_text)
+    config = parse_config(config_text)
     dataset = Dataset(source=str(directory), config=config)
+    for use in config.stats.apply_groups:
+        dataset.warnings.append(
+            f"config.set: apply-groups not expanded ({use}): policies, addresses or "
+            "applications inherited from configuration groups are not read"
+        )
+    for note in config.stats.notes:
+        dataset.warnings.append(f"config.set: {note}")
 
     text = _read(directory / "commits.txt")
     if text is None:
