@@ -14,6 +14,7 @@ from pathlib import Path
 
 from palimp.formats.commits import parse_commits
 from palimp.formats.hitcount import parse_hitcount
+from palimp.formats.junos_config import parse_config
 from palimp.formats.junos_set import parse_set
 from palimp.formats.rt_flow import parse_rt_flow
 
@@ -44,6 +45,16 @@ def run_set(text: str, name: str):
     return f"{len(config.policies)} policies", config.stats
 
 
+def run_config(text: str, name: str):
+    config = parse_config(text, file=name)
+    notes = sum(len(p.annotations) for p in config.policies)
+    return (
+        f"{config.stats.format}: {len(config.policies)} policies, {len(config.addresses)} "
+        f"addresses, {len(config.applications)} applications, {notes} policy annotations",
+        config.stats,
+    )
+
+
 def run_hitcount(text: str, name: str):
     rows, stats = parse_hitcount(text, file=name)
     shown = "; ".join(f"{r.from_zone}/{r.to_zone}/{r.name}={r.count} {r.action}" for r in rows)
@@ -64,6 +75,7 @@ READERS = {
     "show-system-commit": run_commits,
     "rollback_completions": run_commits,
     "display_set": run_set,
+    "hier_": run_config,
     "hitcount": run_hitcount,
     "rt_flow": run_rt_flow,
 }

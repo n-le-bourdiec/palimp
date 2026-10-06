@@ -160,7 +160,7 @@ def _render(finding: Finding, dataset: Dataset, notes: dict[str, int] | None = N
         f"  description:  {policy.description or '-'}",
     ]
     lines += [f"  annotation:   {note}" for note in policy.annotations]
-    commit =next((c for c in dataset.commits if c.index == finding.created_in_commit), None)
+    commit = next((c for c in dataset.commits if c.index == finding.created_in_commit), None)
     if commit:
         lines.append(
             f"  created in:   commit {commit.index} "

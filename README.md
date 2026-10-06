@@ -31,6 +31,34 @@ confidence and verdict reason, and a 170-rule report went from 2 seconds to 26 m
 The deterministic text is the assessment itself. If you want the prose anyway, use
 `--llm --llm-model qwen3.5:4b-q4_K_M`. Details in `docs/llm-writer-measure.md`.
 
+## What to put in ARTIFACTS
+
+    config.set                 show configuration (hierarchical or | display set)
+    rollbacks/rollback-NN.set  show system rollback NN (either format), NN = commit index
+    commits.txt                show system commit
+    hitcount.txt               show security policies hit-count
+    logs/rt_flow.log           RT_FLOW session logs (syslog)
+    tickets.csv                optional ticket or CMDB export
+
+Only `config.set` is required. The configuration format is detected per file:
+the hierarchical (curly-brace) output of `show configuration` and the set output
+of `show configuration | display set` give the same analysis, and a saved
+terminal session (prompts, `[edit]` banners) is accepted. Prefer the
+hierarchical output: Juniper documents annotations (`/* ... */` notes an admin
+added with `annotate`) in it, not in set output, and palimp uses them as
+evidence.
+`apply-groups` is reported but not expanded: policies inherited from
+configuration groups are not read (`show configuration | display inheritance`
+prints them in place).
+
+## What palimp has been tested on
+
+palimp has never been run on a real SRX history. It has been tested only on
+synthetic scenarios from its own simulator, with Junos output formats confirmed
+by samples from Juniper's documentation and by published practitioner captures
+(`docs/format-assumptions.md`). If you run it on a real firewall and something
+looks wrong, please open an issue with an anonymized copy (below).
+
 ## Sharing a problem config safely in an issue
 
 If palimp misreads your artifacts, an anonymized copy is the best bug report.

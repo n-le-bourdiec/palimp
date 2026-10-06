@@ -1,4 +1,4 @@
-# Format assumptions VSRX-1 to VSRX-12, checked against Juniper documentation
+# Format assumptions VSRX-1 to VSRX-12 and HIER-1, checked against Juniper documentation
 
 Session 6, 2026-10-04. Decision 0013: until a real vSRX is available, each
 format assumption is checked against output published in Juniper's official
@@ -62,6 +62,11 @@ This file only records what the documentation shows.
 | VSRX-12a | predefined `junos-http` (tcp 80), `junos-https` (tcp 443), `junos-ssh` (tcp 22), `junos-smtp` (tcp 25), `junos-dns-udp` (udp 53) | CONFIRMED-OUTPUT | sample | `junos_defaults_applications_13.2.txt` | Present in `show groups junos-defaults` with those protocols and ports. |
 | VSRX-12b | predefined `junos-ntp` | UNVERIFIED | none | - | Not in the partial `junos-defaults` sample. The predefined applications page lists NTP with port 123 but does not give the `junos-` name. |
 | VSRX-12c | UDP sessions close with reason `idle Timeout` | CONFIRMED-TEXT in part | text | "Monitoring Security Flow Sessions" page | The reason string `idle Timeout` exists ("no traffic for the session before the configured age-out time was reached"). A separate `aged out` reason also exists; which one UDP sessions use is not stated. |
+| HIER-1a | (decision 0032) `show configuration` and configuration-mode `show` print the hierarchical format: one statement per line ending in `;`, containers in `{ }`, lists as `[ a b ]` | CONFIRMED-OUTPUT | sample | `hier_show_security_policies.txt`, `hier_zone_relative_show.txt`, `hier_address_book_sets_dns.txt`, `hier_applications.txt`, `hier_policy_log_prompt_nospace.txt` | Output of `show X Y` in configuration mode starts below `X Y` (relative). Container-form addresses (`address Intranet { dns-name ...; }`) exist next to one-line ones. One page prints prompts with no space after `#` (`user@host#show security zones`). |
+| HIER-1b | `inactive:` prefixes a deactivated statement | CONFIRMED-OUTPUT | sample | `hier_inactive.txt` | `inactive: at-5/2/0 { ... }` after `deactivate at-5/2/0` (interfaces). No sample on a security policy. |
+| HIER-1c | annotations print as `/* ... */` on the line before the annotated statement | CONFIRMED-OUTPUT | sample | `hier_annotations.txt` | Shown on `protocols ospf` statements. The page also says a comment after a statement on the same line, or before a closing brace, is dropped (configuration file input). No sample on a security policy. |
+| HIER-1d | quoted strings (descriptions) in hierarchical output | UNVERIFIED | none | - | No hierarchical sample with a `description` was found; the reader treats quoted strings like the set reader. |
+| HIER-1e | `show system rollback N` prints a whole configuration in hierarchical format | UNVERIFIED | none | `show system rollback` page (VSRX-1c) | The page shows only `compare` output (lines starting with `+`). The reader accepts either format for rollback files. |
 
 ## Readers against the fixtures
 
@@ -74,6 +79,14 @@ completion help, `...`) count as ignored.
 |---------|--------|-----------|-----------|------|
 | `display_set_deactivate.txt` | junos_set | prompt line unknown | parses (nothing in scope: interfaces only) | G1 fixed |
 | `display_set_pipe.txt` | junos_set | fails on relative lines | parses (nothing in scope) | G1, G2 fixed |
+| `hier_show_security_policies.txt` | junos_hier | - | (added in session 20) parses, 2 policies | - |
+| `hier_zone_relative_show.txt` | junos_hier | - | (session 20) parses, 2 policies, 4 addresses | - |
+| `hier_address_book_attach.txt` | junos_hier | - | (session 20) parses, `attach` ignored | - |
+| `hier_address_book_sets_dns.txt` | junos_hier | - | (session 20) parses, 8 addresses | - |
+| `hier_applications.txt` | junos_hier | - | (session 20) parses, 2 applications | - |
+| `hier_policy_log_prompt_nospace.txt` | junos_hier | - | (session 20) parses, log session-init and session-close | G1 (prompt without space) fixed |
+| `hier_annotations.txt` | junos_hier | - | (session 20) parses (nothing in scope), 7 annotations attached, the 5 the page calls dropped are dropped | - |
+| `hier_inactive.txt` | junos_hier | - | (session 20) parses (nothing in scope), one `inactive:` read | - |
 | `show_system_commit.txt` | commits | 6 of 6 entries, 3 unknown | parses, `rescue` and `...` ignored | G1, G3 fixed |
 | `show-system-commit-vmx-2023.txt` | commits | (added in session 7) 11 of 11 with comments, prompt unknown | parses | G1 fixed |
 | `show_system_commit_rollback_pending.txt` | commits | parses apart from prompt | parses, `commit_type=confirmed`, 10 min | G1, G4 fixed |
@@ -181,6 +194,6 @@ columns.
 ## Open points that need a real device
 
 VSRX-1b (quoted descriptions in set output), VSRX-1c (rollback in set format),
-VSRX-2b (annotations),
+VSRX-2b (annotations), HIER-1b and HIER-1c on a security policy, HIER-1d,
 VSRX-7c (counter reset on commit), VSRX-8 (stored file header), VSRX-9b (vSRX
 SD-ID), VSRX-11 (policy name after delete), VSRX-12b and VSRX-12c.
