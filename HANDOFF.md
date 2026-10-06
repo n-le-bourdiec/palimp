@@ -1,59 +1,66 @@
 # Handoff
 
-## Last session: 19 (2026-10-06), analyzer: palimp anonymize, internet-facing from public addresses, LLM frozen for v1
+## Last session: 20 (2026-10-06), analyzer: plan before release (decision 0032), hierarchical config format (decision 0033)
 
 ### Note for analyzer sessions
 
 - No ground truth schema change.
-- Decision 0029: the LLM writer stays experimental and off by default for
-  v1. No further LLM work before v1 (`palimp.prose`, `palimp.llm`,
-  `eval/llm_writer.py` only kept passing).
-- Decision 0030: internet-facing (Worth a look ranking only) is a public
-  address on either side (`palimp.addresses`, documentation ranges count as
-  public), else a zone named like the internet on a side with `any` or
-  unresolved addresses. Reason in `RuleEntry.internet`.
-- Decision 0031: `palimp anonymize -a DIR -o OUT --key KEYFILE
-  [--strip-text] [--shift-dates] [--mapping]`. Words palimp reads as
-  signals are kept in names (`palimp.anonymize.is_signal`): if you add a
-  word list to the analyzer (role, temporary, decommission, ticket prefix,
-  internet zone), add it to `is_signal` too, or anonymized copies will
-  stop reproducing the analysis. `tests/test_anonymize.py` (slow) catches it
-  on Medium seeds 0 to 9.
+- Decision 0032: plan before release (below). v1 reads set and hierarchical
+  configurations (decision 0003 superseded in part).
+- Decision 0033: `palimp.formats.junos_config.parse_config` detects the
+  format per file and is what ingest, rollbacks and anonymize call. The
+  hierarchical walker (`palimp.formats.junos_hier.statements`) feeds the
+  set reader's `_Builder`, so any new statement the analyzer reads must be
+  added to the builder only, and both formats get it. `Policy.annotations`
+  holds `/* */` notes; evidence kind `annotation` is treated like
+  `description` (assess `INTENT_KINDS`, owners initials, ticket refs,
+  temporary words, prose `FREE_TEXT_KINDS`, anonymize free text). If you add
+  a description-based rule, add annotations to it too.
+- `tests/conftest.py` has `to_hierarchical(src, dst)`: renders a scenario's
+  config and rollbacks as hierarchical text from the parsed model.
 
 ### Done
 
-- Part A: session 18 metrics finalized (148 calls, 9.82 USD); decision 0029
-  (README and `--help` say experimental); decision 0030 with tests. Medium
-  seed 0: 34 internet-facing rules (29 by public address, 5 by zone), same
-  count as the zone list on this seed.
-- Part B: `palimp anonymize` (`src/palimp/anonymize.py`): HMAC-SHA256 keyed;
-  prefix- and class-preserving IP mapping; names mapped run by run with
-  prefix-dependent permutations (length, case, shared prefixes kept); known
-  names, IPs, ticket IDs, e-mails, initials after req and upper-case short
-  names replaced in free text; system and SNMP lines word by word; mapping
-  redrawn with the next salt if a replacement hits a kept word. Only files
-  palimp reads are copied, plus `ANONYMIZED.txt`. Key created if missing;
-  key and `OUT.PRIVATE-mapping.json` refused inside OUT. About 4.5 s for a
-  Medium scenario.
-- Tests: Medium seeds 0-9 identical verdicts, confidence, owner certainty
-  and Worth a look ranking, no original name, person word, ticket ID or IP
-  left (except as another value's replacement); shifted dates keep
-  judgments (seed 0); same key same bytes, other key other mapping;
-  strip-text; address classes and subnets; CLI guards.
-- README: "Sharing a problem config safely in an issue".
+- Part A: session 19 metrics finalized (67 calls, 5.85 USD, 43 min);
+  decision 0032 recorded, plan below, CLAUDE.md v1 scope updated.
+- Part B: hierarchical reader (`inactive:`, `protect:`/`replace:` dropped,
+  `/* */` annotations on the next statement, `##` comments, quoted strings,
+  `[ ]` lists, prompts and `[edit]` banners, relative `show X Y` output);
+  `apply-groups` and deactivated zone pairs reported, not applied (both
+  formats); `ingest` prints the format of each file. Annotations are T1
+  evidence. Rollbacks may be hierarchical (mixed formats work). Anonymize
+  rewrites hierarchical files.
+- Fixtures: 8 samples from 6 Juniper documentation pages
+  (`tests/fixtures/junos_docs/hier_*.txt`), all parse with 0 unknown lines;
+  HIER-1a to HIER-1e in `docs/format-assumptions.md`.
+- Round trip on Medium seeds 0-9: model, creation commits, verdicts,
+  confidence and owners identical. Anonymize on hierarchical renderings of
+  seeds 0-9: identical judgments and Worth a look ranking, nothing left.
+- README: artifact layout, both formats, plain statement that palimp has
+  never been run on a real SRX history (decision 0032 item 4, done early,
+  safe direction).
 
 ### Next
 
+- Decision 0032 item 2 (simulator sessions): Hard level with
+  TRAP-RENAME-CHAIN, TRAP-IP-REUSE, TRAP-SCANNER-HITS, TRAP-STALE-NAME.
+- Decision 0032 item 3: real public configs, local only, never committed.
+  First thing to check there: `inactive:`, annotations and descriptions on
+  real security policies (HIER-1b to HIER-1d unverified on policies).
 - Project lead: try `palimp anonymize` on a real config before
   recommending it in the issue template; review the limits in decision 0031.
-- Project lead: held-out run for a release including sessions 14 to 19.
 - Carried over: remaining dead rules at verify (mostly no logging), owners
   of applications with no ticket.
 
 ### Open questions
 
-- Should the issue template ask for `--strip-text` by default? (palimp
-  keeps free text by default, as the prompt asked.)
+- `inactive:` on a whole zone pair (or on `security policies`): palimp reads
+  the policies under it as active and warns. Marking them deactivated would
+  be correct but moves them toward `removal_candidate`: approve? (decision
+  0033)
+- `apply-groups`: warn only (current) or expand simple groups without
+  wildcards?
+- Should the issue template ask for `--strip-text` by default?
 - Carried over: decision 0020 example without a migration (needs
   approval); held-out level and count; 90% vs best trade; HIGH with an open
   ticket; decision 0019 blind items; per trap metric; Hard trap weights;
@@ -62,14 +69,20 @@
 
 ### Known issues
 
+- Hierarchical: file names stay `config.set` and `rollback-NN.set` whatever
+  the format. `global` policies (`security policies global`) are not read
+  in either format (pre-existing). An `inactive:` leaf with a value is kept
+  as `description x` in `deactivated_statements`, where set output may
+  print only the keyword (no sample). `then { permit { application-services
+  ... } }` leaves the action unset in both formats (pre-existing, set reader
+  needs `then permit` as a leaf; not changed: verdict direction unknown).
+- The anonymized `## Last commit:` header line is treated as free text
+  (the time zone abbreviation is replaced, harmless).
 - Anonymize limits (decision 0031): pseudonymization, not encryption;
   names palimp does not know stay in free text; non-ISO dates in free text
   are not shifted; a kept signal word that starts a longer name loses the
   shared prefix; people with a one-letter name word may get other initials.
-- LLM writer limits frozen for v1 (decisions 0027 to 0029): wrong relations
-  between true facts pass validation (about 8% of passed qwen sentences);
-  negated verdicts and unseen lowercase application names not detected;
-  mixed paragraphs can repeat facts.
+- LLM writer limits frozen for v1 (decisions 0027 to 0029).
 - The report prints the artifact path as given on the command line.
 - 3 MISLEADING-COMMENT rules on 20 to 99 show no conflict (not inspected).
 - `vendor-arch-109` still does not name `archive`.
@@ -77,6 +90,11 @@
   undercount traffic; time of day in logged time zone; Junos predefined
   applications from general knowledge (VSRX-12); VSRX-2b; `svc-ansible`; S2
   and S5; git identity in repo config only; session 2 Part C checks.
+- Session 20 note: `docs/assets/` (diagrams, `gen_diagrams.py`) appeared
+  untracked during the session; it was swept into a local commit by
+  mistake, removed again before any push, and left untracked on disk.
+  `uv run ruff check .` fails on `gen_diagrams.py` (line length): fix or
+  exclude it before committing it, or CI turns red.
 
 ## Plan before release (decision 0032)
 
@@ -139,9 +157,10 @@ has transcript `b14ba40d-eb4c-4ee4-bc69-02b4a94d38bb` (finalized in session
 17). Session 17 has transcript `052aad46-2e12-4fa9-99c9-54d4730081ee` (finalized
 in session 18). Session 18 has transcript
 `fd2407ac-42b6-4684-a907-dbaff839c04d` (finalized in session 19). Session 19
-has transcript `63a66e24-b7a2-43f0-9fe2-32d2c7b0b4af`. Finalize it at the start
-of session 20 with:
+has transcript `63a66e24-b7a2-43f0-9fe2-32d2c7b0b4af` (finalized in session 20).
+Session 20 has transcript `1561b174-b703-4305-b4b4-d9a8a844a436`. Finalize it
+at the start of session 21 with:
 
-    uv run python metrics/session_tokens.py 63a66e24-b7a2-43f0-9fe2-32d2c7b0b4af
+    uv run python metrics/session_tokens.py 1561b174-b703-4305-b4b4-d9a8a844a436
 
 Cost is API-equivalent (decision 0006), not a billed amount.
