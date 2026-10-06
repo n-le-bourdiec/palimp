@@ -11,6 +11,7 @@ import itertools
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -230,3 +231,99 @@ def test_cli(easy: Path, tmp_path: Path) -> None:
     assert refused.exit_code == 2 and "outside OUT" in refused.output
     report = runner.invoke(app, ["report", "-a", str(out), "-o", str(tmp_path / "r")])
     assert report.exit_code == 0, report.output
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("seed", range(10))
+def test_hierarchical_judgments_identical_and_nothing_left(
+    seed: int, tmp_path: Path, to_hierarchical: Callable[[Path, Path], Path]
+) -> None:
+    """The same check on a hierarchical rendering of the scenario (decision 0032)."""
+    source = to_hierarchical(generate(seed, tmp_path / "scenario"), tmp_path / "hier")
+    assert ingest(source).config.stats.format == "hierarchical"
+    result = anonymize(source, KEY)
+    write(result, tmp_path / "copy", Options())
+    assert ingest(tmp_path / "copy").config.stats.format == "hierarchical"
+    check_copy(source, tmp_path / "copy", result.mapper)
+
+
+ANNOTATED = """\
+## Last commit: 2026-03-02 10:00:00 UTC by bob
+security {
+    address-book {
+        global {
+            address crm-web 10.20.1.10/32;
+        }
+    }
+    policies {
+        from-zone trust to-zone dc {
+            /* CRM front end for Alice Example, CHG0000777, server 10.20.1.10 */
+            policy crm-web {
+                description "CRM web CHG0000777";
+                match {
+                    source-address any;
+                    destination-address crm-web;
+                    application junos-https;
+                }
+                then {
+                    permit;
+                }
+            }
+            /* opened by bob
+               for crm-web */
+            inactive: policy crm-old {
+                match {
+                    source-address any;
+                    destination-address crm-web;
+                    application junos-http;
+                }
+                then {
+                    permit;
+                }
+            }
+        }
+    }
+}
+"""
+
+
+@pytest.fixture
+def annotated(tmp_path: Path) -> Path:
+    source = tmp_path / "annotated"
+    source.mkdir()
+    (source / "config.set").write_text(ANNOTATED, encoding="utf-8")
+    (source / "commits.txt").write_text(
+        "0   2026-03-02 10:00:00 UTC by bob via cli\n    CHG0000777 CRM\n", encoding="utf-8"
+    )
+    (source / "tickets.csv").write_text(
+        "ticket_id,requester,status,summary\nCHG0000777,Alice Example,closed,CRM\n",
+        encoding="utf-8",
+    )
+    return source
+
+
+def test_annotations_anonymized_like_descriptions(annotated: Path, tmp_path: Path) -> None:
+    result = anonymize(annotated, KEY)
+    text = result.files["config.set"]
+    for original in ("Alice", "Example", "CHG0000777", "10.20.1.10", "crm-web", "bob"):
+        assert original not in text, original
+    assert " front end for " in text and "opened by " in text
+    write(result, tmp_path / "copy", Options())
+    copy, original = ingest(tmp_path / "copy"), ingest(annotated)
+    assert copy.config.stats.format == "hierarchical" and copy.config.stats.unknown == 0
+    assert judgments(copy) == judgments(original)
+    notes = [p.annotations for p in copy.config.policies]
+    assert " front end for " in notes[0][0] and notes[1][0].startswith("opened by ")
+    assert copy.config.policies[1].deactivated
+
+
+def test_strip_text_removes_annotations(annotated: Path, tmp_path: Path) -> None:
+    options = Options(strip_text=True)
+    result = anonymize(annotated, KEY, options)
+    assert (
+        "/*" not in result.files["config.set"] and "description" not in result.files["config.set"]
+    )
+    write(result, tmp_path / "copy", options)
+    copy = ingest(tmp_path / "copy")
+    assert [p.annotations for p in copy.config.policies] == [[], []]
+    assert copy.config.stats.unknown == 0 and len(copy.config.policies) == 2

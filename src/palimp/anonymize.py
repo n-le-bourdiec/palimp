@@ -17,12 +17,17 @@ a secret key with HMAC-SHA256, so the copy keeps what palimp needs:
   reads as signals (role words such as `users`, temporary words, ticket
   prefixes such as `CHG`, decommission words, zone names such as `untrust`
   read as the internet) and one-letter runs are kept.
-- Free text (descriptions, commit comments, ticket summaries): known names,
-  IP addresses, ticket IDs, e-mail addresses, initials after "req" and
-  upper-case short names are replaced, other words are kept. `strip_text`
-  removes free text instead.
+- Free text (descriptions, annotations, commit comments, ticket summaries):
+  known names, IP addresses, ticket IDs, e-mail addresses, initials after
+  "req" and upper-case short names are replaced, other words are kept.
+  `strip_text` removes free text instead.
 - Dates are kept, or shifted by one secret number of whole weeks
   (`shift_dates`), which keeps weekdays and times of day.
+
+Configuration files are rewritten in the format they are in: set lines one
+by one, hierarchical text (decision 0032) line by line with the hierarchy
+each line sits in, so names inside security policies, address books and
+applications are mapped the same way in both formats.
 
 A replacement word never equals a kept signal word or a word left in free
 text: if one does, the whole mapping is drawn again with the next salt.
@@ -46,9 +51,11 @@ from palimp.addresses import NON_PUBLIC
 from palimp.apps import ROLE_WORDS, vocabulary
 from palimp.evidence import TEMPORARY_WORDS
 from palimp.formats.commits import ACTIVATE, CONFIRMED, ENTRY, RESCUE, REVISION
+from palimp.formats.junos_config import detect_format
+from palimp.formats.junos_hier import statements
 from palimp.formats.rollbacks import NAME as ROLLBACK_NAME
 from palimp.formats.rollbacks import read_rollbacks
-from palimp.formats.terminal import PROMPT
+from palimp.formats.terminal import PROMPT, edit_path, is_terminal_noise, shown_path
 from palimp.ingest import ingest, resolve_directory
 from palimp.models import Config, Dataset
 from palimp.notlive import DECOMMISSION
@@ -425,7 +432,13 @@ def known_names(directory: Path, dataset: Dataset) -> set[str]:
     for path in [directory / "config.set", *sorted((directory / "rollbacks").glob("*.set"))]:
         if not path.is_file():
             continue
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if detect_format(text) == "hierarchical":
+            for statement in statements(text):
+                if statement.kind in ("set", "deactivate"):
+                    found |= _set_names(["set", *statement.path])
+            continue
+        for line in text.splitlines():
             found |= _set_names(line.split())
     for commit in dataset.commits:
         found.add(commit.user)
@@ -449,6 +462,24 @@ def known_names(directory: Path, dataset: Dataset) -> set[str]:
     return {n for n in found if not n.lower().startswith("junos-")}
 
 
+def _secure(words: list[str]) -> bool:
+    """True for a set line (words[0] is the verb) inside the hierarchies palimp reads."""
+    return words[1:3] in (
+        ["security", "policies"],
+        ["security", "address-book"],
+        ["security", "zones"],
+    ) or words[1:2] == ["applications"]
+
+
+def _split_tail(body: str) -> tuple[str, str]:
+    """A hierarchical line without its trailing comment (`## ...` or `/* ... */`)."""
+    for match in SET_TOKEN.finditer(body):
+        word = match.group(2)
+        if word is not None and (word.startswith("##") or word.startswith("/*")):
+            return body[: match.start()], body[match.start() :]
+    return body, ""
+
+
 @dataclass
 class Result:
     files: dict[str, str]  # relative path -> anonymized text
@@ -467,6 +498,8 @@ class _Rewriter:
     # config.set and rollbacks
 
     def config(self, text: str) -> str:
+        if detect_format(text) == "hierarchical":
+            return self._hierarchical(text)
         out = []
         for line in text.splitlines(keepends=True):
             body = line.rstrip("\r\n")
@@ -486,6 +519,54 @@ class _Rewriter:
                 ["security", "zones"],
             ) or words[1:2] == ["applications"]
             out.append(self._set_line(body, security) + ending)
+        return "".join(out)
+
+    def _hierarchical(self, text: str) -> str:
+        """Rewrite hierarchical text line by line, knowing the hierarchy of each line."""
+        out: list[str] = []
+        stack: list[list[str]] = []
+        level: list[str] = []
+        edit: list[str] = []
+        note_open = False
+        for line in text.splitlines(keepends=True):
+            body = line.rstrip("\r\n")
+            ending = line[len(body) :]
+            stripped = body.strip()
+            if note_open or stripped.startswith("/*"):
+                # An annotation: free text written by a person.
+                note_open = "*/" not in (stripped if note_open else stripped[2:])
+                if not self.options.strip_text:
+                    out.append(self.m.text(body, "free", self.log_year) + ending)
+                continue
+            if PROMPT.match(stripped):
+                if not stack and (shown := shown_path(stripped)) is not None:
+                    level = (edit if shown[0] == "edit" else []) + shown[1]
+                out.append(self.m.text(body, "generic") + ending)
+                continue
+            if stripped.startswith("#"):
+                out.append(self.m.text(body, "free", self.log_year) + ending)
+                continue
+            if is_terminal_noise(stripped) or not stripped:
+                if not stack and (banner := edit_path(stripped)) is not None:
+                    edit = level = banner.split()
+                    out.append(self._set_line(body, _secure(["", *edit])) + ending)
+                else:
+                    out.append(line)
+                continue
+            core, tail = _split_tail(body)
+            words = [w for w in core.split() if w not in ("inactive:", "protect:", "replace:")]
+            words = [w for w in words if w not in ("{", "}", ";")]
+            if self.options.strip_text and "description" in words:
+                continue
+            path = level + [w for frame in stack for w in frame] + words
+            rewritten = self._set_line(core, _secure(["", *path]))
+            if tail:
+                rewritten += self.m.text(tail, "free", self.log_year)
+            out.append(rewritten + ending)
+            if core.rstrip().endswith("{"):
+                stack.append([w for w in words if w != "{"])
+            elif core.strip() == "}" and stack:
+                stack.pop()
         return "".join(out)
 
     def _set_line(self, body: str, security: bool) -> str:
