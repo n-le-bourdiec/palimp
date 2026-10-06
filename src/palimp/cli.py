@@ -8,6 +8,7 @@ import typer
 from palimp import __version__
 from palimp.evidence import collect, collect_all
 from palimp.ingest import ingest as ingest_directory
+from palimp.ingest import resolve_directory
 from palimp.llm import DEFAULT_OLLAMA_URL, Backend, FakeBackend, NonLocalURLError, OllamaBackend
 from palimp.models import Dataset, Finding, ParseStats, PolicyKey
 from palimp.prose import Names, add_prose, write_rule
@@ -337,3 +338,81 @@ def questions(
     (out / "answers.csv").write_text(answers_csv(built, found), encoding="utf-8")
     rules = len({ref for q in found for ref in q.rules})
     typer.echo(f"{len(found)} questionnaires covering {rules} rules written to {out}")
+
+
+def _inside(path: Path, directory: Path) -> bool:
+    return path.resolve().is_relative_to(directory.resolve())
+
+
+@app.command()
+def anonymize(
+    source: Path = typer.Option(..., "--artifacts", "-a", help="Artifact directory."),
+    out: Path = typer.Option(
+        ..., "--out", "-o", help="New directory for the anonymized copy (must not exist)."
+    ),
+    key_file: Path = typer.Option(
+        ...,
+        "--key",
+        help="Secret key file, created if missing. Keep it private and outside OUT; the same "
+        "key gives the same replacements.",
+    ),
+    strip_text: bool = typer.Option(
+        False,
+        "--strip-text",
+        help="Remove free text (descriptions, commit comments, ticket summaries) instead of "
+        "replacing the names inside it. The analysis of the copy loses that evidence.",
+    ),
+    shift_dates: bool = typer.Option(
+        False,
+        "--shift-dates",
+        help="Move every date back by one secret number of whole weeks (weekdays and times "
+        "of day are kept).",
+    ),
+    mapping: bool = typer.Option(
+        False,
+        "--mapping",
+        help="Also write OUT.PRIVATE-mapping.json next to OUT (original -> replacement). "
+        "Never share it.",
+    ),
+    log_year: int = typer.Option(None, "--log-year", help=LOG_YEAR_HELP),
+) -> None:
+    """Write an anonymized copy of an artifact directory, safe to share in an issue."""
+    from palimp.anonymize import Options, load_key, mapping_json, write
+    from palimp.anonymize import anonymize as run_anonymize
+
+    directory = resolve_directory(source)
+    mapping_file = out.parent / f"{out.name}.PRIVATE-mapping.json"
+    problems = []
+    if out.exists():
+        problems.append(f"{out} already exists: choose a new directory")
+    if _inside(out, directory) or _inside(directory, out):
+        problems.append("OUT and the artifact directory must not contain each other")
+    if _inside(key_file, out) or _inside(key_file, directory):
+        problems.append("the key file must be outside OUT and outside the artifacts")
+    if problems:
+        for problem in problems:
+            typer.echo(f"error: {problem}", err=True)
+        raise typer.Exit(2)
+    try:
+        key, created = load_key(key_file)
+    except ValueError as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(2) from error
+    if created:
+        typer.echo(f"new key written to {key_file}: keep it private, reuse it for the same mapping")
+    options = Options(strip_text=strip_text, shift_dates=shift_dates)
+    try:
+        result = run_anonymize(directory, key, options, log_year=log_year)
+    except FileNotFoundError as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(2) from error
+    write(result, out, options)
+    for skipped in result.skipped:
+        typer.echo(f"not copied (palimp does not read it): {skipped}", err=True)
+    if mapping:
+        mapping_file.write_text(mapping_json(result), encoding="utf-8")
+        typer.echo(f"PRIVATE mapping written to {mapping_file}: never share it")
+    typer.echo(
+        f"{len(result.files)} files anonymized to {out} ({len(result.mapper.names)} names, "
+        f"{len(result.mapper.ips)} addresses replaced)"
+    )
