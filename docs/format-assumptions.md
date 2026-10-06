@@ -67,6 +67,9 @@ This file only records what the documentation shows.
 | HIER-1c | annotations print as `/* ... */` on the line before the annotated statement | CONFIRMED-OUTPUT | sample | `hier_annotations.txt` | Shown on `protocols ospf` statements. The page also says a comment after a statement on the same line, or before a closing brace, is dropped (configuration file input). No sample on a security policy. |
 | HIER-1d | quoted strings (descriptions) in hierarchical output | UNVERIFIED | none | - | No hierarchical sample with a `description` was found; the reader treats quoted strings like the set reader. |
 | HIER-1e | `show system rollback N` prints a whole configuration in hierarchical format | UNVERIFIED | none | `show system rollback` page (VSRX-1c) | The page shows only `compare` output (lines starting with `+`). The reader accepts either format for rollback files. |
+| GLOBAL-1 | (decision 0034, not in the spec) global policies are configured under `security policies global policy NAME`, with optional `match from-zone` and `match to-zone` conditions | CONFIRMED-OUTPUT | sample | `display_set_global_policies.txt`, `display_set_global_policy_zones.txt`, `hier_global_policies.txt`, `hier_global_policy_zones.txt` | Set and hierarchical samples from the Global Security Policies page; `show security policies global` prints "From zones: any" when no zone is given. How `show security policies hit-count` and RT_FLOW messages name a global policy is not shown: UNVERIFIED (hit count looked up under `global global NAME`, logs matched by policy name under the real zones). |
+| APPSVC-1 | (decision 0034, not in the spec) `then permit application-services SERVICE ...` (hierarchical: `then { permit { application-services { ... } } }`) is a permit with services attached | CONFIRMED-OUTPUT | sample | `display_set_application_services.txt`, `hier_application_services.txt` | Application Firewall page: `application-firewall rule-set NAME`, and `ssl-proxy profile-name NAME` on the same policy. Other services (`idp`, `uac-policy`, `application-traffic-control`) are read the same way, without a sample. |
+| DEACT-1 | (decision 0034) a deactivated container (`deactivate security policies from-zone X to-zone Y`, `inactive: from-zone X to-zone Y { ... }`) deactivates its whole subtree | CONFIRMED-TEXT | text | - | "Modify the Configuration of a Device" page and the `deactivate` command reference: a deactivated statement "is ignored and is not applied at all" at commit. No sample of a deactivated zone pair: the tests use inline samples. |
 
 ## Readers against the fixtures
 
@@ -87,6 +90,12 @@ completion help, `...`) count as ignored.
 | `hier_policy_log_prompt_nospace.txt` | junos_hier | - | (session 20) parses, log session-init and session-close | G1 (prompt without space) fixed |
 | `hier_annotations.txt` | junos_hier | - | (session 20) parses (nothing in scope), 7 annotations attached, the 5 the page calls dropped are dropped | - |
 | `hier_inactive.txt` | junos_hier | - | (session 20) parses (nothing in scope), one `inactive:` read | - |
+| `display_set_global_policies.txt` | junos_set | - | (added in session 21) parses, 2 global policies | - |
+| `display_set_global_policy_zones.txt` | junos_set | - | (session 21) parses, 1 global policy with 2 from-zones and 2 to-zones | - |
+| `hier_global_policies.txt` | junos_hier | - | (session 21) parses, 2 global policies | - |
+| `hier_global_policy_zones.txt` | junos_hier | - | (session 21) parses, zone lists read | - |
+| `display_set_application_services.txt` | junos_set | - | (session 21) parses, 2 permits with services, rule sets ignored | - |
+| `hier_application_services.txt` | junos_hier | - | (session 21) parses, 1 permit with services | - |
 | `show_system_commit.txt` | commits | 6 of 6 entries, 3 unknown | parses, `rescue` and `...` ignored | G1, G3 fixed |
 | `show-system-commit-vmx-2023.txt` | commits | (added in session 7) 11 of 11 with comments, prompt unknown | parses | G1 fixed |
 | `show_system_commit_rollback_pending.txt` | commits | parses apart from prompt | parses, `commit_type=confirmed`, 10 min | G1, G4 fixed |

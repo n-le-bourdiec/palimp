@@ -1,6 +1,6 @@
 # 0033 Hierarchical reader: one model builder, annotations as T1, unsupported constructs reported
 
-- Status: Accepted
+- Status: Accepted; the deactivated zone pair part of "Reported, not applied" is superseded by decision 0034
 - Date: 2026-10-06
 - Supersedes: nothing (implements item 1 of decision 0032)
 

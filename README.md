@@ -47,6 +47,9 @@ terminal session (prompts, `[edit]` banners) is accepted. Prefer the
 hierarchical output: Juniper documents annotations (`/* ... */` notes an admin
 added with `annotate`) in it, not in set output, and palimp uses them as
 evidence.
+Zone policies and global policies (`security policies global`, shown as
+`global/NAME`) are read. A deactivated zone pair, `policies` or `security`
+block deactivates every policy under it, as Junos does at commit.
 `apply-groups` is reported but not expanded: policies inherited from
 configuration groups are not read (`show configuration | display inheritance`
 prints them in place).
