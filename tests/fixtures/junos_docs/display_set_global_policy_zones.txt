@@ -1,0 +1,18 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-global-policies.html
+# Page title: Global Security Policies | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: GLOBAL-1 (global policies, set format)
+# Note: Example: Configuring a Global Policy with Multiple Zones, quick configuration (from-zone and to-zone match conditions).
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+set security policies global policy Pa match source-address any
+set security policies global policy Pa match destination-address any
+set security policies global policy Pa match application any
+set security policies global policy Pa match from-zone zone1
+set security policies global policy Pa match from-zone zone2
+set security policies global policy Pa match to-zone zone3
+set security policies global policy Pa match to-zone zone4
+set security policies global policy Pa then permit

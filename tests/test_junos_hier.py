@@ -416,3 +416,47 @@ def test_set_relative_reported() -> None:
     config = parse_config(text)
     assert config.stats.format == "set relative"
     assert keys(config) == ["a/b/p"]
+
+
+# Global policies (decision 0034), fixtures from the Global Security Policies page
+
+
+def test_global_policies_in_both_formats() -> None:
+    for name in ("display_set_global_policies.txt", "hier_global_policies.txt"):
+        config = parse_config(body(name))
+        assert config.stats.unknown == 0, name
+        assert keys(config) == ["global/gp1", "global/gp2"], name
+        gp1, gp2 = config.policies
+        assert gp1.is_global and (gp1.from_zone, gp1.to_zone) == ("global", "global")
+        assert (gp1.sources, gp1.destinations, gp1.applications) == (
+            ["server1"],
+            ["server2"],
+            ["any"],
+        )
+        assert (gp1.action, gp2.action) == ("permit", "deny")
+        assert gp1.match_from_zones == [] and gp1.zones_text("from") == "any zone (global policy)"
+
+
+def test_global_policy_zone_conditions_in_both_formats() -> None:
+    for name in ("display_set_global_policy_zones.txt", "hier_global_policy_zones.txt"):
+        config = parse_config(body(name))
+        assert config.stats.unknown == 0, name
+        (pa,) = config.policies
+        assert str(pa.key) == "global/Pa"
+        assert pa.match_from_zones == ["zone1", "zone2"]
+        assert pa.match_to_zones == ["zone3", "zone4"]
+        assert pa.zones_text("to") == "zones zone3, zone4 (global policy)"
+
+
+def test_global_key_round_trip_and_deactivated_global_block() -> None:
+    from palimp.models import PolicyKey
+
+    key = PolicyKey.parse("global/gp1")
+    assert (key.from_zone, key.to_zone, key.name) == ("global", "global", "gp1")
+    assert str(key) == "global/gp1"
+    text = body("display_set_global_policies.txt")
+    zone = "set security policies from-zone a to-zone b policy p then permit\n"
+    config = parse_set(zone + text + "deactivate security policies global\n")
+    assert [p.deactivated for p in config.policies] == [False, True, True]
+    one = parse_set(text + "deactivate security policies global policy gp2\n")
+    assert [p.deactivated for p in one.policies] == [False, True]

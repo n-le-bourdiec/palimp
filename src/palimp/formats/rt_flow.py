@@ -302,6 +302,42 @@ class _Accumulator:
         return summary
 
 
+def merge_summaries(name: str, summaries: list[LogSummary]) -> LogSummary:
+    """One summary for a policy logged under several zone pairs (a global policy).
+
+    Counts are summed. Distinct sources and destinations are a lower bound
+    when a per-pair list was capped.
+    """
+    merged = LogSummary(policy_name=name)
+    for one in summaries:
+        merged.create += one.create
+        merged.close += one.close
+        merged.deny += one.deny
+        merged.sessions += one.sessions
+        for when in (one.first_seen, one.last_seen):
+            if when is None:
+                continue
+            if merged.first_seen is None or when < merged.first_seen:
+                merged.first_seen = when
+            if merged.last_seen is None or when > merged.last_seen:
+                merged.last_seen = when
+        merged.hours = [a + b for a, b in zip(merged.hours, one.hours, strict=True)]
+        merged.weekdays = [a + b for a, b in zip(merged.weekdays, one.weekdays, strict=True)]
+    for attr in ("sources", "destinations", "ports", "services"):
+        values = sorted({v for one in summaries for v in getattr(one, attr)})
+        setattr(merged, attr, values[:LIST_CAP])
+    merged.source_count = max(
+        [len({v for one in summaries for v in one.sources})]
+        + [one.source_count for one in summaries]
+    )
+    merged.destination_count = max(
+        [len({v for one in summaries for v in one.destinations})]
+        + [one.destination_count for one in summaries]
+    )
+    merged.days = sorted({d for one in summaries for d in one.days})
+    return merged
+
+
 def summary_key(policy_name: str, from_zone: str, to_zone: str) -> str:
     """FROM/TO/NAME, or NAME alone when the message carries no zones."""
     return f"{from_zone}/{to_zone}/{policy_name}" if from_zone and to_zone else policy_name

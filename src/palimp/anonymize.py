@@ -400,6 +400,7 @@ def _config_names(config: Config) -> set[str]:
     found = set(config.addresses) | {a for a in config.applications if not a.startswith("junos-")}
     for policy in config.policies:
         found |= {policy.name, policy.from_zone, policy.to_zone}
+        found |= set(policy.match_from_zones) | set(policy.match_to_zones)
         found |= set(policy.sources) | set(policy.destinations) | set(policy.applications)
     for obj in config.addresses.values():
         found |= set(obj.members) | {obj.book}

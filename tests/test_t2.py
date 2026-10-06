@@ -134,3 +134,31 @@ def test_missing_artifacts_are_blind(artifacts: Path) -> None:
     (artifacts / "logs" / "rt_flow.log").unlink()
     items = t2(artifacts, "logged")
     assert {signal for signal, _ in items.values()} == {"blind"}
+
+
+def test_global_policy_logs_under_real_zones(artifacts: Path) -> None:
+    # Decision 0034: a global policy is logged under the zones of each session.
+    config = artifacts / "config.set"
+    gp = "set security policies global policy {name} {rest}\n"
+    extra = ""
+    for name in ("gp", "logged"):
+        extra += gp.format(name=name, rest="then permit")
+        extra += gp.format(name=name, rest="then log session-close")
+    config.write_text(config.read_text() + extra)
+    log = artifacts / "logs" / "rt_flow.log"
+    lines = [structured(day, 2, "gp", 100 + day) for day in range(1, 31)]
+    lines += [
+        structured(day, 3, "gp", 200 + day).replace('"trust"', '"guest"') for day in range(1, 6)
+    ]
+    log.write_text(log.read_text() + "\n".join(lines) + "\n")
+    dataset = ingest(artifacts)
+    finding = collect(dataset, PolicyKey.parse("global/gp"))
+    items = {e.artifact: (e.signal, e.claim) for e in finding.evidence if e.tier == "T2"}
+    signal, claim = items["logs/rt_flow.log"]
+    assert signal == "present" and claim.startswith("35 sessions logged")
+    assert items["hitcount.txt"][0] == "blind" and "global" in items["hitcount.txt"][1]
+    assert finding.assessment.verdict == "keep"
+    # Sessions of the zone policy with the same name are not the global policy's.
+    same = collect(dataset, PolicyKey.parse("global/logged"))
+    log_item = next(e for e in same.evidence if e.artifact == "logs/rt_flow.log")
+    assert log_item.signal == "absent"

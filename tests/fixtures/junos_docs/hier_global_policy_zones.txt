@@ -1,0 +1,24 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-global-policies.html
+# Page title: Global Security Policies | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: GLOBAL-1, HIER-1 (global policies, hierarchical format)
+# Note: 'show security policies global' with from-zone and to-zone lists (relative to security policies global).
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+[edit]
+user@host# show security policies global
+policy Pa {
+    match {
+        source-address any;
+        destination-address any;
+        application any;
+        from-zone [ zone1 zone2 ];
+        to-zone [ zone3 zone4 ];
+    }
+    then {
+        permit;
+    }
+}

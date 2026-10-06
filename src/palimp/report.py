@@ -27,7 +27,7 @@ from palimp.assess import NOT_LIVE_KINDS
 from palimp.counters import clears
 from palimp.evidence import collect_all
 from palimp.lineage import networks
-from palimp.models import Dataset, Evidence, Finding
+from palimp.models import Dataset, Evidence, Finding, Policy
 from palimp.services import describe
 
 SHOWN = 3
@@ -204,8 +204,8 @@ def allows(finding: Finding, dataset: Dataset) -> Cited:
     verb = {"permit": "Allows", "deny": "Blocks", "reject": "Rejects"}.get(action, "Matches")
     services = "; ".join(_service(a, dataset) for a in policy.applications) or "no application"
     text = (
-        f"{verb} {_side(policy.sources, dataset)}, in zone {policy.from_zone}, "
-        f"to reach {_side(policy.destinations, dataset)}, in zone {policy.to_zone}, "
+        f"{verb} {_side(policy.sources, dataset)}, in {policy.zones_text('from')}, "
+        f"to reach {_side(policy.destinations, dataset)}, in {policy.zones_text('to')}, "
         f"for {services}."
     )
     if policy.deactivated:
@@ -273,8 +273,12 @@ def is_broad(finding: Finding) -> bool:
     return "any" in policy.applications or not policy.sources or "any" in policy.sources
 
 
-def _side_internet(dataset: Dataset, names: list[str], zone: str) -> str:
-    """Why one side of a rule reaches the internet, or "" (decision 0030)."""
+def _side_internet(dataset: Dataset, names: list[str], zones: list[str]) -> str:
+    """Why one side of a rule reaches the internet, or "" (decision 0030).
+
+    ZONES empty means any zone (a global policy with no zone condition,
+    decision 0034): it includes any zone named like the internet.
+    """
     public: list[str] = []
     open_side = not names
     for name in names:
@@ -286,9 +290,19 @@ def _side_internet(dataset: Dataset, names: list[str], zone: str) -> str:
     if public:
         more = f" and {len(public) - 2} more" if len(public) > 2 else ""
         return "public address " + ", ".join(public[:2]) + more
-    if open_side and zone.lower() in INTERNET_ZONES:
-        return f"zone {zone}, named like the internet, with any or unresolved addresses"
+    if open_side and not zones:
+        return "any zone (global policy), with any or unresolved addresses"
+    for zone in zones:
+        if open_side and zone.lower() in INTERNET_ZONES:
+            return f"zone {zone}, named like the internet, with any or unresolved addresses"
     return ""
+
+
+def _zones(policy: Policy, side: str) -> list[str]:
+    """Zones of one side; empty for a global policy with no zone condition."""
+    if policy.is_global:
+        return policy.match_from_zones if side == "from" else policy.match_to_zones
+    return [policy.from_zone if side == "from" else policy.to_zone]
 
 
 def internet_facing(finding: Finding, dataset: Dataset) -> str:
@@ -302,8 +316,8 @@ def internet_facing(finding: Finding, dataset: Dataset) -> str:
     """
     policy = finding.policy
     sides = (
-        _side_internet(dataset, policy.sources, policy.from_zone),
-        _side_internet(dataset, policy.destinations, policy.to_zone),
+        _side_internet(dataset, policy.sources, _zones(policy, "from")),
+        _side_internet(dataset, policy.destinations, _zones(policy, "to")),
     )
     return "; ".join(s for s in sides if s)
 

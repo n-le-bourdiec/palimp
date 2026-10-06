@@ -147,3 +147,35 @@ def test_deactivated_zone_pair_follows_the_deactivated_path(artifacts: Path) -> 
     assert finding.assessment.verdict_rule == "V-NOTLIVE"
     other = collect(dataset, PolicyKey.parse("dc/dc/CHG0000777-db"))
     assert not other.policy.deactivated
+
+
+def test_global_policy_through_the_pipeline(artifacts: Path) -> None:
+    # Decision 0034: a global policy has its own key and the same pipeline.
+    from palimp.report import allows, internet_facing
+
+    config = artifacts / "config.set"
+    config.write_text(
+        config.read_text()
+        + "set security policies global policy gp-crm match source-address lan\n"
+        + "set security policies global policy gp-crm match destination-address crm-web\n"
+        + "set security policies global policy gp-crm match application junos-https\n"
+        + "set security policies global policy gp-crm match to-zone dc\n"
+        + "set security policies global policy gp-crm then permit\n"
+        + "set security policies global policy gp-any match source-address any\n"
+        + "set security policies global policy gp-any match destination-address crm-web\n"
+        + "set security policies global policy gp-any match application any\n"
+        + "set security policies global policy gp-any then permit\n"
+    )
+    dataset = ingest(artifacts)
+    finding = collect(dataset, PolicyKey.parse("global/gp-crm"))
+    assert str(finding.key) == "global/gp-crm"
+    assert finding.assessment.verdict == "verify"
+    text = allows(finding, dataset).text
+    assert "in any zone (global policy)" in text and "in zone dc (global policy)" in text
+    assert internet_facing(finding, dataset) == ""
+    broad = collect(dataset, PolicyKey.parse("global/gp-any"))
+    assert internet_facing(broad, dataset).startswith("any zone (global policy)")
+    result = CliRunner().invoke(app, ["explain", "global/gp-crm", "-a", str(artifacts), "--no-llm"])
+    assert result.exit_code == 0, result.output
+    assert "global/gp-crm" in result.output
+    assert "from any zone (global policy), to zone dc (global policy)" in result.output

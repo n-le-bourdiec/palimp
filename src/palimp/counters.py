@@ -16,7 +16,8 @@ after a clear covers only the time since that clear.
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from palimp.models import Dataset
+from palimp.formats.rt_flow import merge_summaries
+from palimp.models import Dataset, LogSummary, Policy
 
 MIN_PAIR_POLICIES = 3
 
@@ -37,6 +38,26 @@ class Clear:
         return name, self.after[name]
 
 
+def log_summary(dataset: Dataset, policy: Policy) -> LogSummary | None:
+    """What the session log says about POLICY, or None.
+
+    Messages name the zone pair of each session. A global policy (decision
+    0034) is logged under the real zones, so its summary merges every zone
+    pair that logged its name, except pairs where a zone policy has that name.
+    """
+    if policy.is_global:
+        zoned = {(p.from_zone, p.to_zone) for p in dataset.config.policies if p.name == policy.name}
+        found = [
+            s
+            for s in dataset.logs.values()
+            if s.policy_name == policy.name and (s.from_zone, s.to_zone) not in zoned
+        ]
+        if not found:
+            return None
+        return found[0] if len(found) == 1 else merge_summaries(policy.name, found)
+    return dataset.logs.get(str(policy.key)) or dataset.logs.get(policy.name)
+
+
 def clears(dataset: Dataset) -> dict[tuple[str, str], Clear]:
     found: dict[tuple[str, str], Clear] = {}
     if dataset.hit_count_stats is None:
@@ -49,7 +70,7 @@ def clears(dataset: Dataset) -> dict[tuple[str, str], Clear]:
             continue
         pair = (policy.from_zone, policy.to_zone)
         pairs.setdefault(pair, []).append(count)
-        summary = dataset.logs.get(str(policy.key)) or dataset.logs.get(policy.name)
+        summary = log_summary(dataset, policy)
         if count == 0 and summary and summary.sessions and summary.last_seen:
             found.setdefault(pair, Clear()).after[policy.name] = summary.last_seen
     elsewhere = {pair for pair, values in pairs.items() if any(values)}

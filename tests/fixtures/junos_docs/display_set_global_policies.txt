@@ -1,0 +1,20 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-global-policies.html
+# Page title: Global Security Policies | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: GLOBAL-1 (global policies, set format)
+# Note: Example: Configuring a Global Policy with No Zone Restrictions, quick configuration (gp1 permit, gp2 deny).
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+set security address-book global address server1 dns-name www.example.com
+set security address-book global address server2 dns-name www.mail.example.com
+set security policies global policy gp1 match source-address server1
+set security policies global policy gp1 match destination-address server2
+set security policies global policy gp1 match application any
+set security policies global policy gp1 then permit
+set security policies global policy gp2 match source-address server2
+set security policies global policy gp2 match destination-address server1
+set security policies global policy gp2 match application junos-ftp
+set security policies global policy gp2 then deny

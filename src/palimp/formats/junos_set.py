@@ -19,7 +19,7 @@ level (`show | display set relative`, gap G2) get the `X Y` prefix back.
 import re
 
 from palimp.formats.terminal import edit_path, is_terminal_noise
-from palimp.models import AddressObject, Application, Config, ParseStats, Policy
+from palimp.models import GLOBAL, AddressObject, Application, Config, ParseStats, Policy
 
 TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|(\S+)')
 
@@ -70,7 +70,22 @@ IGNORED_SECURITY = {
 
 def policy_path(policy: Policy) -> list[str]:
     """Where the policy sits under `security policies`."""
+    if policy.is_global:
+        return [GLOBAL, "policy", policy.name]
     return ["from-zone", policy.from_zone, "to-zone", policy.to_zone, "policy", policy.name]
+
+
+def locate(path: list[str]) -> tuple[tuple[str, str, str], list[str]] | None:
+    """Policy key and remaining words of a path under `security policies`, or None.
+
+    `from-zone X to-zone Y policy NAME ...` or `global policy NAME ...`
+    (a global policy, zones `global`/`global`, decision 0034).
+    """
+    if len(path) >= 3 and path[0] == GLOBAL and path[1] == "policy":
+        return (GLOBAL, GLOBAL, path[2]), path[3:]
+    if len(path) >= 6 and path[0] == "from-zone" and path[2] == "to-zone" and path[4] == "policy":
+        return (path[1], path[3], path[5]), path[6:]
+    return None
 
 
 def tokenize(line: str) -> list[str]:
@@ -105,24 +120,11 @@ class _Builder:
         Kept when it is on a policy or on a statement inside one; other
         annotations (zone pairs, objects, other hierarchies) are not used.
         """
-        rest = path[2:]
-        if (
-            path[:2] == ["security", "policies"]
-            and len(rest) >= 6
-            and rest[0] == "from-zone"
-            and rest[2] == "to-zone"
-            and rest[4] == "policy"
-        ):
-            key = (rest[1], rest[3], rest[5])
-            policy = self.policies.get(key)
-            if policy is None:
-                policy = Policy(
-                    from_zone=key[0], to_zone=key[1], name=key[2], position=len(self.policies)
-                )
-                self.policies[key] = policy
-            policy.annotations.append(text)
-            return "parsed"
-        return "ignored"
+        found = locate(path[2:]) if path[:2] == ["security", "policies"] else None
+        if found is None:
+            return "ignored"
+        self.get_policy(found[0]).annotations.append(text)
+        return "parsed"
 
     # Each handler returns "parsed", "ignored" or "unknown".
 
@@ -152,17 +154,21 @@ class _Builder:
             stats=self.stats,
         )
 
-    def policy(self, path: list[str], deactivate: bool) -> str:
-        if len(path) < 6 or path[0] != "from-zone" or path[2] != "to-zone" or path[4] != "policy":
-            return "unknown"
-        key = (path[1], path[3], path[5])
+    def get_policy(self, key: tuple[str, str, str]) -> Policy:
         policy = self.policies.get(key)
         if policy is None:
             policy = Policy(
                 from_zone=key[0], to_zone=key[1], name=key[2], position=len(self.policies)
             )
             self.policies[key] = policy
-        rest = path[6:]
+        return policy
+
+    def policy(self, path: list[str], deactivate: bool) -> str:
+        found = locate(path)
+        if found is None:
+            return "unknown"
+        key, rest = found
+        policy = self.get_policy(key)
         if deactivate:
             if not rest:
                 policy.deactivated = True
@@ -180,6 +186,11 @@ class _Builder:
                 "destination-address": policy.destinations,
                 "application": policy.applications,
             }.get(rest[1])
+            if field is None and policy.is_global:
+                field = {
+                    "from-zone": policy.match_from_zones,
+                    "to-zone": policy.match_to_zones,
+                }.get(rest[1])
             if field is None:
                 return "ignored"
             if rest[2] not in field:
@@ -265,7 +276,11 @@ class _Builder:
             return "ignored" if top == "applications" else "unknown"
         section = path[1]
         if section == "policies":
-            if deactivate and (len(path) <= 2 or (len(path) == 6 and path[2] == "from-zone")):
+            if deactivate and (
+                len(path) <= 2
+                or (len(path) == 6 and path[2] == "from-zone")
+                or path[2:] == [GLOBAL]
+            ):
                 return self.deactivate_scope(path)
             if len(path) >= 3 and path[2] in (
                 "default-policy",

@@ -7,6 +7,10 @@ from pydantic import BaseModel, Field
 
 Tier = Literal["T1", "T2", "T3", "T4"]
 
+# Zones of a global policy (`security policies global policy NAME`, decision 0034).
+# Junos never allows `global` as a from-zone, so the pair cannot be a real zone pair.
+GLOBAL = "global"
+
 
 class PolicyKey(BaseModel, frozen=True):
     from_zone: str
@@ -14,13 +18,18 @@ class PolicyKey(BaseModel, frozen=True):
     name: str
 
     def __str__(self) -> str:
+        if self.from_zone == GLOBAL and self.to_zone == GLOBAL:
+            return f"{GLOBAL}/{self.name}"
         return f"{self.from_zone}/{self.to_zone}/{self.name}"
 
     @classmethod
     def parse(cls, text: str) -> "PolicyKey":
+        """FROM/TO/NAME for a zone policy, global/NAME for a global policy."""
         parts = text.split("/")
+        if len(parts) == 2 and parts[0] == GLOBAL and parts[1]:
+            return cls(from_zone=GLOBAL, to_zone=GLOBAL, name=parts[1])
         if len(parts) != 3 or not all(parts):
-            raise ValueError(f"expected FROM/TO/NAME, got {text!r}")
+            raise ValueError(f"expected FROM/TO/NAME or global/NAME, got {text!r}")
         return cls(from_zone=parts[0], to_zone=parts[1], name=parts[2])
 
 
@@ -41,10 +50,27 @@ class Policy(BaseModel):
     # `/* ... */` notes an admin attached to the policy or to a statement inside
     # it (`annotate`), shown only by the hierarchical format.
     annotations: list[str] = []
+    # Global policies only: `match from-zone` and `match to-zone` conditions
+    # (empty means any zone).
+    match_from_zones: list[str] = []
+    match_to_zones: list[str] = []
 
     @property
     def key(self) -> PolicyKey:
         return PolicyKey(from_zone=self.from_zone, to_zone=self.to_zone, name=self.name)
+
+    @property
+    def is_global(self) -> bool:
+        return self.from_zone == GLOBAL and self.to_zone == GLOBAL
+
+    def zones_text(self, side: str) -> str:
+        """The zones a side of the rule applies to, in words ("zone X", "any zone")."""
+        if not self.is_global:
+            return f"zone {self.from_zone if side == 'from' else self.to_zone}"
+        zones = self.match_from_zones if side == "from" else self.match_to_zones
+        if not zones:
+            return "any zone (global policy)"
+        return ("zone " if len(zones) == 1 else "zones ") + ", ".join(zones) + " (global policy)"
 
 
 class AddressObject(BaseModel):

@@ -28,7 +28,7 @@ from typing import NamedTuple
 from palimp.apps import Vocabulary, vocabulary
 from palimp.assess import assess
 from palimp.behavior import recurrence, stopped, time_of_day
-from palimp.counters import Clear, clears, meaning
+from palimp.counters import Clear, clears, log_summary, meaning
 from palimp.lineage import Migration, leftover_items, migrations, takeover_claim, takeovers
 from palimp.models import Dataset, Evidence, Finding, LogSummary, Policy, PolicyKey, Signal
 from palimp.notlive import Marker, decommission_items, markers
@@ -86,6 +86,11 @@ def hit_count_items(dataset: Dataset, policy: Policy, clear: Clear | None = None
     if row is None:
         if policy.deactivated:
             claim = "no row: deactivated policies match no traffic and are not listed"
+        elif policy.is_global:
+            claim = (
+                "no row under zones global global for this global policy: how hit counts list "
+                "global policies is not documented, its use is unknown from counters"
+            )
         else:
             claim = "no row for this policy: its use is unknown from counters"
         return [Item("T2", artifact, locator, claim, "blind", "hit_count")]
@@ -103,13 +108,6 @@ def hit_count_items(dataset: Dataset, policy: Policy, clear: Clear | None = None
         locator = f"hitcount.txt and logs/rt_flow.log, zone pair {pair[0]} -> {pair[1]}"
         items.append(Item("T2", artifact, locator, claim, "blind", "counter_clear"))
     return items
-
-
-def log_summary(dataset: Dataset, policy: Policy) -> LogSummary | None:
-    summary = dataset.logs.get(str(policy.key))
-    if summary is None:
-        summary = dataset.logs.get(policy.name)
-    return summary
 
 
 def _span(dataset: Dataset) -> str:

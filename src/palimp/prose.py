@@ -306,7 +306,7 @@ def evidence_text(finding: Finding) -> dict[str, str]:
             claim = QUOTED.sub('"..."', e.claim)
         # The rule's own name and zones are given to the LLM: any item may state them.
         policy = finding.policy
-        own = f"policy {policy.name} from {policy.from_zone} to {policy.to_zone}"
+        own = f"policy {policy.name} from {policy.zones_text('from')} to {policy.zones_text('to')}"
         found[e.id] = f"{own}; {e.artifact} {e.locator}: {claim} {' '.join(e.apps)}".strip()
     return found
 

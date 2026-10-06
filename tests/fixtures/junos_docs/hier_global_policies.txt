@@ -1,0 +1,33 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-global-policies.html
+# Page title: Global Security Policies | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: GLOBAL-1, HIER-1 (global policies, hierarchical format)
+# Note: 'show security policies' with a global block (verification of gp1 and gp2).
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+user@host# show security policies
+global {
+    policy gp1 {
+        match {
+            source-address server1;
+            destination-address server2;
+            application any;
+        }
+        then {
+            permit;
+        }
+    }
+    policy gp2 {
+        match {
+            source-address server2;
+            destination-address server1;
+            application junos-ftp;
+        }
+        then {
+            deny;
+        }
+    }
+}
