@@ -1,65 +1,71 @@
 # Handoff
 
-## Last session: 20 (2026-10-06), analyzer: plan before release (decision 0032), hierarchical config format (decision 0033)
+## Last session: 21 (2026-10-06), analyzer: push unblocked (noreply identity), parser gaps before release (decision 0034)
 
 ### Note for analyzer sessions
 
 - No ground truth schema change.
-- Decision 0032: plan before release (below). v1 reads set and hierarchical
-  configurations (decision 0003 superseded in part).
-- Decision 0033: `palimp.formats.junos_config.parse_config` detects the
-  format per file and is what ingest, rollbacks and anonymize call. The
-  hierarchical walker (`palimp.formats.junos_hier.statements`) feeds the
-  set reader's `_Builder`, so any new statement the analyzer reads must be
-  added to the builder only, and both formats get it. `Policy.annotations`
-  holds `/* */` notes; evidence kind `annotation` is treated like
-  `description` (assess `INTENT_KINDS`, owners initials, ticket refs,
-  temporary words, prose `FREE_TEXT_KINDS`, anonymize free text). If you add
-  a description-based rule, add annotations to it too.
-- `tests/conftest.py` has `to_hierarchical(src, dst)`: renders a scenario's
-  config and rollbacks as hierarchical text from the parsed model.
+- Git identity: repository config `n-le-bourdiec` /
+  `240397139+n-le-bourdiec@users.noreply.github.com` (CLAUDE.md). The 11
+  session 20 commits were rewritten to it (author and committer only,
+  trees and messages unchanged) and pushed; CI green.
+- Decision 0034:
+  - a deactivated zone pair, `security policies global`, `security
+    policies` or `security` deactivates every policy under it
+    (`_Builder.deactivate_scope`, applied in `_Builder.config()` whatever
+    the line order); these follow the existing deactivated path
+    (V-NOTLIVE unless traffic is seen, cleanup list);
+  - global policies: zones `global`/`global` (`models.GLOBAL`), key
+    `global/NAME` (`PolicyKey` prints and parses it), `Policy.is_global`,
+    `match_from_zones`, `match_to_zones`, `zones_text()`; the log lookup is
+    `counters.log_summary` (moved from evidence) with
+    `rt_flow.merge_summaries` for global policies;
+  - `then permit application-services ...`: action permit,
+    `Policy.application_services`, one T3 item kind `application_services`
+    (no apps);
+  - `apply-groups` stays warn-only until the real public configs test.
+- Any new code that reads `policy.from_zone`/`to_zone` as real zones must
+  handle `policy.is_global` (see `report._zones`).
 
 ### Done
 
-- Part A: session 19 metrics finalized (67 calls, 5.85 USD, 43 min);
-  decision 0032 recorded, plan below, CLAUDE.md v1 scope updated.
-- Part B: hierarchical reader (`inactive:`, `protect:`/`replace:` dropped,
-  `/* */` annotations on the next statement, `##` comments, quoted strings,
-  `[ ]` lists, prompts and `[edit]` banners, relative `show X Y` output);
-  `apply-groups` and deactivated zone pairs reported, not applied (both
-  formats); `ingest` prints the format of each file. Annotations are T1
-  evidence. Rollbacks may be hierarchical (mixed formats work). Anonymize
-  rewrites hierarchical files.
-- Fixtures: 8 samples from 6 Juniper documentation pages
-  (`tests/fixtures/junos_docs/hier_*.txt`), all parse with 0 unknown lines;
-  HIER-1a to HIER-1e in `docs/format-assumptions.md`.
-- Round trip on Medium seeds 0-9: model, creation commits, verdicts,
-  confidence and owners identical. Anonymize on hierarchical renderings of
-  seeds 0-9: identical judgments and Worth a look ranking, nothing left.
-- README: artifact layout, both formats, plain statement that palimp has
-  never been run on a real SRX history (decision 0032 item 4, done early,
-  safe direction).
+- Part A: repo git identity set to the noreply address; 11 unpushed
+  commits rewritten (filter-branch on `origin/main..HEAD` only; dates,
+  messages, Co-Authored-By lines and trees identical); 650/650 tests with
+  `--runslow`; pushed, CI green. `docs/assets` committed as is, excluded
+  from ruff in `pyproject.toml`. Session 20 metrics finalized (11 commits,
+  124 calls, 8.00 USD). CLAUDE.md records the noreply identity rule.
+- Part B (decision 0034): deactivated scopes (both formats), global
+  policies (both formats, through evidence, verdict, report, explain,
+  anonymize), application-services permit as T3; 6 new documentation
+  fixtures (Global Security Policies page, Application Firewall page),
+  all parse with 0 unknown; GLOBAL-1, APPSVC-1, DEACT-1 in
+  `docs/format-assumptions.md`; README inputs updated.
+- Eval Medium seeds 20-99 before and after: 12553 rules, identical per-rule
+  rows (verdict, rule, confidence and every other field); dangerous errors
+  0 before and after (the simulator writes none of these constructs).
 
 ### Next
 
 - Decision 0032 item 2 (simulator sessions): Hard level with
   TRAP-RENAME-CHAIN, TRAP-IP-REUSE, TRAP-SCANNER-HITS, TRAP-STALE-NAME.
 - Decision 0032 item 3: real public configs, local only, never committed.
-  First thing to check there: `inactive:`, annotations and descriptions on
-  real security policies (HIER-1b to HIER-1d unverified on policies).
+  Check there: `inactive:`, annotations and descriptions on real security
+  policies (HIER-1b to HIER-1d), global policies in hit counts and logs
+  (GLOBAL-1), how `apply-groups` is used on policies (decision 0034).
 - Project lead: try `palimp anonymize` on a real config before
-  recommending it in the issue template; review the limits in decision 0031.
+  recommending it in the issue template; review the limits in decision
+  0031 and the capture issue below.
 - Carried over: remaining dead rules at verify (mostly no logging), owners
   of applications with no ticket.
 
 ### Open questions
 
-- `inactive:` on a whole zone pair (or on `security policies`): palimp reads
-  the policies under it as active and warns. Marking them deactivated would
-  be correct but moves them toward `removal_candidate`: approve? (decision
-  0033)
-- `apply-groups`: warn only (current) or expand simple groups without
-  wildcards?
+- Other `then permit` options (`tunnel`, `firewall-authentication`,
+  `destination-address`): read them as permit too? The action shows as
+  `-` today; no verdict depends on it.
+- Should anonymize recognize prompts and banners in captures (known issue
+  below)?
 - Should the issue template ask for `--strip-text` by default?
 - Carried over: decision 0020 example without a migration (needs
   approval); held-out level and count; 90% vs best trade; HIGH with an open
@@ -69,19 +75,24 @@
 
 ### Known issues
 
-- Session 20 commits are NOT pushed: `git push` failed with "push declined
-  due to email privacy restrictions" (GitHub refuses commits authored with
-  the private address in `.git/config`; session 19 pushed with the same
-  address). The project lead decides: allow it in GitHub email settings, or
-  set the noreply address and rewrite the 11 local commits, then push and
-  check CI.
 - Hierarchical: file names stay `config.set` and `rollback-NN.set` whatever
-  the format. `global` policies (`security policies global`) are not read
-  in either format (pre-existing). An `inactive:` leaf with a value is kept
-  as `description x` in `deactivated_statements`, where set output may
-  print only the keyword (no sample). `then { permit { application-services
-  ... } }` leaves the action unset in both formats (pre-existing, set reader
-  needs `then permit` as a leaf; not changed: verdict direction unknown).
+  the format. An `inactive:` leaf with a value is kept as `description x`
+  in `deactivated_statements`, where set output may print only the keyword
+  (no sample).
+- Other `then permit <option>` forms (`tunnel ipsec-vpn X`,
+  `firewall-authentication ...`, `destination-address drop-untranslated`)
+  still leave the action unset, both formats (decision 0034, postponed: no
+  fixture, outside the session 21 mission).
+- Global policies: how hit counts and RT_FLOW name them is undocumented
+  (GLOBAL-1). Hit count looked up under `global global NAME` (blind when
+  absent); logs merged by policy name across zone pairs, except pairs where
+  a zone policy has the same name.
+- Anonymize (pre-existing, seen in session 21): in a saved terminal capture,
+  prompt and banner words are treated as names (`[edit]` became `[srwb]`,
+  `show` became `lufh` in `user@host# show security policies global`), so
+  the anonymized capture loses its relative path and parses differently.
+  Not fixed (outside the mission). Workaround: give anonymize a plain
+  `show configuration` output without prompts.
 - The anonymized `## Last commit:` header line is treated as free text
   (the time zone abbreviation is replaced, harmless).
 - Anonymize limits (decision 0031): pseudonymization, not encryption;
@@ -95,12 +106,10 @@
 - Carried over: held-out `scenario_id` can equal a dev id; logged sessions
   undercount traffic; time of day in logged time zone; Junos predefined
   applications from general knowledge (VSRX-12); VSRX-2b; `svc-ansible`; S2
-  and S5; git identity in repo config only; session 2 Part C checks.
-- Session 20 note: `docs/assets/` (diagrams, `gen_diagrams.py`) appeared
-  untracked during the session; it was swept into a local commit by
-  mistake, removed again before any push, and left untracked on disk.
-  `uv run ruff check .` fails on `gen_diagrams.py` (line length): fix or
-  exclude it before committing it, or CI turns red.
+  and S5; session 2 Part C checks.
+- The test suite is slow on this machine: 16 min with `--runslow`
+  (session 21 Part A), and one plain run took 37 min. Run targeted test
+  files while developing, the full suite before pushing.
 
 ## Plan before release (decision 0032)
 
@@ -164,9 +173,11 @@ has transcript `b14ba40d-eb4c-4ee4-bc69-02b4a94d38bb` (finalized in session
 in session 18). Session 18 has transcript
 `fd2407ac-42b6-4684-a907-dbaff839c04d` (finalized in session 19). Session 19
 has transcript `63a66e24-b7a2-43f0-9fe2-32d2c7b0b4af` (finalized in session 20).
-Session 20 has transcript `1561b174-b703-4305-b4b4-d9a8a844a436`. Finalize it
-at the start of session 21 with:
+Session 20 has transcript `1561b174-b703-4305-b4b4-d9a8a844a436` (finalized
+in session 21). Session 21 has transcript
+`1787e2cd-2949-4e20-ab01-cde64c249ddc`. Finalize it at the start of session 22
+with:
 
-    uv run python metrics/session_tokens.py 1561b174-b703-4305-b4b4-d9a8a844a436
+    uv run python metrics/session_tokens.py 1787e2cd-2949-4e20-ab01-cde64c249ddc
 
 Cost is API-equivalent (decision 0006), not a billed amount.
