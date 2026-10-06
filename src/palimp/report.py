@@ -22,9 +22,11 @@ import re
 from pydantic import BaseModel
 
 from palimp import __version__
+from palimp.addresses import is_public
 from palimp.assess import NOT_LIVE_KINDS
 from palimp.counters import clears
 from palimp.evidence import collect_all
+from palimp.lineage import networks
 from palimp.models import Dataset, Evidence, Finding
 from palimp.services import describe
 
@@ -62,6 +64,7 @@ class RuleEntry(BaseModel):
     section: str  # removal_candidate, verify or keep
     group: str  # who to ask (see owner_group)
     allows: Cited
+    internet: str = ""  # why the rule faces the internet, empty if it does not
     why: list[Cited] = []
     intent: Cited
     owner: str = ""
@@ -270,17 +273,46 @@ def is_broad(finding: Finding) -> bool:
     return "any" in policy.applications or not policy.sources or "any" in policy.sources
 
 
-def is_internet_facing(finding: Finding) -> bool:
-    """One side of the rule is a zone named like the internet (untrust, internet, ...)."""
+def _side_internet(dataset: Dataset, names: list[str], zone: str) -> str:
+    """Why one side of a rule reaches the internet, or "" (decision 0030)."""
+    public: list[str] = []
+    open_side = not names
+    for name in names:
+        nets = None if name == "any" else networks(dataset, name)
+        if nets is None:
+            open_side = True
+            continue
+        public += [f"{name} ({net})" for net in nets if is_public(net)]
+    if public:
+        more = f" and {len(public) - 2} more" if len(public) > 2 else ""
+        return "public address " + ", ".join(public[:2]) + more
+    if open_side and zone.lower() in INTERNET_ZONES:
+        return f"zone {zone}, named like the internet, with any or unresolved addresses"
+    return ""
+
+
+def internet_facing(finding: Finding, dataset: Dataset) -> str:
+    """Why the rule faces the internet, or "": public addresses first, zone names second.
+
+    A public address on either side is enough. A zone named like the internet
+    (untrust, internet, ...) counts only for a side whose addresses palimp
+    cannot resolve (any, DNS names, unknown objects): resolved private
+    addresses in a zone named untrust are a partner or VPN network, not the
+    internet.
+    """
     policy = finding.policy
-    return bool({policy.from_zone.lower(), policy.to_zone.lower()} & INTERNET_ZONES)
+    sides = (
+        _side_internet(dataset, policy.sources, policy.from_zone),
+        _side_internet(dataset, policy.destinations, policy.to_zone),
+    )
+    return "; ".join(s for s in sides if s)
 
 
 def look_risk(entry: "RuleEntry") -> int:
     """Rank of a worth-a-look rule, 0 most risky: an index into RISKS."""
     if is_broad(entry.finding):
         return 0
-    if is_internet_facing(entry.finding):
+    if entry.internet:
         return 1
     if counters_only(entry.finding):
         return 2
@@ -320,8 +352,10 @@ def worth_a_look(entry: "RuleEntry") -> list[Cited]:
         risks.append(
             Cited(text="matches any application or any source", evidence=entry.allows.evidence)
         )
-    if is_internet_facing(entry.finding):
-        risks.append(Cited(text="internet-facing zone", evidence=entry.allows.evidence))
+    if entry.internet:
+        risks.append(
+            Cited(text=f"internet-facing: {entry.internet}", evidence=entry.allows.evidence)
+        )
     return risks + reasons
 
 
@@ -628,6 +662,7 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
                 section=assessment.verdict,
                 group=FIREWALL_TEAM if cleanup else owner_group(finding),
                 allows=allows(finding, dataset),
+                internet=internet_facing(finding, dataset),
                 why=why(finding, notes, ref),
                 intent=intent(finding),
                 owner=CLEANUP_ASK if cleanup else assessment.ask or "",

@@ -7,6 +7,7 @@ artifacts.
 
 import csv
 import io
+import ipaddress
 import json
 import re
 import subprocess
@@ -16,8 +17,10 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from palimp.addresses import is_public
 from palimp.assess import NOT_LIVE_KINDS
 from palimp.cli import app
+from palimp.evidence import collect_all
 from palimp.ingest import ingest
 from palimp.questions import answers_csv, cleanup_list
 from palimp.questions import build as build_questions
@@ -29,6 +32,7 @@ from palimp.report import (
     build,
     cited_ids,
     counters_only,
+    internet_facing,
     is_cleanup,
     look_risk,
     markdown,
@@ -164,8 +168,9 @@ def test_worth_a_look_ranked_by_risk(easy: Path) -> None:
     for finding in (low, counters, internet, broad):
         finding.assessment.confidence = "LOW"  # type: ignore[union-attr]
         finding.policy.from_zone, finding.policy.to_zone = "trust", "servers"
-        finding.policy.sources, finding.policy.applications = ["host-a"], ["junos-ssh"]
-    internet.policy.to_zone = "untrust"
+        finding.policy.sources, finding.policy.applications = ["users-hq"], ["junos-ssh"]
+        finding.policy.destinations = ["dns-01"]
+    internet.policy.to_zone, internet.policy.destinations = "untrust", ["any"]
     broad.policy.applications = ["any"]
     report = build(dataset, findings)
     ref = {id(r.finding): r.ref for r in report.rules}
@@ -174,6 +179,31 @@ def test_worth_a_look_ranked_by_risk(easy: Path) -> None:
     assert [r for r in order if r in mine] == mine
     risk = {e.ref: e.risk for e in report.worth_a_look}
     assert [risk[r] for r in mine] == list(RISKS)
+
+
+def test_internet_facing_from_public_addresses(easy: Path) -> None:
+    """Decision 0030: public addresses first, zone names only for unresolved sides."""
+    dataset = ingest(easy)
+    finding = collect_all(dataset)[0]
+    policy = finding.policy
+    policy.from_zone, policy.to_zone = "trust", "servers"
+    policy.sources, policy.destinations = ["users-hq"], ["dns-01"]
+    assert internet_facing(finding, dataset) == ""
+    policy.destinations = ["ntp-pool"]
+    assert internet_facing(finding, dataset) == "public address ntp-pool (198.51.100.123/32)"
+    policy.to_zone, policy.destinations = "untrust", ["dns-01"]
+    assert internet_facing(finding, dataset) == ""
+    policy.destinations = ["any"]
+    assert "zone untrust, named like the internet" in internet_facing(finding, dataset)
+    policy.to_zone = "partners"
+    assert internet_facing(finding, dataset) == ""
+
+
+def test_public_address_classes() -> None:
+    public = ["198.51.100.7/32", "8.8.8.8/32", "0.0.0.0/0", "2001:db8::/64", "2a00:1450::1/128"]
+    private = ["10.1.2.0/24", "172.16.0.0/12", "192.168.1.1/32", "100.64.0.1/32", "fd00::1/128"]
+    assert all(is_public(ipaddress.ip_network(n)) for n in public)
+    assert not any(is_public(ipaddress.ip_network(n)) for n in private)
 
 
 def test_easy_report(easy: Path) -> None:
