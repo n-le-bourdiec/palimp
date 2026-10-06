@@ -1,0 +1,53 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-address-books-sets.html
+# Page title: Address Books and Address Sets | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: HIER-1 (hierarchical format)
+# Note: 'show security address-book': address sets, a container-form address with dns-name, attach, a global book.
+# Note: Text copied verbatim from the page <pre> block (line endings normalized).
+# ---
+[edit]
+user@host# show security zones
+    security-zone trust {
+        
+        interfaces {
+            ge-0/0/0.0;
+        }
+    }
+    security-zone untrust {
+        interfaces {
+            ge-0/0/1.0;
+        }
+    }
+[edit]
+user@host# show security address-book
+        Eng-dept {
+            address a1 203.0.113.1/32;
+            address a2 203.0.113.2/32;
+            address a3 203.0.113.3/32;
+            address a4 203.0.113.4/32;
+            address-set sw-eng {
+                address a1;
+                address a2;
+            }
+            address-set hw-eng {
+                address a3;
+                address a4;
+            }
+            attach {
+                zone trust;
+            }
+        }
+            Web {
+                address Intranet {
+                    dns-name www-int.device1.example.com;
+                }
+                attach {
+                    zone untrust;
+                }
+            }
+            global {
+                address g1 198.51.100.2/32;
+            }

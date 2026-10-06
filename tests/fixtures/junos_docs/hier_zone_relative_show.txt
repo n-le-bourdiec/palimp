@@ -1,0 +1,54 @@
+# Source: https://www.juniper.net/documentation/en_US/junos12.1x46/topics/example/security-srx-device-zone-and-policy-configuring.html
+# Page title: Example: Configuring Security Zones and Policies for SRX Series - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos12.1x46 (URL path)
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: HIER-1 (hierarchical format)
+# Note: Three samples: 'show security zones security-zone DMZ' and 'show security policies from-zone X to-zone Y' (output relative to the path in the command).
+# Note: The page renders the sample as nested <span> blocks with a left margin per level: the text is copied as published, indentation rebuilt as 4 spaces per level.
+# ---
+[edit]
+user@srx210-host# show security zones security-zone DMZ
+address-book {
+    address Server-HTTP-1 192.168.2.2/24;
+    address Server-HTTP-2 192.168.2.3/24;
+    address Server-SMTP 192.168.2.4/24;
+    address-set DMZ-address-set-http {
+        address Server-HTTP-1;
+        address Server-HTTP-2;
+    }
+}
+    interfaces {
+        ge-0/0/1.0 {
+            host-inbound-traffic {
+                system-services {
+                    all;
+                }
+            }
+        }
+    }
+[edit]
+user@srx210-host# show security policies from-zone trust to-zone DMZ
+policy permit-mail-trust-DMZ {
+    match {
+        source-address PC-Trust;
+        destination-address Server-SMTP;
+        application junos-smtp;
+    }
+    then {
+        permit;
+    }
+}
+[edit]
+user@srx210-host# show security policies from-zone DMZ to-zone DMZ
+policy permit-http-in-DMZ {
+    match {
+        source-address DMZ-address-set-http;
+        destination-address DMZ-address-set-http;
+        application junos-http;
+    }
+    then {
+        permit;
+    }
+}

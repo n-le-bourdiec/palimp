@@ -1,0 +1,76 @@
+# Source: https://www.juniper.net/documentation/en_US/junos13.2/topics/example/junos-software-configuration-comments-including.html
+# Page title: Example: Including Comments in a Junos Configuration - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos13.2 (URL path)
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: HIER-1 (hierarchical format)
+# Note: Two samples: a session with 'annotate' then 'show' (comments as /* */ before the annotated statement), and a configuration file example with comments, some of which the page says are dropped.
+# Note: The page renders the sample as nested <span> blocks with a left margin per level: the text is copied as published, indentation rebuilt as 4 spaces per level.
+# Note: 'annotate interface so0' then 'interface so-0/0/0' in the output: copied as published.
+# ---
+[edit]
+user@host# show
+protocols {
+    ospf {
+        area 0.0.0.0 {
+            interface so-0/0/0 {
+                hello-interval 5;
+            }
+        }
+    }
+}
+[edit]
+user@host# edit protocols ospf
+[edit protocols ospf]
+user@host# set area 0.0.0.0
+user@host# annotate area 0.0.0.0 "Backbone area configuration added June 15, 1998"
+[edit protocols ospf]
+user@host# edit area 0.0.0.0
+[edit protocols ospf area 0.0.0.0]
+user@host# annotate interface so0 "Interface from router sj1 to router sj2"
+[edit protocols ospf area 0.0.0.0]
+user@host# top
+[edit]
+user@host# show
+protocols {
+    ospf {
+        /* Backbone area configuration added June 15, 1998 */
+        area 0.0.0.0 {
+            /* Interface from router sj1 to router sj2 */
+            interface so-0/0/0 {
+                hello-interval 5;
+            }
+        }
+    }
+}
+[edit]
+user@host#
+/* This comment goes with routing-options */
+routing-options {
+    /* This comment goes with routing-options traceoptions */
+    traceoptions {
+        /* This comment goes with routing-options traceoptions tracefile */
+        tracefile rpd size 1m files 10;
+        /* This comment goes with routing-options traceoptions traceflag task */
+        traceflag task;
+        /* This comment goes with routing-options traceoptions traceflag general */
+        traceflag general;
+    }
+    autonomous-system 10458;    /* This comment is dropped */
+}
+routing-options {
+    rib-groups {
+        ifrg {
+            import-rib [ inet.0 inet.2 ];
+            /* A comment here is dropped */
+        }
+        dvmrp-rib {
+            import-rib inet.2;
+            export-rib inet.2;
+            /* A comment here is dropped */
+        }
+        /* A comment here is dropped */
+    }
+    /* A comment here is dropped */
+}

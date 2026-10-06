@@ -1,0 +1,36 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-policy-configuration.html
+# Page title: Configuring Security Policies | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: HIER-1 (hierarchical format)
+# Note: 'then { permit; log { session-init; session-close; } }'. The prompts have no space after '#' ('user@host#show'), as published.
+# Note: Text copied verbatim from the page <pre> block (line endings normalized).
+# ---
+[edit]
+user@host#show security zones
+    security-zone tap-zone {
+        interfaces {
+            ge-0/0/0.0;
+        }
+        application-tracking;
+    }
+[edit]
+user@host#show security policies
+    from-zone tap-zone to-zone tap-zone {
+        policy tap-policy {
+            match {
+                source-address any;
+                destination-address any;
+                application any;
+            }
+            then {
+                permit;
+                log {
+                    session-init;
+                    session-close;
+                }
+            }
+        }
+    }

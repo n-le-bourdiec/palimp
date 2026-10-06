@@ -1,0 +1,38 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-policy-configuration.html
+# Page title: Configuring Security Policies | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: HIER-1 (hierarchical format)
+# Note: Two samples of the page: 'show security policies' then 'show security address-book' (named books attached to zones).
+# Note: Text copied verbatim from the page <pre> block (line endings normalized).
+# Note: The second sample is indented by 4 more spaces from book2 on, as published.
+# ---
+[edit]
+user@host# show security policies
+from-zone trust to-zone untrust {
+    policy permit-mail {
+        match {
+            source-address mail-trust;
+            destination-address mail-untrust;
+            application junos-mail;
+        }
+        then {
+            permit;
+        }
+    }
+}
+user@host# show security address-book
+book1 {
+    address mail-untrust 203.0.113.14/24;
+    attach {
+        zone untrust;
+    }
+}
+    book2 {
+        address mail-trust 192.168.1.1/32;
+        attach {
+            zone trust;
+        }
+    }

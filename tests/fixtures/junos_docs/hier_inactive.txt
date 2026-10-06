@@ -1,0 +1,33 @@
+# Source: https://www.juniper.net/documentation/en_US/junos12.3/topics/example/junos-cli-statements-and-identifiers-activating-deactivating.html
+# Page title: Examples: Deactivating and Reactivating Statements and Identifiers in a Junos Configuration - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos12.3 (URL path)
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: HIER-1 (hierarchical format)
+# Note: 'deactivate at-5/2/0' then 'show': the statement gets the 'inactive:' prefix. The page elides lines with '...' and nests the second session inside the first, as published.
+# Note: The page renders the sample as nested <span> blocks with a left margin per level: the text is copied as published, indentation rebuilt as 4 spaces per level.
+# ---
+[edit interfaces]
+user@host# show
+at-5/2/0 {
+    traceoptions {
+        traceflag all;
+    }
+    atm-options {
+        vpi 0 maximum-vcs 256;
+    }
+    unit 0 {
+        ...
+        [edit interfaces]
+        user@host# deactivate at-5/2/0
+        [edit interfaces]
+        user@host# show
+        inactive: at-5/2/0 {
+            traceoptions {
+                traceflag all;
+            }
+            ...
+        }
+    }
+}
