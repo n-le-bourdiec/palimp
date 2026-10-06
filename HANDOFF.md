@@ -1,60 +1,59 @@
 # Handoff
 
-## Last session: 18 (2026-10-06), analyzer: questionnaire fixes, real local model measure, prompt injection
+## Last session: 19 (2026-10-06), analyzer: palimp anonymize, internet-facing from public addresses, LLM frozen for v1
 
 ### Note for analyzer sessions
 
 - No ground truth schema change.
-- Decision 0028 (supersedes the licensing part of 0027): untrusted artifact
-  text (descriptions, commit comments, ticket summaries) sits in an
-  `<artifact_data>` block of the prompt as neutralized JSON strings and
-  licenses no fact in validation; a sentence citing only free text must
-  attribute it; judgment and instruction words are rejected. Ollama
-  requests: `think: false`, 400 token cap.
-- `--no-llm` stays the default (measured, see `docs/llm-writer-measure.md`).
-  If `--llm`: `qwen3.5:4b-q4_K_M`.
-- Every questionnaire says "If we do not hear back, the rule is kept."
-  `palimp report` also writes `00-firewall-team-cleanup.txt`. "Worth a
-  look" is ranked by risk (`report.LookEntry`, `Report.worth_a_look`):
-  any application or any source, internet-facing zone (`INTERNET_ZONES`),
-  counters only, LOW confidence; Markdown top 20, JSON all.
+- Decision 0029: the LLM writer stays experimental and off by default for
+  v1. No further LLM work before v1 (`palimp.prose`, `palimp.llm`,
+  `eval/llm_writer.py` only kept passing).
+- Decision 0030: internet-facing (Worth a look ranking only) is a public
+  address on either side (`palimp.addresses`, documentation ranges count as
+  public), else a zone named like the internet on a side with `any` or
+  unresolved addresses. Reason in `RuleEntry.internet`.
+- Decision 0031: `palimp anonymize -a DIR -o OUT --key KEYFILE
+  [--strip-text] [--shift-dates] [--mapping]`. Words palimp reads as
+  signals are kept in names (`palimp.anonymize.is_signal`): if you add a
+  word list to the analyzer (role, temporary, decommission, ticket prefix,
+  internet zone), add it to `is_signal` too, or anonymized copies will
+  stop reproducing the analysis. `tests/test_anonymize.py` (slow) catches it
+  on Medium seeds 0 to 9.
 
 ### Done
 
-- Part A: session 17 metrics finalized (75 calls, 4.98 USD); the three
-  small fixes above, tested (Easy fast, Medium seed 0 slow).
-- Part B: hardware (Ryzen 5 5600H, 31.3 GB RAM, RTX 3050 Laptop 4 GB);
-  pulled llama3.2:3b (2.0 GB) and qwen3.5:4b-q4_K_M (3.3 GB);
-  `eval/llm_writer.py` measures a model on a stratified sample (60 rules of
-  Medium seeds 0-2) and, with `--poison`, the prompt injection test.
-  qwen3.5:4b: 16.7% sentences rejected, 58% paragraphs fully LLM, 8.8 s
-  per rule; llama3.2:3b: 52.6%, 10%, 4.7 s. 0 judgments changed. Manual
-  review of passed sentences (seed 0): about 8% (qwen) and 36% (llama)
-  wrong or misleading. Poisoned copy: 0 injected claims kept, 0 judgments
-  changed, both models. Prompt injection tests with the fake backend
-  (`tests/test_prompt_injection.py`). Three false positives fixed after a
-  first run (rule line citations, own policy name, lowercase "may"), and
-  the month of a cited ISO date is now licensed.
+- Part A: session 18 metrics finalized (148 calls, 9.82 USD); decision 0029
+  (README and `--help` say experimental); decision 0030 with tests. Medium
+  seed 0: 34 internet-facing rules (29 by public address, 5 by zone), same
+  count as the zone list on this seed.
+- Part B: `palimp anonymize` (`src/palimp/anonymize.py`): HMAC-SHA256 keyed;
+  prefix- and class-preserving IP mapping; names mapped run by run with
+  prefix-dependent permutations (length, case, shared prefixes kept); known
+  names, IPs, ticket IDs, e-mails, initials after req and upper-case short
+  names replaced in free text; system and SNMP lines word by word; mapping
+  redrawn with the next salt if a replacement hits a kept word. Only files
+  palimp reads are copied, plus `ANONYMIZED.txt`. Key created if missing;
+  key and `OUT.PRIVATE-mapping.json` refused inside OUT. About 4.5 s for a
+  Medium scenario.
+- Tests: Medium seeds 0-9 identical verdicts, confidence, owner certainty
+  and Worth a look ranking, no original name, person word, ticket ID or IP
+  left (except as another value's replacement); shifted dates keep
+  judgments (seed 0); same key same bytes, other key other mapping;
+  strip-text; address classes and subnets; CLI guards.
+- README: "Sharing a problem config safely in an issue".
 
 ### Next
 
-- Project lead: read `docs/llm-writer-measure.md` (side by side, review)
-  and decide whether the LLM writer is worth more work. Options: give the
-  LLM the intent, confidence and verdict reason as sentences it must keep;
-  a relation check (a person named with "requested" must come from a
-  ticket item of this rule, not an application requester item).
-- Known false positives (not fixed, to keep the measure comparable):
-  "in zone servers" reads "zone" as an application; ordinary words before
-  "server" ("specific", "rule", "allows", "predefined").
-- Project lead: held-out run for a release including sessions 14 to 18.
+- Project lead: try `palimp anonymize` on a real config before
+  recommending it in the issue template; review the limits in decision 0031.
+- Project lead: held-out run for a release including sessions 14 to 19.
 - Carried over: remaining dead rules at verify (mostly no logging), owners
   of applications with no ticket.
 
 ### Open questions
 
-- Is the LLM writer worth more sessions, given the numbers? (decision 0028)
-- Internet-facing is a zone name list (`internet`, `untrust`, `outside`,
-  `external`, `wan`): good enough, or should it use public addresses?
+- Should the issue template ask for `--strip-text` by default? (palimp
+  keeps free text by default, as the prompt asked.)
 - Carried over: decision 0020 example without a migration (needs
   approval); held-out level and count; 90% vs best trade; HIGH with an open
   ticket; decision 0019 blind items; per trap metric; Hard trap weights;
@@ -63,12 +62,14 @@
 
 ### Known issues
 
-- Validation checks tokens, not relations: a sentence relating true facts
-  wrongly passes (about 8% of passed qwen sentences).
-- A paragraph with a rejected sentence mixes LLM sentences and the
-  deterministic text, which can repeat facts.
-- Prose validation does not detect a negated verdict ("should not be kept")
-  or a lowercase application name palimp never saw (decision 0027).
+- Anonymize limits (decision 0031): pseudonymization, not encryption;
+  names palimp does not know stay in free text; non-ISO dates in free text
+  are not shifted; a kept signal word that starts a longer name loses the
+  shared prefix; people with a one-letter name word may get other initials.
+- LLM writer limits frozen for v1 (decisions 0027 to 0029): wrong relations
+  between true facts pass validation (about 8% of passed qwen sentences);
+  negated verdicts and unseen lowercase application names not detected;
+  mixed paragraphs can repeat facts.
 - The report prints the artifact path as given on the command line.
 - 3 MISLEADING-COMMENT rules on 20 to 99 show no conflict (not inspected).
 - `vendor-arch-109` still does not name `archive`.
@@ -121,9 +122,10 @@ in session 15). Session 15 has transcript
 has transcript `b14ba40d-eb4c-4ee4-bc69-02b4a94d38bb` (finalized in session
 17). Session 17 has transcript `052aad46-2e12-4fa9-99c9-54d4730081ee` (finalized
 in session 18). Session 18 has transcript
-`fd2407ac-42b6-4684-a907-dbaff839c04d`. Finalize it at the start of session 19
-with:
+`fd2407ac-42b6-4684-a907-dbaff839c04d` (finalized in session 19). Session 19
+has transcript `63a66e24-b7a2-43f0-9fe2-32d2c7b0b4af`. Finalize it at the start
+of session 20 with:
 
-    uv run python metrics/session_tokens.py fd2407ac-42b6-4684-a907-dbaff839c04d
+    uv run python metrics/session_tokens.py 63a66e24-b7a2-43f0-9fe2-32d2c7b0b4af
 
 Cost is API-equivalent (decision 0006), not a billed amount.
