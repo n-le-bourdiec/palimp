@@ -33,7 +33,8 @@ in hexadecimal, created if KEYFILE does not exist):
   are kept, so `mon` stays the start of `monitoring` and palimp still learns
   abbreviations. One-letter runs, `junos-*` names, `any`, and words palimp
   reads as signals (role words, temporary words and their `tmep` typos,
-  ticket prefixes, decommission words, `requested by`) are kept. Person
+  ticket prefixes, decommission words, `requested by`, and the zone words
+  read as the internet by decision 0030 such as `untrust`) are kept. Person
   names, logins and object names share one mapping, so `req JL` initials are
   replaced with the initials of the replaced name.
 - Free text (descriptions, commit comments, ticket summaries): known names,
@@ -71,7 +72,8 @@ in hexadecimal, created if KEYFILE does not exist):
 ## Consequences
 
 - Tested on Medium dev seeds 0 to 9: verdicts, confidence and owner
-  certainty identical on the copy, no original name, person, ticket ID or
+  certainty identical on the copy, and the same "Worth a look" ranking, no
+  original name, person, ticket ID or
   address left in it (a value can only reappear as another value's
   replacement); with `--shift-dates` on seed 0, judgments identical too.
 - Limits, said in the README: this is keyed pseudonymization, not

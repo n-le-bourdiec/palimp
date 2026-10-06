@@ -15,7 +15,8 @@ a secret key with HMAC-SHA256, so the copy keeps what palimp needs:
   length, case and shared prefixes (`mon` stays the start of `monitoring`,
   so palimp still learns abbreviations), and separators stay. Words palimp
   reads as signals (role words such as `users`, temporary words, ticket
-  prefixes such as `CHG`, decommission words) and one-letter runs are kept.
+  prefixes such as `CHG`, decommission words, zone names such as `untrust`
+  read as the internet) and one-letter runs are kept.
 - Free text (descriptions, commit comments, ticket summaries): known names,
   IP addresses, ticket IDs, e-mail addresses, initials after "req" and
   upper-case short names are replaced, other words are kept. `strip_text`
@@ -51,6 +52,7 @@ from palimp.formats.terminal import PROMPT
 from palimp.ingest import ingest, resolve_directory
 from palimp.models import Config, Dataset
 from palimp.notlive import DECOMMISSION
+from palimp.report import INTERNET_ZONES
 
 KEY_BYTES = 32
 MAX_SALT = 50
@@ -153,6 +155,7 @@ def is_signal(word: str) -> bool:
         or word in TEMPORARY_WORDS
         or word in TICKET_PREFIXES
         or word in SIGNAL_WORDS
+        or word in INTERNET_ZONES
         or (len(word) == 4 and sorted(word) == list("empt"))
         or bool(DECOMMISSION.match(word))
     )

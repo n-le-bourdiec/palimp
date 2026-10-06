@@ -22,6 +22,7 @@ from palimp.cli import app
 from palimp.evidence import collect_all
 from palimp.ingest import ingest
 from palimp.models import Dataset
+from palimp.report import build
 
 KEY = bytes(range(32))
 OTHER_KEY = bytes(range(1, 33))
@@ -50,6 +51,11 @@ def judgments(dataset: Dataset) -> list[tuple[str, str, bool]]:
         assert assessment is not None
         found.append((assessment.verdict, assessment.confidence, assessment.owner is not None))
     return found
+
+
+def looks(dataset: Dataset) -> list[tuple[str, str]]:
+    """The "Worth a look" list of the report: rule reference and risk, most risky first."""
+    return [(e.ref, e.risk) for e in build(dataset).worth_a_look]
 
 
 def originals(dataset: Dataset) -> tuple[set[str], set[str]]:
@@ -88,6 +94,7 @@ def check_copy(source: Path, out: Path, mapper: Mapper) -> None:
     original = ingest(source)
     copy = ingest(out)
     assert judgments(copy) == judgments(original)
+    assert looks(copy) == looks(original)
 
     names, words = originals(original)
     image = set(mapper.names.values())
@@ -184,6 +191,7 @@ def test_names_keep_structure_and_signal_words() -> None:
     assert mapper.name("crm-db-01").split("-")[0] == mapper.name("crm-web-02").split("-")[0]
     assert mapper.name("users-to-crm").startswith("users-")
     assert mapper.name("temp-vendor").startswith("temp-")
+    assert mapper.name("untrust") == "untrust"
     assert mapper.name("CHG0045868").startswith("CHG")
     assert mapper.name("CHG0045868") != "CHG0045868"
     assert mapper.name("junos-ssh") == "junos-ssh"
