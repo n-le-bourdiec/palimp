@@ -243,3 +243,12 @@ def test_cli_defaults_to_no_llm(artifacts: Path, report: Report, tmp_path: Path)
     assert "## Executive summary" in (out / "report.md").read_text(encoding="utf-8")
     run = json.loads((out / "llm-rejections.json").read_text(encoding="utf-8"))
     assert run["backend"] == "fake"
+
+
+def test_modal_may_and_own_policy_name_are_not_rejected(report: Report, names: Names) -> None:
+    entry = with_kinds(report, "address_objects")
+    objects = item(entry, "address_objects").id
+    name = entry.finding.policy.name
+    assert judge(entry, f"Policy {name} may serve this flow [{objects}].", names) is None
+    reason = judge(entry, f"It was opened in May [{objects}].", names)
+    assert reason == "month May not in the cited evidence"

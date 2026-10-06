@@ -235,6 +235,8 @@ def check(
                 return f"{kind} {value} not in the cited evidence"
         text = pattern.sub(" ", text)
     for value in MONTH.findall(text):
+        if value == "may":
+            continue  # the modal verb; the month is written "May"
         if not _has(source, value.lower()):
             return f"month {value} not in the cited evidence"
     for value in NUMBER.findall(text):
@@ -287,7 +289,10 @@ def evidence_text(finding: Finding) -> dict[str, str]:
             claim = details.group(0) if details else ""
         else:
             claim = QUOTED.sub('"..."', e.claim)
-        found[e.id] = f"{e.artifact} {e.locator}: {claim} {' '.join(e.apps)}".strip()
+        # The rule's own name and zones are given to the LLM: any item may state them.
+        policy = finding.policy
+        own = f"policy {policy.name} from {policy.from_zone} to {policy.to_zone}"
+        found[e.id] = f"{own}; {e.artifact} {e.locator}: {claim} {' '.join(e.apps)}".strip()
     return found
 
 
@@ -307,6 +312,7 @@ def rule_facts(entry: RuleEntry) -> dict:
     assert a is not None
     return {
         "rule": entry.allows.text,
+        "rule_evidence": list(entry.allows.evidence),
         "policy": entry.key,
         "verdict": a.verdict,
         "verdict_reason": a.verdict_reason,
@@ -338,7 +344,7 @@ def rule_prompt(facts: dict) -> str:
     )
     # Reasons may quote artifact text: they are neutralized like the evidence.
     lines = [
-        f"Rule {facts['policy']}: {_data(facts['rule'])}",
+        f"Rule {facts['policy']}: {_data(facts['rule'])} [{', '.join(facts['rule_evidence'])}]",
         f"Verdict: {facts['verdict']}, reason {_data(facts['verdict_reason'])} "
         f"[{', '.join(facts['verdict_evidence'])}]",
         f"Confidence: {facts['confidence']}, reason {_data(facts['confidence_reason'])} "
