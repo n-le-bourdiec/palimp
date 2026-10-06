@@ -41,7 +41,8 @@ A rule backed only by T4 can never exceed LOW confidence.
 
 ## v1 scope
 
-- Juniper SRX security policies only, Junos "set" format input.
+- Juniper SRX security policies only, Junos "set" or hierarchical format
+  input (decision 0032).
 - Commands: `ingest`, `explain <policy>`, `report`, `questions`, `anonymize`, `demo`.
 - Out of scope for v1: other vendors, live connections, config changes,
   advanced shadowing detection, web UI.

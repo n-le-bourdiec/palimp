@@ -78,6 +78,22 @@
   applications from general knowledge (VSRX-12); VSRX-2b; `svc-ansible`; S2
   and S5; git identity in repo config only; session 2 Part C checks.
 
+## Plan before release (decision 0032)
+
+1. Hierarchical config format (session 20).
+2. Hard level with 4 new traps: TRAP-RENAME-CHAIN, TRAP-IP-REUSE,
+   TRAP-SCANNER-HITS, TRAP-STALE-NAME (simulator sessions).
+3. Robustness on real public configs: local only, never committed, never
+   republished.
+4. End-to-end test on a real vSRX postponed until after release (no
+   budget). The README must state plainly that palimp has never been run on
+   a real SRX history, only on synthetic scenarios with formats confirmed by
+   Juniper documentation and practitioner captures.
+5. Release preparation, then the second held-out run.
+
+Release as a 0.x beta when these are done and no dangerous error appears
+on held-out or on the real public configs.
+
 ## Simulator backlog (v2)
 
 For simulator sessions. Analyzer sessions add items here, they never read
