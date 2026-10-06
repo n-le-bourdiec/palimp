@@ -320,6 +320,30 @@ zone pair **[VSRX-3]**. Annotations (`annotate`) do not appear in set format
 format is added later. Global policies (`set security policies global ...`) are
 off by default and enabled by a knob.
 
+Hard (decision 0035) draws two format variants per scenario, recorded in
+`manifest.json` (`format_draw`):
+
+- `config_format`: `set` or `hierarchical` (0.5 each). Hierarchical files are
+  written as `show configuration` prints them (HIER-1a): 4 spaces per level,
+  `;` after each statement, `[ a b ]` lists, `inactive:` before a deactivated
+  policy (HIER-1b) and annotations as `/* ... */` on the line before the
+  policy (HIER-1c). The active configuration starts with the `## Last
+  commit: <date> <zone> by <user>` header (VSRX-8); rollbacks have no header
+  (HIER-1e). File names stay `config.set` and `rollback-NN.set` in both
+  formats, so the ground truth `artifact` values do not change. Descriptions
+  are quoted only when they hold a space or a special character (HIER-1d,
+  no sample).
+- `global_policies` (yes 0.4): 1 to 3 shared services (monitoring, backup
+  from the management zone; NTP from servers to internet) are written as
+  global policies with `match from-zone` / `match to-zone` conditions
+  (GLOBAL-1). They are evaluated after the zone pair policies. Hit counts list
+  them under `global global NAME` and log lines carry the real zones (both
+  unverified, VSRX-14).
+
+Annotations exist in every Hard scenario (senior admins annotate 25% of their
+new policies, the cleaner notes the old name of 30% of the policies it
+renames); they show only in hierarchical output (VSRX-2).
+
 ### 5.2 Commit history (`commits.txt`)
 
 As printed by `show system commit` **[VSRX-4]**:
@@ -554,42 +578,46 @@ Field meanings:
 
 ### 7.1 Knobs
 
-| Knob | easy | medium | hard (v2) | adversarial (v2) |
+| Knob | easy | medium | hard (decision 0035) | adversarial (v2) |
 |---|---|---|---|---|
 | `years` | 2 | 4 | 7 | 10 |
 | applications | 18 | 25 | 60 | 120 |
-| final policy count (approx) | 40 | 150 | 450 | 1200 |
+| final policy count (approx) | 40 | 150 | 450 (measured: see 7.5) | 1200 |
 | zones | 4 | 5 | 6 | 7 |
 | personas active | senior | senior, operator, automation | all | all, several shared logins |
 | `comment_rate` (weighted mean) | 0.9 | 0.6 | 0.35 | 0.2 |
-| misleading comments (copied) | 0 | drawn: 0 to 3 per scenario (decision 0018) | rate 0.08 | rate 0.15 |
+| misleading comments (copied) | 0 | drawn: 0 to 3 per scenario (decision 0018) | drawn: 0 to 4 | rate 0.15 |
 | `description_rate` | 0.8 | 0.4 | 0.2 | 0.1 |
 | `log_rate` | 0.9 | 0.6 | 0.35 | 0.2 |
 | `log_window_days` | 90 | 60 | 30 | 14 |
 | days since hit count reset | 365 | 180 | 45 | 7 |
 | `ticket_rate` / export coverage | 0.9 / 1.0 | 0.6 / 0.8 | 0.4 / 0.5 | 0.2 / 0.3 |
-| CMDB present / staleness | yes / low | yes / medium | yes / high | no |
+| CMDB present / staleness (not generated yet at any level) | yes / low | yes / medium | yes / high | no |
 | `cleanup_rate` | 0.35 | 0.6 | 0.3 | 0.15 |
-| decommissions per year | 2 | 1.5 | not set yet | not set yet |
-| migrations per year (duplicate style in v1) | 1 | 1.5 | not set yet | not set yet |
-| access requests per year (section 4.9) | 0 | 30 | not set yet | not set yet |
-| integrations per application (section 4.9) | 0 | 0 to 2, mean 1.15 | not set yet | not set yet |
-| `cleanup_error_rate` | 0 | 0 (v2: 0.02) | 0.05 | 0.1 |
-| emergency events | 0 | drawn: 0 to 3 per scenario (decision 0018) | 4 per year | 8 per year |
+| decommissions per year | 2 | 1.5 | 2, plus the trap subjects | not set yet |
+| migrations per year (duplicate style in v1) | 1 | 1.5 | 1.5 duplicate, plus drawn repoint replacements (TRAP-STALE-NAME) | not set yet |
+| access requests per year (section 4.9) | 0 | 30 | 40 | not set yet |
+| integrations per application (section 4.9) | 0 | 0 to 2, mean 1.15 | as Medium, plus a health check from the monitoring server for half the applications | not set yet |
+| `cleanup_error_rate` | 0 | 0 (v2: 0.02) | 0 (0.05 once TRAP-CLEANUP-FLAP exists) | 0.1 |
+| emergency events | 0 | drawn: 0 to 3 per scenario (decision 0018) | drawn: 0 to 4 | 8 per year |
 | contractor periods | 0 | 0 (v2: 1) | 2 | 4 |
-| `ip_reuse_rate` | 0 | 0 (v2: 0.1) | 0.3 | 0.5 |
-| renames per year | 0 | 0 (v2: 1) | 4 | 10 |
+| `ip_reuse_rate` | 0 | 0 (v2: 0.1) | drawn: 0 to 3 reused addresses | 0.5 |
+| renames per year | 0 | 0 (v2: 1) | 4 rename events a year, 0 to 3 of them drawn inside the retained history | 10 |
 | commits per year (drives history horizon) | 20 | 60 | 150 | 300 |
-| rare jobs (quarterly, yearly) | 0 | drawn: 0 to 2 yearly, 0 to 1 quarterly (decision 0018) | 6 | 12 |
-| weekly jobs without logging | 0 | drawn: 0 to 2 (decision 0018) | not set yet | not set yet |
-| batch commits | 0 | drawn: 0 to 2 (decision 0018) | not set yet | not set yet |
-| hit count based cleanups | 0 | 1 per year | not set yet | not set yet |
+| rare jobs (quarterly, yearly) | 0 | drawn: 0 to 2 yearly, 0 to 1 quarterly (decision 0018) | drawn: 0 to 3 yearly, 0 to 2 quarterly | 12 |
+| weekly jobs without logging | 0 | drawn: 0 to 2 (decision 0018) | drawn: 0 to 3 | not set yet |
+| batch commits | 0 | drawn: 0 to 2 (decision 0018) | drawn: 0 to 3 | not set yet |
+| hit count based cleanups | 0 | 1 per year | 1 per year | not set yet |
+| scanner or probe leftovers | 0 | 0 | drawn: 0 to 3 | not set yet |
+| applications replaced on their rules | 0 | 0 | drawn: 0 to 3 | not set yet |
+| `config_format` | set | set | drawn: hierarchical 0.5, set 0.5 | not set yet |
+| global policies | no | no | drawn: yes 0.4, no 0.6 | not set yet |
 | log format | structured | structured | structured | standard |
-| `log_collection` | device | drawn: syslog-server 0.6, device 0.4 | not set yet | not set yet |
-| `log_release` | pre-22.2 | drawn: pre-22.2 0.7, 12.x 0.3 | not set yet | not set yet |
-| `hitcount_layout` | standard | drawn: standard 0.7, legacy 0.3 | not set yet | not set yet |
-| `rescue_line` | no | drawn: yes 0.5, no 0.5 | not set yet | not set yet |
-| syslog server clock skew | none | 1 to 6 s, either sign | not set yet | not set yet |
+| `log_collection` | device | drawn: syslog-server 0.6, device 0.4 | drawn as Medium | not set yet |
+| `log_release` | pre-22.2 | drawn: pre-22.2 0.7, 12.x 0.3 | drawn as Medium | not set yet |
+| `hitcount_layout` | standard | drawn: standard 0.7, legacy 0.3 | drawn as Medium | not set yet |
+| `rescue_line` | no | drawn: yes 0.5, no 0.5 | drawn as Medium | not set yet |
+| syslog server clock skew | none | 1 to 6 s, either sign | as Medium | not set yet |
 
 Easy values were tuned in session 4 to about 40 final policies with 15 to 20%
 dead rules (measured over seeds 0 to 99: mean 39.9 policies, 17.6% dead). A low
@@ -610,10 +638,24 @@ manifest while at their neutral default, so Easy manifests do not change.
 Each knob can be overridden individually; a scenario is defined by a level plus
 overrides.
 
-Scope (decision 0008): v1 implements Easy and Medium only. Hard and Adversarial
-are v2. In v1, Medium uses the values shown first; the values marked "v2" apply
-once the matching traps exist. Migrations in v1 use the duplicate and bridge
-styles only (repoint produces `TRAP-STALE-NAME`, a v2 trap).
+Scope (decision 0008, decision 0035 for Hard): Easy, Medium and Hard are
+implemented; Adversarial is v2. Medium uses the values shown first; the values
+marked "v2" in the Medium column are not applied, so Medium output stays
+byte-identical (decision 0035). Easy and Medium migrations use the duplicate
+and bridge styles only; Hard adds the repoint style for application
+replacements (`TRAP-STALE-NAME`).
+
+Hard values were set in session 22 (decision 0035). Personas: the Medium four
+(two seniors in turn, the hurried operator, the automation account), two
+contractors (3 to 12 months each, around 15 to 30% and 60 to 75% of the
+period, `ext-` logins, `CTR_P001` names, `MEP <app>` comments, half of the
+new applications while active), a cleaner (from about mid-period: hit count
+cleanups and renames) and an on-call responder (emergency rules). Persona
+factors on comment, description and log rates: senior 1.4, operator 0.5,
+contractor 0.4, cleaner 1.0, on-call 0.3. The sixth zone is `pci` or
+`secure` (10.40.0.0/24): the database tier of billing, payroll, POS and HR
+applications sits there. The 60 applications are the 27 templates plus
+regional instances (`erp-de`, code `ERPDE`).
 
 ### 7.2 Trap coverage rule
 
@@ -623,9 +665,18 @@ TRAP-RARE-JOB, TRAP-EMERGENCY-LOADBEARING, TRAP-MISLEADING-COMMENT and
 TRAP-BATCH-COMMIT is drawn per scenario; over seeds 0 to 99 each appears in
 60 to 90% of Medium scenarios, with a count that varies. TRAP-HISTORY-HORIZON
 and TRAP-DEACTIVATED follow from the timeline and appear in every Medium
-scenario. Easy scenarios contain no deliberate traps. v2: every trap appears at least once in
-every Hard and Adversarial scenario. Each trap id is recorded on the rules it
+scenario. Easy scenarios contain no deliberate traps. Each trap id is recorded on the rules it
 affects, so metrics can be reported per trap.
+
+Hard (decision 0035, replacing the earlier "every trap in every Hard
+scenario"): the eleven Hard traps are the seven v1 traps and
+TRAP-RENAME-CHAIN, TRAP-IP-REUSE, TRAP-SCANNER-HITS and TRAP-STALE-NAME. The
+number of instances of each drawn trap comes from
+`levels.HARD_TRAP_COUNT_WEIGHTS`, with zero possible; TRAP-HISTORY-HORIZON and
+TRAP-DEACTIVATED follow from the timeline. A trap is tagged only when its
+condition holds on the final state, so an instance can also appear by
+accident (a dead rule the scanner sweep happens to reach, a rename made
+before the retained history whose old name is still in the logs).
 
 ### 7.3 Deliberate traps
 
@@ -636,12 +687,12 @@ affects, so metrics can be reported per trap.
 | `TRAP-PREPROVISIONED` | v2 (decision 0012) | rule created before go-live, zero hits | dead | live soon |
 | `TRAP-MISLEADING-COMMENT` | v1 | comment or ticket describes another change | trusts the comment | intent from other evidence |
 | `TRAP-BATCH-COMMIT` | v1 | one commit, one comment, many unrelated changes | one intent for all | per rule intents |
-| `TRAP-STALE-NAME` | v2 | rule name refers to an old app, objects repointed | intent from the name | intent of the current destination |
-| `TRAP-IP-REUSE` | v2 | dead rule matches traffic to a reused IP | live, keep | intent dead, traffic belongs elsewhere; verify |
-| `TRAP-SCANNER-HITS` | v2 | hits only from scanners or monitoring | live | dead for business use |
+| `TRAP-STALE-NAME` | Hard | rule name refers to an old app, objects repointed | intent from the name | intent of the current destination |
+| `TRAP-IP-REUSE` | Hard | dead rule matches traffic to a reused IP | live, keep | intent dead, traffic belongs elsewhere; verify |
+| `TRAP-SCANNER-HITS` | Hard | hits only from scanners or monitoring | live | dead for business use |
 | `TRAP-EMERGENCY-LOADBEARING` | v1 | "temporary" broad rule now the only one carrying a flow | remove the temp rule | needed, verify and replace |
 | `TRAP-SHADOWED-DUPLICATE` | v2 | valid intent, rule never matched because an earlier rule covers it | dead, unknown intent | intent known, rule redundant |
-| `TRAP-RENAME-CHAIN` | v2 | object or policy renamed, old rollbacks use old names | two unrelated rules | same rule |
+| `TRAP-RENAME-CHAIN` | Hard | object or policy renamed, old rollbacks use old names | two unrelated rules | same rule |
 | `TRAP-DEACTIVATED` | v1 | deactivated policy still in config | active rule | inactive; intent historical |
 | `TRAP-TICKET-REJECTED` | v2 | ticket rejected or cancelled but rule exists | intent from ticket | intent unconfirmed |
 | `TRAP-HISTORY-HORIZON` | v1 | rule older than retained history | no T1 evidence means no intent | intent only from T2/T3/T4, confidence capped |
@@ -684,6 +735,44 @@ Trap verdict rule: a live rule whose liveness the artifacts cannot show (zero
 hits in its counting window and no log line) gets best achievable verdict
 `verify`. A dead rule whose counting window is under 90 days (zone pair cleared)
 also gets `verify`.
+
+### 7.5 How Hard builds its traps
+
+Session 22 (`simulator/src/palimp_sim/hard.py`, decision 0035). Counts drawn
+per scenario from `levels.HARD_TRAP_COUNT_WEIGHTS` (zero possible); the v1
+traps are built as in 7.4. `truth.py` tags a rule only when the condition
+holds on the final state.
+
+| Trap | Mechanism | Ground truth |
+|---|---|---|
+| `TRAP-RENAME-CHAIN` | 4 rename events a year by the cleaner (or a senior before the cleaner joins); 0 to 3 of them drawn in the last 5 to 100 days, inside the retained history. Each renames 1 or 2 policies (`<from>_<to>_<appcode>_NN`, 65%) or server address objects (`host_<name>`, 35%); the cleaner notes `renamed from X` in an annotation 30% of the time | tagged when the old name is in a rollback file or in a log line; `name_history` lists the old names; T3 rollback evidence links them; the rename commit comment is misleading (it looks like a creation) |
+| `TRAP-IP-REUSE` | 0 to 3 pairs: an application retired at least 30 days before a later one goes live; its users rule (same service) is kept; one tier of the new application gets the freed addresses, and its admin writes no rule for the flow the old rule already lets through | tagged when the rule has hits or log lines; `live` false, `still_needed` true, `hits_reason` `ip_reuse`; verdict and best `verify`; owner to ask: the new application's owner; hit count and log evidence misleading; T3 "same address as" lists the new server objects |
+| `TRAP-SCANNER-HITS` | 0 to 3 retired applications whose rule is kept: half a users rule reached by a weekly vulnerability scanner sweep (10.10.1.250, from up to 300 days before the snapshot, also sweeping 12 live servers), half a health check rule still used by a monitoring probe of the switched-off server. Sessions to an address with no live host age out (`idle Timeout`, nothing from the server, VSRX-15) | tagged on any dead active rule whose hits all come from the scanner or a probe (accidental instances included); `hits_reason` `scanner` or `monitoring`; verdict `removal_candidate`, best `verify` (45 days of counters); hit count and log evidence misleading |
+| `TRAP-STALE-NAME` | 0 to 3 applications replaced by a successor product (`crm` by `salescloud`, catalog.SUCCESSORS) 60 days or more before the snapshot: the address objects of the old servers get the new servers' addresses (repoint), flows move to the new servers, no rule changes; a decommission ticket for the old application with probability 0.6 | tagged on live rules now serving the successor whose name, objects, description or annotation name the old application; intent of the successor; verdict `keep`; those names and the go-live comment are misleading; the repoint commit (comment, changed address values) is evidence when retained |
+
+Measured over seeds 0 to 49 (session 22, simulator 0.3.0, Windows
+development machine): 415 policies on average (369 to 475), 33.7% dead rules
+(28.2 to 41.1%), 8.5 s (at most 10.7 s) and 13.9 MB (at most 17.3 MB) per
+scenario. Format variants: hierarchical 25, set 25; global policies 22.
+
+| Trap | Scenarios with it | Min | Max | Mean |
+|---|---|---|---|---|
+| `TRAP-LIVE-NOLOG` | 86% | 0 | 3 | 1.6 |
+| `TRAP-RARE-JOB` | 92% | 0 | 4 | 2.2 |
+| `TRAP-EMERGENCY-LOADBEARING` | 90% | 0 | 4 | 2.3 |
+| `TRAP-MISLEADING-COMMENT` | 84% | 0 | 7 | 2.3 |
+| `TRAP-BATCH-COMMIT` | 88% | 0 | 43 | 15.0 |
+| `TRAP-HISTORY-HORIZON` | 100% | 236 | 354 | 287.2 |
+| `TRAP-DEACTIVATED` | 100% | 32 | 102 | 71.4 |
+| `TRAP-RENAME-CHAIN` | 88% | 0 | 27 | 5.3 |
+| `TRAP-IP-REUSE` | 82% | 0 | 9 | 2.7 |
+| `TRAP-SCANNER-HITS` | 86% | 0 | 5 | 2.0 |
+| `TRAP-STALE-NAME` | 76% | 0 | 23 | 6.6 |
+
+Counts are rules, not instances: one replaced application or one reused
+address can tag several rules. Tests: `simulator/tests/test_hard.py`
+(naive reading against the ground truth for each new trap, seeds 0, 2, 3, 4
+and 11 in CI; distribution over seeds 0 to 49 with `--runslow`).
 
 ## 8. Determinism and the dev / held-out split
 
@@ -786,6 +875,9 @@ Rules:
 | VSRX-9 | structured syslog field names and order for RT_FLOW_SESSION_CREATE, CLOSE and DENY on the lab's Junos release, and the `junos@2636...` SD-ID | enable `security log format sd-syslog`, generate traffic |
 | VSRX-10 | standard syslog RT_FLOW line layout | same with default format |
 | VSRX-11 | whether logs of deactivated or deleted policies keep the old policy name | delete a logged policy during live sessions |
+| VSRX-13 | (Hard) renaming a policy keeps its hit counter, and log lines written before the rename keep the old name | rename a policy with hits, compare `show security policies hit-count` and old log lines |
+| VSRX-14 | (Hard) `show security policies hit-count` lists a global policy under `global global NAME`; RT_FLOW lines of a global policy carry the real zones | configure a global policy, generate traffic, read both |
+| VSRX-15 | (Hard) a session to an address with no live host still counts a hit and can be logged (scanner sweeps, probes of a switched-off server) | permit and log traffic to an unused address |
 | VSRX-12 | predefined application names used by the simulator (`junos-http`, `junos-https`, `junos-ssh`, `junos-smtp`, `junos-dns-udp`, `junos-ntp`) exist with those ports, and RT_FLOW close reasons for UDP read `idle Timeout` | `show configuration groups junos-defaults applications`, generate UDP sessions |
 
 Until a vSRX lab exists, assumptions are checked against published samples
@@ -827,6 +919,10 @@ sources and remain simulator choices.
 | S14 | Tian et al., "What Makes a Good Commit Message?", ICSE 2022, https://arxiv.org/abs/2202.02974 | Analogy. In open source projects "an average of circa 44% of messages could be improved" (missing why or what). |
 | S15 | CodeFuse-CommitEval, "Towards Benchmarking LLM's Power on Commit Message and Code Change Inconsistency Detection", 2025, https://arxiv.org/abs/2511.19875 | Analogy. Commit messages "are often low quality and, more critically, inconsistent with their diffs", known as message-code inconsistency. |
 | S16 | Emory University, Firewall Change Procedures, https://it.emory.edu/security/policies-procedures/firewall_change.html | Indirect lead only. "24 hour lead time for all firewall rule change requests"; requesters must plan for the delay. |
+| S18 | ipthreat.net, "Your Firewall Rules Are Getting You Breached, and the Rules Themselves Are Why", https://ipthreat.net/blog/your-firewall-rules-are-getting-you-breached-and-the-rules-themselves-are-why-76 (retrieved 2026-10-06) | "Traffic analysis often reveals rules that are technically active but are only being hit by internal scanning tools or monitoring agents." |
+| S19 | Juniper, `rename` command reference, https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/command/rename.html (retrieved 2026-10-06) | "Rename an existing configuration statement or identifier." Capability only, not a practice. |
+| S20 | r/sysadmin, "Firewall rule naming conventions: What actually works in practice?", read through the mirror https://t.me/s/r_systemadmin/38595 (retrieved 2026-10-06) | A practitioner taking over a rule base: "there's a mix of different naming styles and structures", wants to "introduce a consistent structure and naming scheme going forward". |
+| S21 | CactuseSecurity firewall-orchestrator, issue #5407 "IP mismatches in firewall host objects", https://github.com/CactuseSecurity/firewall-orchestrator/issues/5407 (retrieved 2026-10-06) | "Hosts are matched by name rather than IP address. If the IP address configured on the firewall differs from the resolved IP, the mismatch is currently not detected or corrected." Host object names that no longer match what they point to, seen by a firewall management tool. |
 | S17 | Tigera, "Why Does It Take Four Months to Get a Firewall Rule Change?", https://www.tigera.io/blog/why-does-it-take-four-months-to-get-a-firewall-rule-change/ | Indirect lead only. "It took over 4 months to get a firewall rule changed." |
 
 ### 12.2 Admin behaviors (section 3 and 4)
@@ -868,11 +964,11 @@ sources and remain simulator choices.
 | `TRAP-EMERGENCY-LOADBEARING` | v1 | S3, S7, S12 |
 | `TRAP-HISTORY-HORIZON` | v1 | S4 |
 | `TRAP-DEACTIVATED` | v1 | S2 |
-| `TRAP-STALE-NAME` | v2 | UNGROUNDED |
-| `TRAP-IP-REUSE` | v2 | S7 |
-| `TRAP-SCANNER-HITS` | v2 | UNGROUNDED |
+| `TRAP-STALE-NAME` | Hard | S21 (object names that no longer match their address); the takeover of an old application's objects by its successor is UNGROUNDED |
+| `TRAP-IP-REUSE` | Hard | S7 (an address reassigned after a decommission turns the stale rule into an exposure); the admin who finds the flow already open and adds no rule is UNGROUNDED |
+| `TRAP-SCANNER-HITS` | Hard | S18 |
 | `TRAP-SHADOWED-DUPLICATE` | v2 | S8 |
-| `TRAP-RENAME-CHAIN` | v2 | UNGROUNDED |
+| `TRAP-RENAME-CHAIN` | Hard | S19 (the `rename` command), S20 (a new naming scheme over a mixed rule base), S4 (old rollbacks keep the old names); no source shows the renames in a real history |
 | `TRAP-TICKET-REJECTED` | v2 | UNGROUNDED |
 | `TRAP-SHARED-LOGIN` | v2 | S10 |
 | `TRAP-CLEANUP-FLAP` | v2 | S11, S12 (removal of a live rule; the re-add under a new name is UNGROUNDED) |
