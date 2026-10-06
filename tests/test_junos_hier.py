@@ -300,12 +300,20 @@ security {
     assert flat.stats.apply_groups == ["top level: apply-groups common-policies"]
 
 
-def test_inactive_zone_pair_reported_not_applied() -> None:
-    text = """\
-security {
+def test_inactive_zone_pair_deactivates_its_policies() -> None:
+    # No documentation sample shows `inactive:` on a zone pair (decision 0034):
+    # inline sample, with `inactive:` placed as HIER-1b shows it on interfaces.
+    text = """security {
     policies {
         inactive: from-zone a to-zone b {
             policy p {
+                then {
+                    permit;
+                }
+            }
+        }
+        from-zone a to-zone c {
+            policy q {
                 then {
                     permit;
                 }
@@ -315,11 +323,59 @@ security {
 }
 """
     config = parse_config(text)
-    assert not config.policies[0].deactivated
+    p, q = config.policies
+    assert p.deactivated and not q.deactivated
+    assert p.deactivated_statements == ["deactivated with security policies from-zone a to-zone b"]
     assert config.stats.notes == [
-        "deactivate security policies from-zone a to-zone b: not applied, "
-        "the policies under it are read as active"
+        "deactivate security policies from-zone a to-zone b: every policy under it is read "
+        "as deactivated"
     ]
+    assert config.stats.unknown == 0
+
+
+def test_inactive_policies_or_security_deactivates_every_policy() -> None:
+    for wrapper in ("inactive: security {\n    policies {", "security {\n    inactive: policies {"):
+        text = (
+            wrapper
+            + """
+        from-zone a to-zone b {
+            policy p {
+                then {
+                    permit;
+                }
+            }
+        }
+        from-zone b to-zone a {
+            policy q {
+                then {
+                    deny;
+                }
+            }
+        }
+    }
+}
+"""
+        )
+        config = parse_config(text)
+        assert [p.deactivated for p in config.policies] == [True, True], wrapper
+
+
+def test_deactivate_zone_pair_in_set_format_any_line_order() -> None:
+    lines = [
+        "set security policies from-zone a to-zone b policy p then permit",
+        "set security policies from-zone a to-zone b policy p2 then permit",
+        "set security policies from-zone b to-zone a policy q then permit",
+        "deactivate security policies from-zone a to-zone b",
+    ]
+    for text in ("\n".join(lines), "\n".join(lines[-1:] + lines[:-1])):
+        config = parse_set(text + "\n")
+        assert [p.deactivated for p in config.policies if p.from_zone == "a"] == [True, True]
+        assert not next(p for p in config.policies if p.from_zone == "b").deactivated
+        assert config.stats.unknown == 0
+    everything = parse_set("\n".join(lines[:3]) + "\ndeactivate security policies\n")
+    assert all(p.deactivated for p in everything.policies)
+    whole = parse_set("\n".join(lines[:3]) + "\ndeactivate security\n")
+    assert all(p.deactivated for p in whole.policies)
 
 
 def test_operational_show_configuration_capture() -> None:

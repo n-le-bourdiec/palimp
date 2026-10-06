@@ -68,6 +68,11 @@ IGNORED_SECURITY = {
 }
 
 
+def policy_path(policy: Policy) -> list[str]:
+    """Where the policy sits under `security policies`."""
+    return ["from-zone", policy.from_zone, "to-zone", policy.to_zone, "policy", policy.name]
+
+
 def tokenize(line: str) -> list[str]:
     """Split a set line on spaces, keeping double-quoted strings as one token."""
     return [m.group(1) if m.group(1) is not None else m.group(2) for m in TOKEN.finditer(line)]
@@ -79,6 +84,8 @@ class _Builder:
         self.policies: dict[tuple[str, str, str], Policy] = {}
         self.addresses: dict[str, AddressObject] = {}
         self.applications: dict[str, Application] = {}
+        # Deactivated containers above the policies (decision 0034): path -> statement.
+        self.scopes: list[tuple[list[str], str]] = []
 
     def record(self, outcome: str, line: str) -> None:
         if outcome == "parsed":
@@ -119,7 +126,25 @@ class _Builder:
 
     # Each handler returns "parsed", "ignored" or "unknown".
 
+    def deactivate_scope(self, path: list[str]) -> str:
+        """`deactivate` on a container of policies: every policy under it matches nothing.
+
+        Junos ignores a deactivated statement with its whole subtree at commit
+        (decision 0034). Applied when the model is built, whatever the line order.
+        """
+        statement = " ".join(path)
+        self.scopes.append((path[2:], statement))
+        self.note(f"deactivate {statement}: every policy under it is read as deactivated")
+        return "parsed"
+
     def config(self) -> Config:
+        for scope, statement in self.scopes:
+            for policy in self.policies.values():
+                if policy_path(policy)[: len(scope)] == scope:
+                    policy.deactivated = True
+                    shown = f"deactivated with {statement}"
+                    if shown not in policy.deactivated_statements:
+                        policy.deactivated_statements.append(shown)
         return Config(
             policies=list(self.policies.values()),
             addresses=self.addresses,
@@ -235,18 +260,13 @@ class _Builder:
         if top == "applications" and not deactivate:
             return self.application(path[1:])
         if top == "security" and len(path) == 1 and deactivate:
-            self.note("deactivate security: not applied, the policies under it are read as active")
-            return "ignored"
+            return self.deactivate_scope(path)
         if top != "security" or len(path) < 2:
             return "ignored" if top == "applications" else "unknown"
         section = path[1]
         if section == "policies":
             if deactivate and (len(path) <= 2 or (len(path) == 6 and path[2] == "from-zone")):
-                self.note(
-                    f"deactivate {' '.join(path)}: not applied, the policies under it are "
-                    "read as active"
-                )
-                return "ignored"
+                return self.deactivate_scope(path)
             if len(path) >= 3 and path[2] in (
                 "default-policy",
                 "policy-rematch",

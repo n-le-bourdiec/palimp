@@ -129,3 +129,21 @@ def test_simulator_scenario_parses_cleanly(tmp_path: Path) -> None:
     assert dataset.hit_count_stats.unknown == 0
     assert dataset.log_stats.unknown == 0 and dataset.logs
     assert dataset.config.policies and dataset.commits and dataset.tickets
+
+
+def test_deactivated_zone_pair_follows_the_deactivated_path(artifacts: Path) -> None:
+    # Decision 0034: a deactivated zone pair deactivates every policy under it.
+    config = artifacts / "config.set"
+    config.write_text(
+        config.read_text() + "deactivate security policies from-zone trust to-zone dc\n"
+    )
+    dataset = ingest(artifacts)
+    web = dataset.config.policies[0]
+    assert str(web.key) == "trust/dc/crm-web" and web.deactivated
+    finding = collect(dataset, web.key)
+    kinds = [e.kind for e in finding.evidence]
+    assert "deactivated" in kinds
+    assert finding.assessment.verdict == "removal_candidate"
+    assert finding.assessment.verdict_rule == "V-NOTLIVE"
+    other = collect(dataset, PolicyKey.parse("dc/dc/CHG0000777-db"))
+    assert not other.policy.deactivated
