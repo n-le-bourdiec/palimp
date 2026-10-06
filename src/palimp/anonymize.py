@@ -401,6 +401,8 @@ def _config_names(config: Config) -> set[str]:
     for policy in config.policies:
         found |= {policy.name, policy.from_zone, policy.to_zone}
         found |= set(policy.match_from_zones) | set(policy.match_to_zones)
+        # Rule set or profile names: `application-firewall rule-set NAME`.
+        found |= {s.split()[-1] for s in policy.application_services if len(s.split()) >= 3}
         found |= set(policy.sources) | set(policy.destinations) | set(policy.applications)
     for obj in config.addresses.values():
         found |= set(obj.members) | {obj.book}

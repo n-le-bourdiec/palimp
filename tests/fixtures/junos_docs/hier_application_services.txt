@@ -1,0 +1,44 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/application-identification/topics/topic-map/security-application-firewall.html
+# Page title: Application Firewall | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos 26.2
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: APPSVC-1, HIER-1 (then permit application-services, hierarchical format)
+# Note: 'show security policies' then 'show security application-firewall': policy 1 with an application-firewall rule set.
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+[edit]
+user@host# show security policies
+    from-zone untrust to-zone trust {
+        policy 1 {
+            match {
+                source-address any;
+                destination-address any;
+                application junos-http;
+            }
+            then {
+                permit {
+                    application-services {
+                        application-firewall {
+                            rule-set rs1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+user@host# show security application-firewall
+    rule-sets rs1 {
+        rule r1 {
+            match {
+                dynamic-application  [junos:FACEBOOK-CHAT,junos:FACEBOOK-FARMVILLE];
+            }
+            then {
+                 deny;
+            }
+        }
+        default-rule {
+            permit;
+        }
+    }

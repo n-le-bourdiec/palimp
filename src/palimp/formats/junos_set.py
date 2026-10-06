@@ -64,6 +64,7 @@ IGNORED_SECURITY = {
     "pki",
     "ssh-known-hosts",
     "dynamic-address",
+    "application-firewall",
     "user-identification",
 }
 
@@ -198,6 +199,13 @@ class _Builder:
             return "parsed"
         if len(rest) == 2 and rest[0] == "then" and rest[1] in ("permit", "deny", "reject"):
             policy.action = rest[1]
+            return "parsed"
+        if len(rest) >= 4 and rest[:3] == ["then", "permit", "application-services"]:
+            # A permit with services attached (decision 0034).
+            policy.action = "permit"
+            service = " ".join(rest[3:])
+            if service not in policy.application_services:
+                policy.application_services.append(service)
             return "parsed"
         if len(rest) == 3 and rest[:2] == ["then", "log"]:
             if rest[2] == "session-init":

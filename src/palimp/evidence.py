@@ -9,8 +9,9 @@ T2 behavioral: hit count row, RT_FLOW log summary. Each T2 item says whether
 the artifact shows traffic ("present"), could show it and shows none
 ("absent"), or cannot show it for this policy ("blind": no logging,
 deactivated, artifact missing), see decision 0019.
-T3 structural: address object names, policies created in the same commit,
-deactivation, a name, description or annotation that marks the policy as
+T3 structural: address object names, application services attached to the
+permit (`then permit application-services`), policies created in the same
+commit, deactivation, a name, description or annotation that marks the policy as
 temporary, the requesters of the tickets for each application named above (palimp.owners),
 history lineage from the rollbacks (palimp.lineage): removed or deactivated
 policies whose traffic this one took over, and a migration that left this
@@ -293,6 +294,14 @@ def collect(
         apps = list(dict.fromkeys(apps))
         locator = "address objects " + ", ".join(named)
         items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps))
+    if policy.application_services:
+        claim = (
+            "the permit attaches application services: "
+            + "; ".join(policy.application_services)
+            + " (structure chosen for this rule, it names no application)"
+        )
+        locator = f"policy {policy.name} then permit application-services"
+        items.append(Item("T3", "config.set", locator, claim, None, "application_services"))
     if policy.deactivated:
         statements = "; ".join(policy.deactivated_statements) or "deactivate statement"
         claim = (

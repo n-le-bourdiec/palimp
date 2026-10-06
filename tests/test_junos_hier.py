@@ -460,3 +460,25 @@ def test_global_key_round_trip_and_deactivated_global_block() -> None:
     assert [p.deactivated for p in config.policies] == [False, True, True]
     one = parse_set(text + "deactivate security policies global policy gp2\n")
     assert [p.deactivated for p in one.policies] == [False, True]
+
+
+# then permit application-services (decision 0034), Application Firewall page
+
+
+def test_permit_with_application_services_in_both_formats() -> None:
+    flat = parse_config(body("display_set_application_services.txt"))
+    assert flat.stats.unknown == 0
+    assert keys(flat) == ["Z_1/Z_2/policy1", "Z_1/Z_2/policy2"]
+    one, two = flat.policies
+    assert (one.action, two.action) == ("permit", "permit")
+    assert one.application_services == [
+        "application-firewall rule-set appfw-rs-1",
+        "ssl-proxy profile-name ssl-profile-1",
+    ]
+    assert two.application_services == ["application-firewall rule-set appfw-rs-2"]
+    tree = parse_config(body("hier_application_services.txt"))
+    assert tree.stats.unknown == 0
+    (policy,) = tree.policies
+    assert str(policy.key) == "untrust/trust/1"
+    assert policy.action == "permit"
+    assert policy.application_services == ["application-firewall rule-set rs1"]

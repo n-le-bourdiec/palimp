@@ -1,0 +1,25 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/application-identification/topics/topic-map/security-application-firewall.html
+# Page title: Application Firewall | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos 26.2
+# Junos release shown: not stated
+# Retrieved: 2026-10-06
+# Assumptions: APPSVC-1 (then permit application-services, set format)
+# Note: Two policies with application-firewall rule sets, policy1 also with ssl-proxy (application-firewall rule sets in the same sample).
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+set security policies from-zone Z_1 to-zone Z_2 policy policy1 match source-address any
+set security policies from-zone Z_1 to-zone Z_2 policy policy1 match destination-address any
+set security policies from-zone Z_1 to-zone Z_2 policy policy1 match application junos-https
+set security policies from-zone Z_1 to-zone Z_2 policy policy1 then permit application-services application-firewall rule-set appfw-rs-1
+set security policies from-zone Z_1 to-zone Z_2 policy policy1 then permit application-services ssl-proxy profile-name ssl-profile-1
+set security policies from-zone Z_1 to-zone Z_2 policy policy2 match source-address any
+set security policies from-zone Z_1 to-zone Z_2 policy policy2 match destination-address any
+set security policies from-zone Z_1 to-zone Z_2 policy policy2 match application junos-http
+set security policies from-zone Z_1 to-zone Z_2 policy policy2 then permit application-services application-firewall rule-set appfw-rs-2
+set security application-firewall rule-sets appfw-rs-1 rule rule1 match dynamic-application [junos:ORACLE]
+set security application-firewall rule-sets appfw-rs-1 rule rule1 then permit
+set security application-firewall rule-sets appfw-rs-1 default-rule deny
+set security application-firewall rule-sets appfw-rs-2 rule rule1 match dynamic-application [junos:HULU]
+set security application-firewall rule-sets appfw-rs-2 rule rule1 then deny
+set security application-firewall rule-sets appfw-rs-2 default-rule permit

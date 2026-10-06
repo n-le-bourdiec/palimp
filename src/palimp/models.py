@@ -54,6 +54,9 @@ class Policy(BaseModel):
     # (empty means any zone).
     match_from_zones: list[str] = []
     match_to_zones: list[str] = []
+    # `then permit application-services ...`: each attached service with its
+    # arguments, for example "application-firewall rule-set rs1".
+    application_services: list[str] = []
 
     @property
     def key(self) -> PolicyKey:
