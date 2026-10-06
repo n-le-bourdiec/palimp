@@ -8,6 +8,7 @@ in force that day. This drives hit counts, session logs and the ground truth
 
 import ipaddress
 from dataclasses import dataclass, field
+from functools import cache
 
 from palimp_sim.catalog import service_port
 from palimp_sim.junos import ANY_APPLICATION, Config
@@ -17,12 +18,38 @@ from palimp_sim.rng import Rng
 Network = ipaddress.IPv4Network
 
 
+@cache
+def _span(prefix: str) -> tuple[int, int]:
+    """First and last address of a prefix, as integers."""
+    network = Network(prefix)
+    return int(network.network_address), int(network.broadcast_address)
+
+
+def _spans(config: Config, names: list[str]) -> list[tuple[int, int]]:
+    """Address ranges of address names, as Config.resolve_address_list resolves them."""
+    spans = []
+    for name in names:
+        if name == "any":
+            spans.append(_span("0.0.0.0/0"))
+        elif name in config.address_sets:
+            spans += _spans(config, config.address_sets[name])
+        else:
+            spans.append(_span(config.addresses[name]))
+    return spans
+
+
+def _inside(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
+    """Same as `subnet_of` any of the networks."""
+    return any(low <= span[0] and span[1] <= high for low, high in spans)
+
+
 @dataclass
 class PolicyStats:
     hits_since_reset: int = 0
     hits_total: int = 0
     first_hit: int | None = None
     last_hit: int | None = None
+    noise_since_reset: int = 0  # part of hits_since_reset from noise flows (Hard)
 
 
 @dataclass
@@ -44,6 +71,12 @@ class Session:
     bytes_out: int
     log_init: bool
     log_close: bool
+    # Name and zones at the time of the session: a policy may be renamed
+    # later (Hard), and a global policy logs the real zones.
+    policy_name: str = ""
+    from_zone: str = ""
+    to_zone: str = ""
+    unanswered: bool = False  # no live host at the destination (scanner, forgotten probe)
 
 
 @dataclass
@@ -60,13 +93,25 @@ class Matcher:
         self.zone_of_role = zone_of_role
         self.by_pair: dict[tuple[str, str], list] = {}
         self.policies = {p.uid: p for p in config.policies}
+        self.globals: list = []  # global policies, checked after the zone pair (GLOBAL-1)
         for policy in config.ordered_policies():
             if policy.inactive:
                 continue
+            if policy.is_global:
+                entry = (
+                    policy.uid,
+                    _spans(config, policy.sources),
+                    _spans(config, policy.destinations),
+                    {config.resolve_application(name) for name in policy.applications},
+                    policy.from_zones,
+                    policy.to_zones,
+                )
+                self.globals.append(entry)
+                continue
             entry = (
                 policy.uid,
-                config.resolve_address_list(policy.sources),
-                config.resolve_address_list(policy.destinations),
+                _spans(config, policy.sources),
+                _spans(config, policy.destinations),
                 {config.resolve_application(name) for name in policy.applications},
             )
             self.by_pair.setdefault((policy.from_zone, policy.to_zone), []).append(entry)
@@ -76,13 +121,17 @@ class Matcher:
         key = (flow.flow_id, src, dst, service)
         if key not in self.cache:
             pair = (self.zone_of_role[flow.src.zone_role], self.zone_of_role[flow.dst.zone_role])
-            src_net, dst_net = Network(src), Network(dst)
+            src_span, dst_span = _span(src), _span(dst)
             found = None
-            for uid, sources, destinations, services in self.by_pair.get(pair, []):
+            candidates = list(self.by_pair.get(pair, []))
+            for uid, sources, destinations, services, froms, tos in self.globals:
+                if (not froms or pair[0] in froms) and (not tos or pair[1] in tos):
+                    candidates.append((uid, sources, destinations, services))
+            for uid, sources, destinations, services in candidates:
                 if (
                     (service in services or ANY_APPLICATION in services)
-                    and any(src_net.subnet_of(n) for n in sources)
-                    and any(dst_net.subnet_of(n) for n in destinations)
+                    and _inside(src_span, sources)
+                    and _inside(dst_span, destinations)
                 ):
                     found = uid
                     break
@@ -185,6 +234,8 @@ def simulate(sim, rng: Rng) -> TrafficResult:
                     counted = day >= reset_day
                 if counted:
                     stats.hits_since_reset += part_count
+                    if flow.noise:
+                        stats.noise_since_reset += part_count
                 stats.first_hit = day if stats.first_hit is None else stats.first_hit
                 stats.last_hit = day
                 result.flow_last_use[flow.flow_id] = day
@@ -216,8 +267,14 @@ def simulate(sim, rng: Rng) -> TrafficResult:
                         bytes_out=rng_log.randint(200, 90000),
                         log_init=policy.log_init,
                         log_close=policy.log_close,
+                        policy_name=policy.name,
+                        from_zone=zone_of_role[flow.src.zone_role],
+                        to_zone=zone_of_role[flow.dst.zone_role],
                     )
                 )
+                session = result.sessions[-1]
+                if flow.noise and session.dst_ip not in server_ips:
+                    session.unanswered = True
     return result
 
 
@@ -228,7 +285,7 @@ def live_policies(sim) -> dict[str, list[str]]:
     matcher = Matcher(config, dict(sim.zone_names))
     carried: dict[str, list[str]] = {}
     for flow in sim.flows.values():
-        if not flow.active(last_day):
+        if not flow.active(last_day) or flow.noise:
             continue
         for src in flow.src.prefixes:
             for dst in flow.dst.prefixes:

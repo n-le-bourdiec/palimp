@@ -72,7 +72,7 @@ def test_unknown_knob_or_value_is_rejected() -> None:
 
 def test_unknown_level_is_rejected() -> None:
     with pytest.raises(ValueError):
-        generate("hard", 1)
+        generate("adversarial", 1)
 
 
 # 0.2.0 (session 9): Medium added; Easy output unchanged.

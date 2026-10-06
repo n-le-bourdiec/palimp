@@ -927,3 +927,38 @@ JOB_KINDS = {
 }
 JOB_PERIODS = {"weekly": 7, "quarterly": 91, "yearly": 365}
 JOB_PARTNERS = ("bank-sftp", "payroll-provider", "carrier-api", "edi-partner")
+
+# ---------------------------------------------------------------- Hard only
+# Kept out of the Easy and Medium lists so their draws do not change.
+
+# Sixth zone (spec 2.1): the database tier of these applications sits there.
+RESTRICTED_NAMES = ("pci", "secure")
+RESTRICTED_APPS = ("billing", "payroll", "pos", "hr")
+INTERFACES = INTERFACES | {"restricted": ("ge-0/0/5", "10.40.0.1/24")}
+
+# Hard has 60 applications: regional instances of the templates (one ERP per
+# country, and so on), named `<app>-<region>`.
+REGIONS = ("de", "uk", "es", "it", "pl", "nl")
+
+# Successor products for TRAP-STALE-NAME: the new application takes over the
+# rules and objects of the old one (repoint style migration, spec 4.2).
+SUCCESSORS = {
+    "crm": ("salescloud", "Sales cloud CRM"),
+    "intranet": ("portal", "Employee portal"),
+    "wiki": ("kb", "Knowledge base"),
+    "servicedesk": ("itsm", "IT service management"),
+    "lms": ("academy", "Learning academy"),
+    "hr": ("people", "People portal"),
+    "reporting": ("analytics", "Analytics platform"),
+    "dms": ("ecm", "Content management"),
+    "gitlab": ("forge", "Code forge"),
+    "wms": ("wms2", "Warehouse platform"),
+    "erp": ("s4", "ERP platform"),
+    "webshop": ("shop2", "Online shop platform"),
+    "files": ("nas", "File storage"),
+    "ci": ("builds", "Build service"),
+}
+
+# Vulnerability scanner of the security team, on a user LAN (TRAP-SCANNER-HITS).
+SCANNER_ADDRESS = "10.10.1.250"
+SCANNER_SERVICES = ("junos-ssh", "junos-https")

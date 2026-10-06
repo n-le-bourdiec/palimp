@@ -6,7 +6,7 @@ from importlib.resources import files
 
 from jsonschema import Draft202012Validator
 
-from palimp_sim import __version__
+from palimp_sim import __version__, voice
 from palimp_sim.artifacts import RETAINED, commit_index
 from palimp_sim.junos import ANY
 from palimp_sim.traffic import TrafficResult
@@ -38,7 +38,17 @@ def _confidence(evidence: list[dict]) -> str:
     return "LOW"
 
 
-def _rule(sim, policy, traffic: TrafficResult, live: dict, log_lines: dict) -> dict:
+def _mentions(text: str | None, app_id: str) -> bool:
+    """Whether a visible name or text still names an application (TRAP-STALE-NAME)."""
+    if not text:
+        return False
+    lowered = text.lower()
+    return app_id in lowered or voice.code(app_id).lower() in lowered
+
+
+def _rule(
+    sim, policy, traffic: TrafficResult, live: dict, log_lines: dict, log_names=frozenset()
+) -> dict:
     meta = sim.policy_meta[policy.uid]
     commit = sim.commits[meta.commit_seq]
     index = commit_index(sim, commit.seq)
@@ -67,6 +77,33 @@ def _rule(sim, policy, traffic: TrafficResult, live: dict, log_lines: dict) -> d
     batch_named = facts.batch_commits.get(commit.seq)
     hidden_live = is_live and hits == 0 and lines == 0 and not policy.inactive
 
+    # Hard traps (hard.py). Every value below is empty or False in Medium.
+    hierarchical = sim.level.config_format == "hierarchical"
+    renames = facts.renames.get(policy.uid, [])
+    reuse = facts.ip_reuse.get(policy.uid)
+    stale = facts.stale.get(policy.uid)
+    noise = stats.noise_since_reset if stats else 0
+    if reuse:
+        # The rule carries the new server's traffic, not a flow it was made for.
+        is_live = any(f in meta.flow_ids for f in live.get(policy.uid, []))
+    reused = bool(reuse) and not is_live and (hits > 0 or lines > 0)
+    scanned = not is_live and not policy.inactive and hits > 0 and hits == noise
+    old_app = stale["old"] if stale else None
+    stale_texts = [policy.name, policy.description, policy.annotation]
+    stale_texts += policy.sources + policy.destinations
+    stale_named = bool(stale) and is_live and any(_mentions(t, old_app) for t in stale_texts)
+    last_index = min(RETAINED, len(sim.commits)) - 1  # oldest rollback file
+    shown_renames = [
+        (commit_index(sim, seq), old)
+        for seq, old in renames
+        if commit_index(sim, seq) + 1 <= last_index or old in log_names
+    ]
+    object_renames = [
+        (commit_index(sim, seq), old, new)
+        for seq, old, new in facts.object_renames
+        if new in policy.sources + policy.destinations and commit_index(sim, seq) + 1 <= last_index
+    ]
+
     evidence: list[dict] = []
 
     def add(tier: str, artifact: str, locator: str, supports: str, misleading=False) -> None:
@@ -82,11 +119,17 @@ def _rule(sim, policy, traffic: TrafficResult, live: dict, log_lines: dict) -> d
         )
 
     if policy.description:
-        add("T1", "config.set", f"policy {policy.name} description", "intent")
+        wrong = stale_named and _mentions(policy.description, old_app)
+        add("T1", "config.set", f"policy {policy.name} description", "intent", wrong)
+    if hierarchical and policy.annotation:
+        # `annotate` text shows in hierarchical output only (HIER-1c).
+        wrong = stale_named and _mentions(policy.annotation, old_app)
+        add("T1", "config.set", f"policy {policy.name} annotation", "intent", wrong)
     if retained and commit.comment:
         # A copied comment, or a batch comment naming another application,
         # describes another change (TRAP-MISLEADING-COMMENT, TRAP-BATCH-COMMIT).
-        wrong = copied or (batch and batch_named != meta.app_id)
+        # The go-live comment of a replaced application names the old one.
+        wrong = copied or (batch and batch_named != meta.app_id) or stale_named
         add("T1", "commits.txt", f"commit {index} comment", "intent", wrong)
     if ticket and ticket.exported:
         texts = [policy.description or "", commit.comment if retained else ""]
@@ -99,27 +142,65 @@ def _rule(sim, policy, traffic: TrafficResult, live: dict, log_lines: dict) -> d
                 add("T1", "tickets.csv", f"ticket {other.ticket_id}", "intent", True)
     if policy.inactive:
         # Not installed, so not in hitcount.txt and never in the logs.
-        add(
-            "T3",
-            "config.set",
-            f"deactivate security policies from-zone {policy.from_zone} "
-            f"to-zone {policy.to_zone} policy {policy.name}",
-            "not_live",
-        )
+        if hierarchical:
+            where = f"inactive: policy {policy.name}"
+        elif policy.is_global:
+            where = f"deactivate security policies global policy {policy.name}"
+        else:
+            where = (
+                f"deactivate security policies from-zone {policy.from_zone} "
+                f"to-zone {policy.to_zone} policy {policy.name}"
+            )
+        add("T3", "config.set", where, "not_live")
         add("T3", "config.set", f"policy {policy.name} then permit", "live", True)
     else:
+        # Hits of a reused address or of a scanner are not business use.
+        wrong = hidden_live or reused or scanned
         support = "live" if hits else "not_live"
-        add("T2", "hitcount.txt", f"policy {policy.name}", support, hidden_live)
+        add("T2", "hitcount.txt", f"policy {policy.name}", support, wrong)
         if logged:
             support = "live" if lines else "not_live"
-            add("T2", "logs/rt_flow.log", f'policy-name="{policy.name}"', support, hidden_live)
+            add("T2", "logs/rt_flow.log", f'policy-name="{policy.name}"', support, wrong)
     named = [
         n
         for n in policy.sources + policy.destinations
         if n not in GENERIC_ADDRESSES and not (sim.level.traps and n.startswith("users-"))
     ]
     if named:
-        add("T3", "config.set", "address objects " + ", ".join(named), "intent")
+        wrong = stale_named and any(_mentions(n, old_app) for n in named)
+        add("T3", "config.set", "address objects " + ", ".join(named), "intent", wrong)
+    if stale_named and _mentions(policy.name, old_app):
+        add("T3", "config.set", f"policy {policy.name} name", "intent", True)
+    if reused:
+        # The address of the retired server is also the new server's object.
+        config = sim.config
+        own = {m for n in policy.destinations for m in config.address_sets.get(n, [n])}
+        prefixes = {str(n) for n in config.resolve_address_list(policy.destinations)}
+        twins = [
+            name
+            for name, prefix in config.addresses.items()
+            if name not in own and prefix in prefixes
+        ]
+        if twins:
+            add("T3", "config.set", "same address as " + ", ".join(twins), "intent")
+    if stale:
+        repoint = commit_index(sim, stale["seq"])
+        if repoint + 1 <= last_index:
+            add("T3", "rollbacks", f"address values changed in commit {repoint}", "intent")
+        if repoint < RETAINED and sim.commits[stale["seq"]].comment:
+            add("T1", "commits.txt", f"commit {repoint} comment", "intent")
+    for where, old in shown_renames:
+        if where + 1 <= last_index:
+            text = f"policy {old} in rollback {where + 1}, {policy.name} from commit {where}"
+            add("T3", "rollbacks", text, "intent")
+            if sim.commits[len(sim.commits) - 1 - where].comment:
+                # The rename commit looks like the creation of a new rule.
+                add("T1", "commits.txt", f"commit {where} comment", "intent", True)
+        if old in log_names:
+            add("T2", "logs/rt_flow.log", f'policy-name="{old}"', "live")
+    for where, old, new in object_renames:
+        text = f"address {old} in rollback {where + 1}, {new} from commit {where}"
+        add("T3", "rollbacks", text, "intent")
     if retained and len(commit.created) > 1:
         # In a batch commit the rules belong to unrelated applications.
         add("T3", "rollbacks", f"rules created together in commit {index}", "intent", batch)
@@ -149,14 +230,24 @@ def _rule(sim, policy, traffic: TrafficResult, live: dict, log_lines: dict) -> d
             traps.append("TRAP-HISTORY-HORIZON")
         if policy.inactive:
             traps.append("TRAP-DEACTIVATED")
+        if shown_renames or object_renames:
+            traps.append("TRAP-RENAME-CHAIN")
+        if reused:
+            traps.append("TRAP-IP-REUSE")
+        if scanned:
+            traps.append("TRAP-SCANNER-HITS")
+        if stale_named:
+            traps.append("TRAP-STALE-NAME")
 
     pair_reset = sim.pair_resets.get((policy.from_zone, policy.to_zone), 0)
     window = sim.total_days - max(sim.hit_reset_day or 0, pair_reset)
     if policy.inactive:
         # Deactivated by a cleanup because it carried nothing: removable.
         verdict = best = "removal_candidate"
-    elif load_bearing:
+    elif load_bearing or reused:
         # Needed: verify with the owner and replace it with a proper rule.
+        # A reused address: the intent is dead, but another application's
+        # traffic now goes through the rule.
         verdict = best = "verify"
     elif is_live:
         verdict = "keep"
@@ -168,7 +259,7 @@ def _rule(sim, policy, traffic: TrafficResult, live: dict, log_lines: dict) -> d
     return {
         "rule_uid": policy.uid,
         "key": {"from_zone": policy.from_zone, "to_zone": policy.to_zone, "name": policy.name},
-        "name_history": [policy.name],
+        "name_history": [old for _, old in renames] + [policy.name],
         "deactivated": policy.inactive,
         "created": {
             "event_id": meta.event_id,
@@ -186,23 +277,36 @@ def _rule(sim, policy, traffic: TrafficResult, live: dict, log_lines: dict) -> d
         },
         "status": {
             "live": is_live,
-            "still_needed": is_live,
+            "still_needed": is_live or reused,
             "carried_flows": live.get(policy.uid, []),
             "last_real_use": _iso(sim, stats.last_hit if stats else None),
             "hits_in_window": hits,
             "hits_total": stats.hits_total if stats else 0,
             "log_lines": lines,
-            "hits_reason": "business" if hits else "none",
+            "hits_reason": _hits_reason(
+                hits, reused, scanned, facts.scanner_targets.get(policy.uid)
+            ),
         },
         "expected": {
             "verdict": verdict,
             "best_achievable_verdict": best,
             "max_justified_confidence": _confidence(evidence),
-            "owner_to_ask": app.owner_id,
+            "owner_to_ask": sim.apps[reuse["app"]].owner_id if reused else app.owner_id,
         },
         "evidence": evidence,
         "traps": traps,
     }
+
+
+def _hits_reason(hits: int, reused: bool, scanned: bool, noise_kind: str | None) -> str:
+    if not hits:
+        return "none"
+    if reused:
+        return "ip_reuse"
+    if scanned:
+        # A forgotten monitoring probe, or the scanner sweep.
+        return "monitoring" if noise_kind == "monitoring" else "scanner"
+    return "business"
 
 
 def _name_of(sim, uid: str) -> str:
@@ -220,6 +324,7 @@ def ground_truth(
     """`scenario_id` defaults to level and seed; held-out scenarios pass their index instead."""
     config = sim.config
     snapshot = sim.date(sim.total_days)
+    log_names = frozenset(s.policy_name for s in traffic.sessions)
     document = {
         "schema_version": 1,
         "simulator_version": __version__,
@@ -228,7 +333,9 @@ def ground_truth(
         "snapshot": f"{snapshot.isoformat()}T09:00:00Z",
         "hit_count_reset": _iso(sim, sim.hit_reset_day),
         "log_window_start": _iso(sim, sim.total_days - sim.level.log_window_days),
-        "rules": [_rule(sim, p, traffic, live, log_lines) for p in config.ordered_policies()],
+        "rules": [
+            _rule(sim, p, traffic, live, log_lines, log_names) for p in config.ordered_policies()
+        ],
         "objects": [
             {"name": name, "kind": "address", "value": prefix}
             for name, prefix in config.addresses.items()

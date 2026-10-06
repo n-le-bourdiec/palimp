@@ -43,6 +43,21 @@ APP_CODES = {
     "shared-internet": "INET",
     "shared-backup": "BKP",
     "shared-monitoring": "NMS",
+    # Hard successors (catalog.SUCCESSORS).
+    "salescloud": "SFC",
+    "portal": "PORTAL",
+    "kb": "KB",
+    "itsm": "ITSM",
+    "academy": "ACAD",
+    "people": "PPL",
+    "analytics": "ANLX",
+    "ecm": "ECM",
+    "forge": "FORGE",
+    "wms2": "WMSNG",
+    "s4": "S4",
+    "shop2": "SHOPNG",
+    "nas": "NAS",
+    "builds": "BUILD",
 }
 
 TIER_WORDS = {
@@ -82,6 +97,11 @@ def initials(name: str) -> str:
 
 
 def code(app_id: str) -> str:
+    if app_id not in APP_CODES and "-" in app_id:
+        # Regional instance (Hard): ERP in Germany is ERPDE.
+        base, region = app_id.rsplit("-", 1)
+        if base in APP_CODES:
+            return APP_CODES[base] + region.upper()
     return APP_CODES.get(app_id, app_id.upper())
 
 
@@ -171,6 +191,12 @@ def commit_comment(
             "cleanup": ("rule cleanup", "remove unused rules", "cleanup zero hit rules"),
             "access": (f"{app} access request", f"access to {app}", f"{app} acl req"),
             "access_end": (f"{app} access removed", f"remove {app} access"),
+            "replace": (
+                f"{facts.get('new')} go-live on {app} rules",
+                f"{app} replaced by {facts.get('new')}",
+                f"repoint {app} objects to {facts.get('new')}",
+            ),
+            "rename": ("rename to naming convention", "object renaming", "naming cleanup"),
         }[kind]
         text = rng.choice(options)
         if facts.get("requester") and rng.chance(0.3):
@@ -186,6 +212,13 @@ def commit_comment(
     if persona == "on_call":
         return rng.choice(("urgent", f"INC{rng.randint(10000, 99999):07d}", ""))
     return rng.choice(("cleanup", "remove unused"))
+
+
+def annotation(flow, ticket_id: str | None, requester: str, rng: Rng) -> str:
+    """`annotate` text a senior admin leaves on a policy (Hard, HIER-1c)."""
+    app = code(flow.app_id)
+    text = rng.choice((f"{app} flows", f"owner {initials(requester)} ({app})", f"{app} - keep"))
+    return f"{text}, {ticket_id}" if ticket_id else text
 
 
 def batch_comment(app_id: str, rng: Rng) -> str:

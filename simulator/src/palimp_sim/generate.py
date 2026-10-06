@@ -5,9 +5,16 @@ import json
 from pathlib import Path
 
 from palimp_sim import __version__
-from palimp_sim.artifacts import commits_txt, hitcount_txt, rollback_files, rt_flow_log, tickets_csv
-from palimp_sim.junos import render_set
-from palimp_sim.levels import FORMAT_DRAWS, LEVELS
+from palimp_sim.artifacts import (
+    commits_txt,
+    hitcount_txt,
+    render_config,
+    rollback_files,
+    rt_flow_log,
+    tickets_csv,
+)
+from palimp_sim.hard import HardSimulation
+from palimp_sim.levels import FORMAT_DRAWS, HARD_FORMAT_DRAWS, LEVELS
 from palimp_sim.medium import MediumSimulation
 from palimp_sim.rng import Rng
 from palimp_sim.traffic import live_policies, simulate
@@ -33,10 +40,10 @@ def _json(document: dict) -> str:
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
 
 
-def draw_formats(rng: Rng, overrides: dict) -> dict:
-    """Format knobs drawn per scenario (decision 0016); overrides win."""
+def draw_formats(rng: Rng, overrides: dict, draws: dict = FORMAT_DRAWS) -> dict:
+    """Format knobs drawn per scenario (decisions 0016 and 0035); overrides win."""
     drawn = {}
-    for name, options in FORMAT_DRAWS.items():
+    for name, options in draws.items():
         point, value = rng.random(), options[-1][0]
         for option, weight in options:
             if point < weight:
@@ -88,8 +95,14 @@ def _generate(
     rng = Rng(f"palimp-sim:{level}:{seed}")
     knobs = LEVELS[level].with_overrides(overrides)
     drawn = draw_formats(rng.derive("formats"), overrides) if knobs.draw_formats else {}
+    if level == "hard":
+        # Hard only variants, from their own sub-generator (decision 0035).
+        drawn |= draw_formats(rng.derive("formats-hard"), overrides, HARD_FORMAT_DRAWS)
     knobs = knobs.with_overrides({name: str(value) for name, value in drawn.items()})
-    simulation = MediumSimulation if knobs.traps else Simulation
+    if level == "hard":
+        simulation = HardSimulation
+    else:
+        simulation = MediumSimulation if knobs.traps else Simulation
     sim = simulation(knobs, seed).run()
     traffic = simulate(sim, rng.derive("traffic"))
     server = knobs.log_collection == "syslog-server"
@@ -97,7 +110,7 @@ def _generate(
     skew = clock_skew(rng.derive("clock-skew")) if server and knobs.clock_skew else 0
     log_text, log_lines = rt_flow_log(sim, traffic, skew)
     texts = {
-        "artifacts/config.set": render_set(sim.config),
+        "artifacts/config.set": render_config(sim, sim.config, last=True),
         "artifacts/commits.txt": commits_txt(sim),
         "artifacts/hitcount.txt": hitcount_txt(sim, traffic, rng.derive("hitcount")),
         "artifacts/logs/rt_flow.log": log_text,

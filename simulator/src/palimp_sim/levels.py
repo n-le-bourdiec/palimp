@@ -57,6 +57,10 @@ class Level:
     traps: bool = field(default=False, metadata=NEW)
     draw_formats: bool = field(default=False, metadata=NEW)
     clock_skew: bool = field(default=False, metadata=NEW)  # syslog server clock off by seconds
+    # Hard only (decision 0035): configuration format of config.set and the
+    # rollbacks, and shared services written as global policies.
+    config_format: str = field(default="set", metadata=NEW)
+    global_policies: bool = field(default=False, metadata=NEW)
 
     def __post_init__(self) -> None:
         for name, allowed in CHOICES.items():
@@ -90,6 +94,7 @@ CHOICES = {
     "hitcount_layout": ("standard", "legacy"),
     "log_release": ("12.x", "pre-22.2", "22.2"),
     "log_collection": ("device", "syslog-server"),
+    "config_format": ("set", "hierarchical"),
 }
 
 
@@ -176,4 +181,67 @@ TRAP_COUNT_WEIGHTS = {
     "batch_commits": (0.25, 0.55, 0.2),
 }
 
-LEVELS = {"easy": EASY, "medium": MEDIUM}
+# Spec section 7.1, Hard column (decision 0035). Knobs the spec leaves "not
+# set yet" are simulator choices: 2 decommissions and 1.5 migrations a year.
+# Trap producing knobs (emergencies, rare jobs, copied comments, IP reuse,
+# renames) are replaced by counts drawn per scenario (HARD_TRAP_COUNT_WEIGHTS),
+# as decision 0018 did for Medium. cleanup_error_rate (TRAP-CLEANUP-FLAP) stays
+# at zero: that trap is not built yet.
+HARD = Level(
+    name="hard",
+    years=7,
+    applications=60,
+    user_sites=4,
+    comment_rate=0.35,
+    description_rate=0.2,
+    log_rate=0.35,
+    log_init_rate=0.2,
+    log_window_days=30,
+    days_since_hit_reset=45,
+    ticket_rate=0.4,
+    ticket_export_coverage=0.5,
+    cleanup_rate=0.3,
+    decommissions_per_year=2.0,
+    migrations_per_year=1.5,
+    commits_per_year=150,
+    device_time_zone="UTC",
+    log_samples_per_policy_day=1,
+    hitcount_layout="standard",
+    log_release="pre-22.2",
+    log_collection="syslog-server",
+    rescue_line=True,
+    zones=6,
+    persona_mix=True,
+    cleanup_deactivate_rate=0.3,
+    traps=True,
+    draw_formats=True,
+    clock_skew=True,
+)
+
+# Hard only format variants, drawn per scenario after FORMAT_DRAWS from their
+# own sub-generator (decision 0035).
+HARD_FORMAT_DRAWS = {
+    "config_format": (("hierarchical", 0.5), ("set", 0.5)),
+    "global_policies": ((True, 0.4), (False, 0.6)),
+}
+
+# Hard trap counts (decision 0035): the Medium names first, then the new
+# traps. ip_reuse: dead rules whose address went to a new server;
+# scanner_hits: dead rules hit only by a scanner or a forgotten probe;
+# renames: rename events inside the retained history (more renames happen
+# earlier, see hard.RENAMES_PER_YEAR); stale_names: applications replaced on
+# their old rules.
+HARD_TRAP_COUNT_WEIGHTS = {
+    "nolog_jobs": (0.15, 0.35, 0.3, 0.2),
+    "yearly_jobs": (0.15, 0.3, 0.3, 0.25),
+    "quarterly_jobs": (0.3, 0.4, 0.3),
+    "emergencies": (0.1, 0.2, 0.25, 0.25, 0.2),
+    "copied_comments": (0.15, 0.25, 0.25, 0.2, 0.15),
+    "batch_commits": (0.15, 0.4, 0.3, 0.15),
+    "ip_reuse": (0.2, 0.35, 0.3, 0.15),
+    "scanner_hits": (0.2, 0.35, 0.3, 0.15),
+    "renames": (0.15, 0.35, 0.3, 0.2),
+    "stale_names": (0.2, 0.4, 0.3, 0.1),
+}
+
+LEVELS = {"easy": EASY, "medium": MEDIUM, "hard": HARD}

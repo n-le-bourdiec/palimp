@@ -84,6 +84,9 @@ class MediumSimulation(Simulation):
         self._protected: set[str] = set()  # job rules: their owners object to removal
         self._hosts: dict[str, Endpoint] = {}  # workstations and vendors of access requests
         self._emergency_apps: set[str] = set()
+        # Overridden by the Hard level (hard.py); Medium keeps these values.
+        self.count_weights = TRAP_COUNT_WEIGHTS
+        self.access_per_year = ACCESS_PER_YEAR
 
     # ------------------------------------------------------------------ hooks
 
@@ -329,7 +332,7 @@ class MediumSimulation(Simulation):
             name = f"pc-{voice.initials(person.name).lower()}-{number:02d}"
             token = f"pc:{name}"
             pcs = sum(1 for t in self._hosts if t.startswith("pc:"))
-            ip = f"10.10.{site}.{20 + pcs}"  # .20 to .254, distinct across sites too
+            ip = self._pc_address(site, pcs)
             endpoint = Endpoint("users", name, [f"{ip}/32"], name)
             kind = "app_access"
             summary = "A named person's workstation reaches a back-end server directly"
@@ -399,7 +402,7 @@ class MediumSimulation(Simulation):
     def _emergency(self, app: App, day: int) -> None:
         """Broad rule on top of users to servers during an incident (spec 4.4)."""
         rng = self.rng_traps
-        admin = self.active_admin(day)
+        admin = self._emergency_admin(day)
         event = self._event("emergency_rule", day, admin, app, note="incident, on-call change")
         users, servers = self.zone("users"), self.zone("servers")
         flows = [
@@ -470,7 +473,7 @@ class MediumSimulation(Simulation):
         although used less often than the review window).
         """
         rng = self.rng_traps
-        admin = self.active_admin(day)
+        admin = self._cleanup_admin(day)
         event = self._event("partial_cleanup", day, admin, note="rules without hits")
         matcher = Matcher(self.config, dict(self.zone_names))
         carried = set()
@@ -530,6 +533,31 @@ class MediumSimulation(Simulation):
 
     # ------------------------------------------------------------------ plan
 
+    # Hooks the Hard level overrides (hard.py). In Medium they draw nothing,
+    # so Medium output does not change.
+
+    def _emergency_admin(self, day: int) -> Admin:
+        return self.active_admin(day)
+
+    def _cleanup_admin(self, day: int) -> Admin:
+        return self.active_admin(day)
+
+    def _pc_address(self, site: int, pcs: int) -> str:
+        return f"10.10.{site}.{20 + pcs}"  # .20 to .254, distinct across sites too
+
+    def _app_templates(self) -> tuple:
+        return catalog.APPS + catalog.EXTRA_APPS
+
+    def _reserve(self, apps: list[App], go_lives: dict[str, int], protected: set[str]) -> set:
+        """Applications kept for the Hard traps, out of every other draw."""
+        return set()
+
+    def _plan_more(self, plan: list, apps: list[App], go_lives: dict[str, int]) -> None:
+        """Extra plan entries (Hard)."""
+
+    def _more_handlers(self) -> dict:
+        return {}
+
     def _add_job(
         self, app: App, kind: str, phase: int, pair: tuple[str, str] = CLEAR_PAIRS[0]
     ) -> None:
@@ -565,7 +593,7 @@ class MediumSimulation(Simulation):
             self.apps[app.app_id] = app
             plan.append((self.workday(1 + 3 * index), 1, "new_app", app))
 
-        templates = rng.sample(catalog.APPS + catalog.EXTRA_APPS, level.applications)
+        templates = rng.sample(self._app_templates(), level.applications)
         days = sorted(rng.randint(30, total - 120) for _ in templates)
         go_lives: dict[str, int] = {}
         apps: list[App] = []
@@ -587,8 +615,9 @@ class MediumSimulation(Simulation):
             )
 
         counts = {
-            name: self.rng_counts.weighted(weights) for name, weights in TRAP_COUNT_WEIGHTS.items()
+            name: self.rng_counts.weighted(weights) for name, weights in self.count_weights.items()
         }
+        self.counts = counts
         self._copied_count = counts["copied_comments"]
         candidates = [a for a in early if servers_users_flow(a)]
         emergency_apps = traps.sample(candidates, min(counts["emergencies"], len(candidates)))
@@ -620,6 +649,7 @@ class MediumSimulation(Simulation):
             else:
                 self._add_job(app, kind, total - traps.randint(1, 91))
         protected = {a.app_id for a in emergency_apps + job_apps}
+        protected |= self._reserve(apps, go_lives, protected)
         others = [a for a in apps if a.app_id not in protected]
         batches = []
         for _ in range(counts["batch_commits"]):
@@ -668,7 +698,7 @@ class MediumSimulation(Simulation):
                 plan.append((self.workday(day + traps.randint(90, 150)), 3, "cleanup", None))
             plan.append((day, 2, "emergency", app))
 
-        for _ in range(round(level.years * ACCESS_PER_YEAR)):
+        for _ in range(round(level.years * self.access_per_year)):
             request: dict = {}
             day = self.workday(rng.randint(60, total - 30))
             plan.append((day, 2, "access", request))
@@ -683,6 +713,7 @@ class MediumSimulation(Simulation):
         for admin in self.admins[2:]:
             plan.append((admin.joined, 0, "admin_join", admin))
         plan.append((self.admins[0].left, 5, "admin_leave", self.admins[0]))
+        self._plan_more(plan, apps, go_lives)
 
         # Most access ends make no commit: count the expected ones only.
         ends = sum(1 for entry in plan if entry[2] == "access_end")
@@ -706,7 +737,7 @@ class MediumSimulation(Simulation):
             "admin_join": lambda day, admin: self._admin_change(day, admin, True),
             "admin_leave": lambda day, admin: self._admin_change(day, admin, False),
             "routine": lambda day, _: self._routine(day),
-        }
+        } | self._more_handlers()
         for day, _, kind, subject in sorted(plan, key=lambda p: (p[0], p[1])):
             handlers[kind](day, subject)
         self._copy_pasted_comments()

@@ -9,7 +9,7 @@ import io
 import ipaddress
 from datetime import datetime, time, timedelta
 
-from palimp_sim.junos import Policy, render_set
+from palimp_sim.junos import Policy, render_hierarchical, render_set
 from palimp_sim.rng import Rng
 from palimp_sim.traffic import TrafficResult
 
@@ -47,11 +47,31 @@ def commits_txt(sim) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_config(sim, config, last: bool = False) -> str:
+    """The configuration in the scenario's format (decision 0035).
+
+    File names stay `config.set` and `rollback-NN.set` whatever the format
+    (the ground truth `artifact` values name them). The hierarchical active
+    configuration starts with the `## Last commit:` header of `show
+    configuration` (VSRX-8); whether rollbacks carry a header is not shown in
+    the documentation (HIER-1e), so they have none.
+    """
+    if sim.level.config_format != "hierarchical":
+        return render_set(config)
+    header = None
+    if last:
+        commit = sim.commits[-1]
+        moment = timestamp(sim, commit.day, commit.second)
+        zone = sim.level.device_time_zone
+        header = f"## Last commit: {moment:%Y-%m-%d %H:%M:%S} {zone} by {commit.login}"
+    return render_hierarchical(config, header)
+
+
 def rollback_files(sim) -> dict[str, str]:
     files = {}
     for index in range(1, min(RETAINED, len(sim.commits))):
         commit = sim.commits[len(sim.commits) - 1 - index]
-        files[f"rollbacks/rollback-{index:02d}.set"] = render_set(commit.config)
+        files[f"rollbacks/rollback-{index:02d}.set"] = render_config(sim, commit.config)
     return files
 
 
@@ -217,6 +237,11 @@ def rt_flow_log(sim, traffic: TrafficResult, skew: int = 0) -> tuple[str, dict[s
 
     for number, session in enumerate(sessions):
         policy = policies[session.policy_uid]
+        # The name in force that day (a later rename does not rewrite old
+        # lines) and the real zones (a global policy has none of its own).
+        name = session.policy_name or policy.name
+        from_zone = session.from_zone or policy.from_zone
+        to_zone = session.to_zone or policy.to_zone
         session_id = 40000 + number
         values = {
             "source-address": session.src_ip,
@@ -229,11 +254,11 @@ def rt_flow_log(sim, traffic: TrafficResult, skew: int = 0) -> tuple[str, dict[s
             "nat-destination-address": session.dst_ip,
             "nat-destination-port": str(session.dst_port),
             "protocol-id": "6" if session.protocol == "tcp" else "17",
-            "policy-name": policy.name,
-            "source-zone-name": policy.from_zone,
-            "destination-zone-name": policy.to_zone,
+            "policy-name": name,
+            "source-zone-name": from_zone,
+            "destination-zone-name": to_zone,
             "session-id": str(session_id),
-            "packet-incoming-interface": interface_of[policy.from_zone],
+            "packet-incoming-interface": interface_of[from_zone],
         }
         start = timestamp(sim, session.day, session.second)
         millis = (session_id * 37) % 1000
@@ -249,6 +274,16 @@ def rt_flow_log(sim, traffic: TrafficResult, skew: int = 0) -> tuple[str, dict[s
                 "bytes-from-server": str(session.bytes_out),
                 "elapsed-time": str(session.elapsed),
             }
+            if session.unanswered:
+                # Nothing answers (VSRX-15): the session ages out, the server
+                # side stays empty. The reason text is an assumption.
+                values |= {
+                    "reason": "idle Timeout",
+                    "packets-from-client": "1",
+                    "bytes-from-client": "60" if session.protocol == "tcp" else "76",
+                    "packets-from-server": "0",
+                    "bytes-from-server": "0",
+                }
             emit("CLOSE", start + timedelta(seconds=session.elapsed), millis, values)
             counts[session.policy_uid] = counts.get(session.policy_uid, 0) + 1
     entries.sort(key=lambda e: (e[0], e[1], e[2]))
