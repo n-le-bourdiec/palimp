@@ -280,6 +280,26 @@ class Mapper:
             out = (out << 1) | (((value >> shift) & 1) ^ flip)
         return str(ipaddress.ip_address(out) if version == 4 else ipaddress.IPv6Address(out))
 
+    def _with_length(
+        self, address: ipaddress.IPv4Address | ipaddress.IPv6Address, mapped: str, length: int
+    ) -> str:
+        """`address/length` mapped, keeping its host bits (`192.168.2.2/24` stays a host).
+
+        A network (host bits zero) maps to the mapped network. A host keeps its own
+        mapping, so it matches the same address written alone (logs); the one host whose
+        mapping has zero host bits takes the mapped network's own host bits instead, so it
+        never reads as the network: distinct addresses stay distinct.
+        """
+        bits = address.max_prefixlen
+        host_mask = (1 << (bits - length)) - 1
+        if not int(address) & host_mask:
+            return str(ipaddress.ip_network(f"{mapped}/{length}", strict=False))
+        value = int(ipaddress.ip_address(mapped))
+        if not value & host_mask:
+            network = int(address) & ~host_mask
+            value |= int(ipaddress.ip_address(self._address(type(address)(network)))) & host_mask
+        return f"{type(address)(value)}/{length}"
+
     def ip(self, text: str) -> str:
         """An address (`10.1.2.3`) or a network (`10.1.2.0/24`); the text if it is neither."""
         found = self.ips.get(text)
@@ -295,7 +315,7 @@ class Mapper:
             if not length.isdigit() or int(length) > parsed.max_prefixlen:
                 mapped = f"{mapped}/{length}"
             else:
-                mapped = str(ipaddress.ip_network(f"{mapped}/{length}", strict=False))
+                mapped = self._with_length(parsed, mapped, int(length))
         self.ips[text] = mapped
         return mapped
 

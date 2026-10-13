@@ -188,6 +188,50 @@ def test_addresses_keep_their_class_and_subnets() -> None:
     assert ipaddress.ip_address(mapper.ip("10.20.1.10")) in ipaddress.ip_network(network)
 
 
+def test_host_with_prefix_length_keeps_host_bits() -> None:
+    # Session 23 issue: `192.168.2.2/24` was mapped as its network, so three hosts
+    # of one subnet collapsed into one address.
+    mapper = Mapper(key=KEY)
+    texts = ["192.168.2.0/24", *(f"192.168.2.{h}/24" for h in range(1, 255))]
+    texts += ["10.20.0.0/15", "10.20.1.10/15", "10.21.0.0/15", "2a00:1450::/64", "2a00:1450::1/64"]
+    mapped = [mapper.ip(t) for t in texts]
+    assert len(set(mapped)) == len(texts)
+    network = ipaddress.ip_network(mapper.ip("192.168.2.0/24"))
+    for text, new in zip(texts, mapped, strict=True):
+        before, after = ipaddress.ip_interface(text), ipaddress.ip_interface(new)
+        assert after.network.prefixlen == before.network.prefixlen
+        # A network stays a network, a host stays a host.
+        assert (after.ip == after.network.network_address) == (
+            before.ip == before.network.network_address
+        ), text
+    for host in range(1, 255):
+        address = ipaddress.ip_interface(mapper.ip(f"192.168.2.{host}/24")).ip
+        assert address in network
+    # Most hosts match the same address written alone (log lines).
+    alone = sum(
+        mapper.ip(f"192.168.2.{h}/24").split("/")[0] == mapper.ip(f"192.168.2.{h}")
+        for h in range(1, 255)
+    )
+    assert alone >= 253
+
+
+def test_distinct_addresses_stay_distinct_in_the_copy(tmp_path: Path) -> None:
+    source = tmp_path / "capture"
+    source.mkdir()
+    (source / "config.set").write_text(
+        fixture_body("hier_zone_relative_show.txt"), encoding="utf-8"
+    )
+    result = anonymize(source, KEY)
+    write(result, tmp_path / "copy", Options())
+    original, anonymized = ingest(source), ingest(tmp_path / "copy")
+    values = [o.value for o in original.config.addresses.values() if o.value]
+    copied = [o.value for o in anonymized.config.addresses.values() if o.value]
+    assert len(values) == len(copied) >= 3
+    assert len(set(copied)) == len(set(values))
+    assert {result.mapper.ip(v) for v in values} == set(copied)
+    assert judgments(anonymized) == judgments(original)
+
+
 def test_names_keep_structure_and_signal_words() -> None:
     mapper = Mapper(key=KEY)
     assert mapper.name("monitoring").startswith(mapper.name("mon"))
