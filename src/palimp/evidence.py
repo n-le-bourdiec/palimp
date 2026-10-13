@@ -9,7 +9,8 @@ T2 behavioral: hit count row, RT_FLOW log summary. Each T2 item says whether
 the artifact shows traffic ("present"), could show it and shows none
 ("absent"), or cannot show it for this policy ("blind": no logging,
 deactivated, artifact missing), see decision 0019.
-T3 structural: address object names, application services attached to the
+T3 structural: address object names, applications the policy name names
+(with the same name filters, palimp.apps), application services attached to the
 permit (`then permit application-services`), other permit options (`tunnel`,
 `firewall-authentication`, `destination-address`), policies created in the same
 commit, deactivation, a name, description or annotation that marks the policy as
@@ -405,6 +406,13 @@ def collect(
             )
         locator = "address objects " + ", ".join(named)
         items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps, sides))
+    if name_apps := vocab.in_object(policy.name):
+        claim = (
+            f"the policy name names {', '.join(name_apps)}: a name chosen for the rule, "
+            "not a statement of why it exists"
+        )
+        locator = f"policy {policy.name} name"
+        items.append(Item("T3", "config.set", locator, claim, None, "policy_name", name_apps))
     items += shared_address_items(dataset, policy, vocab)
     if policy.application_services:
         claim = (

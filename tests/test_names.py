@@ -107,3 +107,21 @@ def test_server_roles_describe_the_flow_without_an_application() -> None:
     assert a.intent_apps == [] and a.confidence == "LOW"
     assert a.intent_flow == "SMB file sharing between SQL servers"
     assert intent(found).text.startswith("Probably SMB file sharing between SQL servers")
+
+
+def test_policy_name_is_t3_evidence_and_corroborates() -> None:
+    rules = policy("allow-zorvex-dmz", "any", "zorvex-db-01")
+    rules += policy("dmz-local-01", "any", "dan-pc-07")
+    found = collect(dataset(rules), PolicyKey.parse("a/b/allow-zorvex-dmz"))
+    item = next(e for e in found.evidence if e.kind == "policy_name")
+    assert item.tier == "T3" and item.apps == ["zorvex"]
+    assert (found.assessment.confidence, found.assessment.confidence_rule) == ("MEDIUM", "C-T3")
+    assert "the policy name" in found.assessment.confidence_reason
+    plain = collect(dataset(rules), PolicyKey.parse("a/b/dmz-local-01"))
+    assert not [e for e in plain.evidence if e.kind == "policy_name"]  # generic words only
+
+
+def test_policy_name_alone_stays_low() -> None:
+    found = collect(dataset(policy("to-kelvo", "any", "any")), PolicyKey.parse("a/b/to-kelvo"))
+    assert found.assessment.intent_apps == ["kelvo"]
+    assert found.assessment.confidence_rule == "C-T3-SINGLE"
