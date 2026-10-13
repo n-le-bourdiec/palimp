@@ -54,6 +54,28 @@ block deactivates every policy under it, as Junos does at commit.
 configuration groups are not read (`show configuration | display inheritance`
 prints them in place).
 
+## What palimp could not see
+
+Every report has a section with this title, listing the blind spots of the
+artifacts you gave (log window, history horizon, policies without logging,
+counter clears, missing files). Read it before acting on any verdict. Some
+limits hold for every run:
+
+- Scanner and monitoring traffic on a policy that does not log cannot be told
+  apart from business use. Hit counts only say that sessions matched, not who
+  opened them or whether a server answered, so a rule kept alive only by a
+  vulnerability scanner or a monitoring probe looks used. palimp recognizes
+  probe traffic only in session logs (a source that reaches several policies
+  and destinations with unanswered sessions).
+- A rule whose application was renamed, or whose address now serves another
+  application, is detected only when an artifact ties the new application to
+  the rule (its addresses, objects or history). A rename that left no such
+  trace is invisible.
+- With the configuration alone (no commits, rollbacks, logs or hit counts),
+  there is no traffic evidence and no history: every intent rests on names,
+  descriptions and annotations, confidence stays LOW or MEDIUM, and no rule
+  is a removal candidate unless it is deactivated.
+
 ## What palimp has been tested on
 
 palimp has never been run on a real SRX history. It has been tested only on
