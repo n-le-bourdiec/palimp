@@ -1,6 +1,6 @@
 # 0034 Parser gaps before release: deactivated scopes, global policies, application services
 
-- Status: Accepted
+- Status: Accepted; the postponed `then permit <option>` alternative is superseded by decision 0037
 - Date: 2026-10-06
 - Supersedes: the "Reported, not applied" item of decision 0033 for
   `inactive:` on a zone pair, on `policies` or on `security` (the

@@ -21,10 +21,12 @@ from palimp.addresses import NON_PUBLIC, is_public, special_range
 from palimp.anonymize import Mapper, Options, anonymize, write
 from palimp.cli import app
 from palimp.evidence import collect_all
+from palimp.formats.terminal import PROMPT, is_terminal_noise
 from palimp.ingest import ingest
 from palimp.models import Dataset
 from palimp.report import build
 
+FIXTURES = Path(__file__).parent / "fixtures" / "junos_docs"
 KEY = bytes(range(32))
 OTHER_KEY = bytes(range(1, 33))
 IP = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
@@ -327,3 +329,62 @@ def test_strip_text_removes_annotations(annotated: Path, tmp_path: Path) -> None
     copy = ingest(tmp_path / "copy")
     assert [p.annotations for p in copy.config.policies] == [[], []]
     assert copy.config.stats.unknown == 0 and len(copy.config.policies) == 2
+
+
+# Saved terminal captures (session 21 issue): prompt, banner and elision lines
+# are what the parsers ignore (palimp.formats.terminal); anonymize keeps their
+# CLI words, so the copy keeps its relative paths and parses the same way.
+
+
+def fixture_body(name: str) -> str:
+    lines = (FIXTURES / name).read_text(encoding="utf-8").splitlines()
+    return "\n".join(lines[lines.index("# ---") + 1 :]) + "\n"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "hier_zone_relative_show.txt",
+        "hier_policy_log_prompt_nospace.txt",
+        "hier_permit_firewall_authentication.txt",
+        "display_set_pipe.txt",
+    ],
+)
+def test_terminal_capture_keeps_prompts_and_banners(name: str, tmp_path: Path) -> None:
+    source = tmp_path / "capture"
+    source.mkdir()
+    text = fixture_body(name)
+    (source / "config.set").write_text(text, encoding="utf-8")
+    result = anonymize(source, KEY)
+    copy = result.files["config.set"]
+    known = result.mapper.known
+    for before, after in zip(text.splitlines(), copy.splitlines(), strict=True):
+        if not is_terminal_noise(before):
+            continue
+        assert is_terminal_noise(after), (before, after)
+        prompt = PROMPT.match(before.strip())
+        if prompt is None:
+            # `[edit]`, `...`: unchanged unless they hold a name palimp knows.
+            if not any(n in before for n in known):
+                assert after == before
+            continue
+        login, host = before.strip()[: prompt.start(1)].split("@")
+        # Login and host mapped like any name (a signal word such as `user` stays).
+        mapped = f"{result.mapper.name(login)}@{result.mapper.name(host)}"
+        assert after.strip().startswith(mapped)
+        command = before.strip()[prompt.start(1) :].split()
+        shown = PROMPT.match(after.strip())
+        assert shown is not None
+        rewritten = after.strip()[shown.start(1) :].split()
+        assert len(rewritten) == len(command)
+        for word, new in zip(command, rewritten, strict=True):
+            assert new == word or word in known, (word, new)
+    write(result, tmp_path / "copy", Options())
+    original, anonymized = ingest(source), ingest(tmp_path / "copy")
+    assert anonymized.config.stats.format == original.config.stats.format
+    assert anonymized.config.stats.unknown == original.config.stats.unknown
+    assert len(anonymized.config.policies) == len(original.config.policies)
+    assert [result.mapper.name(p.name) for p in original.config.policies] == [
+        p.name for p in anonymized.config.policies
+    ]
+    assert judgments(anonymized) == judgments(original)

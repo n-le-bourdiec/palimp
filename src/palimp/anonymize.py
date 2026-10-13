@@ -396,6 +396,17 @@ def _letters(names: set[str]) -> set[str]:
     return found
 
 
+# In a `then permit` option, the word after these keywords is a name.
+OPTION_NAMES = {
+    "ipsec-vpn",
+    "pair-policy",
+    "client-match",
+    "access-profile",
+    "ssl-termination-profile",
+    "auth-user-agent",
+}
+
+
 def _config_names(config: Config) -> set[str]:
     found = set(config.addresses) | {a for a in config.applications if not a.startswith("junos-")}
     for policy in config.policies:
@@ -403,6 +414,10 @@ def _config_names(config: Config) -> set[str]:
         found |= set(policy.match_from_zones) | set(policy.match_to_zones)
         # Rule set or profile names: `application-firewall rule-set NAME`.
         found |= {s.split()[-1] for s in policy.application_services if len(s.split()) >= 3}
+        # VPN, paired policy, firewall user or group and profile names of permit options.
+        for option in policy.permit_options:
+            words = option.split()
+            found |= {v for k, v in zip(words, words[1:], strict=False) if k in OPTION_NAMES}
         found |= set(policy.sources) | set(policy.destinations) | set(policy.applications)
     for obj in config.addresses.values():
         found |= set(obj.members) | {obj.book}
@@ -507,8 +522,8 @@ class _Rewriter:
         for line in text.splitlines(keepends=True):
             body = line.rstrip("\r\n")
             ending = line[len(body) :]
-            if PROMPT.match(body.strip()):
-                out.append(self.m.text(body, "generic") + ending)
+            if is_terminal_noise(body):
+                out.append(self._terminal(body) + ending)
                 continue
             if body.lstrip().startswith("#"):
                 out.append(self.m.text(body, "free", self.log_year) + ending)
@@ -544,7 +559,7 @@ class _Rewriter:
             if PROMPT.match(stripped):
                 if not stack and (shown := shown_path(stripped)) is not None:
                     level = (edit if shown[0] == "edit" else []) + shown[1]
-                out.append(self.m.text(body, "generic") + ending)
+                out.append(self._terminal(body) + ending)
                 continue
             if stripped.startswith("#"):
                 out.append(self.m.text(body, "free", self.log_year) + ending)
@@ -552,9 +567,7 @@ class _Rewriter:
             if is_terminal_noise(stripped) or not stripped:
                 if not stack and (banner := edit_path(stripped)) is not None:
                     edit = level = banner.split()
-                    out.append(self._set_line(body, _secure(["", *edit])) + ending)
-                else:
-                    out.append(line)
+                out.append(self._terminal(body) + ending)
                 continue
             core, tail = _split_tail(body)
             words = [w for w in core.split() if w not in ("inactive:", "protect:", "replace:")]
@@ -571,6 +584,22 @@ class _Rewriter:
             elif core.strip() == "}" and stack:
                 stack.pop()
         return "".join(out)
+
+    def _terminal(self, body: str) -> str:
+        """A prompt, banner, completion or elision line of a saved terminal session.
+
+        The parsers ignore these lines (palimp.formats.terminal), so the CLI words
+        stay as they are (`[edit]`, `show security policies`), and the copy keeps
+        its relative paths. Only the login and host of a prompt, names palimp
+        knows and IP addresses are replaced, the same way as everywhere else.
+        """
+        start = len(body) - len(body.lstrip())
+        match = PROMPT.match(body[start:])
+        if not match:
+            return self.m.text(body, "known")
+        login, _, host = body[start : start + match.start(1)].partition("@")
+        rest = body[start + match.start(1) :]
+        return f"{body[:start]}{self.m.name(login)}@{self.m.name(host)}{self.m.text(rest, 'known')}"
 
     def _set_line(self, body: str, security: bool) -> str:
         found = self._lines.get((body, security))
@@ -622,8 +651,8 @@ class _Rewriter:
                 out.append(self._entry(body, match) + ending)
             elif RESCUE.match(body):
                 out.append(self.m.text(body, "known") + ending)
-            elif PROMPT.match(body.strip()):
-                out.append(self.m.text(body, "generic") + ending)
+            elif is_terminal_noise(body):
+                out.append(self._terminal(body) + ending)
             elif not self.options.strip_text:
                 out.append(self.m.text(body, "free") + ending)
         return "".join(out)
@@ -663,7 +692,15 @@ class _Rewriter:
     # hitcount.txt
 
     def hitcount(self, text: str) -> str:
-        return self.m.text(text, "known")
+        out = []
+        for line in text.splitlines(keepends=True):
+            body = line.rstrip("\r\n")
+            ending = line[len(body) :]
+            if is_terminal_noise(body):
+                out.append(self._terminal(body) + ending)
+            else:
+                out.append(self.m.text(line, "known"))
+        return "".join(out)
 
     # logs/rt_flow.log
 
@@ -681,6 +718,10 @@ class _Rewriter:
                         year += 1
                     previous_month = month
                 line_year = year
+            body = line.rstrip("\r\n")
+            if is_terminal_noise(body):
+                out.append(self._terminal(body) + line[len(body) :])
+                continue
             out.append(self._log_line(line, line_year))
         return "".join(out)
 
