@@ -34,6 +34,7 @@ from palimp.report import (
     counters_only,
     internet_facing,
     is_cleanup,
+    is_shared,
     look_risk,
     markdown,
     worth_a_look,
@@ -116,18 +117,19 @@ def check(report: Report) -> None:
     expected = [r.ref for r in report.rules if r.section != "keep"]
     assert sorted({ref for q in questionnaires for ref in q.rules}) == sorted(expected)
     cleanup = {r.ref for r in report.rules if is_cleanup(r.finding)}
+    team = cleanup | {r.ref for r in report.rules if is_shared(r.finding)}
     for q in questionnaires:
         if q.group == FIREWALL_TEAM:
-            assert set(q.rules) == cleanup
+            assert set(q.rules) == team
         else:
-            assert not set(q.rules) & cleanup, q.name
+            assert not set(q.rules) & team, q.name
         assert len(q.rules) == len(set(q.rules))
     people = [p for q in questionnaires if q.group != FIREWALL_TEAM for p in q.recipients]
     assert len(people) == len(set(people))
     # A rule with a certain owner is asked once, in its owner's first section.
     for rule in report.rules:
         owner = rule.finding.assessment.owner  # type: ignore[union-attr]
-        if rule.ref in expected and rule.ref not in cleanup and owner:
+        if rule.ref in expected and rule.ref not in team and owner:
             asking = [q for q in questionnaires if rule.ref in q.rules]
             assert [q.recipients for q in asking] == [[owner]]
             assert rule.ref in asking[0].owned

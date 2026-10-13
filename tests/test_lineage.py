@@ -287,6 +287,36 @@ def test_reused_address_gives_verify_and_a_conflict(tmp_path: Path) -> None:
     assert any(item.id in c.evidence for c in assessment.conflicts)
 
 
+def test_shared_address_is_asked_of_the_firewall_team_once_per_address(tmp_path: Path) -> None:
+    # Decision 0041: two rules on 10.20.30.5 give one question to the firewall team,
+    # none to the owners.
+    from palimp.questions import CLEANUP_NAME
+    from palimp.questions import build as build_questions
+    from palimp.report import FIREWALL_TEAM, SHARED_QUESTION, shared_addresses
+    from palimp.report import build as build_report
+
+    config = (
+        SHARED + rule("late", "users-all", "crm-web-01") + rule("allow-all", "lms-net", "hr-web-01")
+    )
+    artifacts = write(tmp_path, [config], [""])
+    report = build_report(ingest(artifacts))
+    shared = shared_addresses(report.rules)
+    assert len(shared) == 1
+    assert shared[0].address == "10.20.30.5/32"
+    assert shared[0].objects == ["crm-web-01", "hr-web-01"]
+    assert len(shared[0].rules) == 2
+    for entry in report.rules:
+        if entry.finding.assessment.verdict_rule == "V-SHARED-ADDRESS":  # type: ignore[union-attr]
+            assert entry.group == FIREWALL_TEAM and entry.question == SHARED_QUESTION
+    questionnaires = build_questions(report)
+    team = [q for q in questionnaires if q.name == CLEANUP_NAME]
+    assert len(team) == 1 and team[0].text.count(SHARED_QUESTION) == 1
+    assert set(shared[0].rules) <= set(team[0].rules)
+    for q in questionnaires:
+        if q.group != FIREWALL_TEAM:
+            assert not set(q.rules) & set(shared[0].rules)
+
+
 def test_no_shared_address_item_on_a_deactivated_policy(tmp_path: Path) -> None:
     deactivated = (
         rule("late", "users-all", "crm-web-01")

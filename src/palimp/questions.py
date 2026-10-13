@@ -11,6 +11,10 @@ Each question is yes/no and "yes" always means the access is still needed.
 Every questionnaire states that silence keeps the rule (decision 0024: no
 removal signal from silence alone).
 References (R12, E3) point to the report, for the person who tracks the answers.
+
+Decision 0041: rules whose verdict comes from a shared address go to the
+firewall team list as well, one question per address shared by several
+objects, never one question per rule to owners.
 """
 
 import csv
@@ -20,7 +24,16 @@ import re
 from pydantic import BaseModel
 
 from palimp.models import Finding
-from palimp.report import FIREWALL_TEAM, Report, RuleEntry, is_cleanup
+from palimp.report import (
+    FIREWALL_TEAM,
+    SHARED_QUESTION,
+    Report,
+    RuleEntry,
+    SharedAddress,
+    is_cleanup,
+    is_shared,
+    shared_addresses,
+)
 
 ANSWER_COLUMNS = [
     "questionnaire",
@@ -205,21 +218,49 @@ def _unnamed_letter(group: str, entries: list[RuleEntry]) -> str:
     return "\n".join(lines + CLOSING)
 
 
-def _cleanup_letter(entries: list[RuleEntry]) -> str:
-    plural = "s" if len(entries) != 1 else ""
-    lines = [
-        f"Subject: Firewall cleanup list: {len(entries)} deactivated rule{plural}",
-        "",
-        "Hello firewall team,",
-        "",
-        "These rules are deactivated: they are still in the configuration but match no "
-        "traffic today. Their application owners are not asked, because their answer would "
-        "not change the action. For each rule: is it kept on purpose, as a rollback switch? "
-        "A 'yes' keeps it, a 'no' makes it a candidate for deletion.",
-        NO_REMOVAL,
-        "",
-        *_items(entries, 1),
-    ]
+def _shared_items(shared: list[SharedAddress], start: int) -> list[str]:
+    lines = []
+    for number, item in enumerate(shared, start=start):
+        lines += [
+            f"{number}. Address {item.address}",
+            f"   Objects: {', '.join(item.objects)}",
+            f"   Rules it puts in verify: {', '.join(item.rules)}",
+            f"   Question: {SHARED_QUESTION}",
+            "   Answer:",
+            "",
+        ]
+    return lines
+
+
+def _cleanup_letter(entries: list[RuleEntry], shared: list[SharedAddress]) -> str:
+    parts = []
+    if entries:
+        parts.append(f"{len(entries)} deactivated rule{'s' if len(entries) != 1 else ''}")
+    if shared:
+        parts.append(f"{len(shared)} shared address{'es' if len(shared) != 1 else ''}")
+    lines = [f"Subject: Firewall cleanup list: {', '.join(parts)}", "", "Hello firewall team,", ""]
+    if entries:
+        lines += [
+            "These rules are deactivated: they are still in the configuration but match no "
+            "traffic today. Their application owners are not asked, because their answer would "
+            "not change the action. For each rule: is it kept on purpose, as a rollback switch? "
+            "A 'yes' keeps it, a 'no' makes it a candidate for deletion.",
+            NO_REMOVAL,
+            "",
+            *_items(entries, 1),
+        ]
+    if shared:
+        lines += [
+            f"Addresses shared by several objects ({len(shared)})",
+            "",
+            "Each address below is registered under several address-book objects named after "
+            "different applications, so the rules that use it may now carry another "
+            "application's traffic. Application owners are not asked rule by rule: please tell "
+            "us which application runs on each address today.",
+            NO_REMOVAL,
+            "",
+            *_shared_items(shared, len(entries) + 1),
+        ]
     return "\n".join(lines + CLOSING)
 
 
@@ -234,11 +275,14 @@ def build(report: Report) -> list[Questionnaire]:
     may_own: dict[str, list[RuleEntry]] = {}
     unnamed: dict[str, list[RuleEntry]] = {}
     cleanup = []
+    team_shared: list[RuleEntry] = []
     for entry in sorted(asked, key=lambda r: r.section != "removal_candidate"):
         assessment = entry.finding.assessment
         assert assessment is not None
         if is_cleanup(entry.finding):
             cleanup.append(entry)
+        elif is_shared(entry.finding):
+            team_shared.append(entry)
         elif assessment.owner:
             owned.setdefault(assessment.owner, []).append(entry)
         elif assessment.owner_candidates:
@@ -247,14 +291,15 @@ def build(report: Report) -> list[Questionnaire]:
         else:
             unnamed.setdefault(entry.group, []).append(entry)
     found = []
-    if cleanup:
+    shared = shared_addresses(team_shared)
+    if cleanup or shared:
         found.append(
             Questionnaire(
                 name=CLEANUP_NAME,
                 group=FIREWALL_TEAM,
                 recipients=[FIREWALL_TEAM],
-                owned=[e.ref for e in cleanup],
-                text=_cleanup_letter(cleanup),
+                owned=[e.ref for e in cleanup + team_shared],
+                text=_cleanup_letter(cleanup, shared),
             )
         )
     number = 0

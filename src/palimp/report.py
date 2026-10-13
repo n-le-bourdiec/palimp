@@ -15,6 +15,10 @@ Decision 0026: deactivated rules are asked of the firewall team (cleanup
 list), never of application owners, whose answer would not change the
 action. Keep rules with LOW confidence or traffic on the counters only are
 listed under "Worth a look", in the report only.
+
+Decision 0041: rules whose verdict comes from a shared address
+(V-SHARED-ADDRESS) are asked of the firewall team too, one question per
+address shared by several objects, never one question per rule to owners.
 """
 
 import re
@@ -142,6 +146,11 @@ class Report(BaseModel):
 
 
 FIREWALL_TEAM = "firewall team"
+SHARED_QUESTION = "These objects share this address: which application runs on it today?"
+SHARED_ASK = (
+    "firewall team: an address of this rule is shared by several address-book objects, "
+    "asked once per address (decision 0041)"
+)
 CLEANUP_QUESTION = "Is this deactivated rule kept on purpose, as a rollback switch?"
 CLEANUP_ASK = (
     "firewall team: the rule is deactivated, so the application owner's answer would not "
@@ -252,6 +261,45 @@ def is_cleanup(finding: Finding) -> bool:
     assessment = finding.assessment
     assert assessment is not None
     return finding.policy.deactivated and assessment.verdict != "keep"
+
+
+def is_shared(finding: Finding) -> bool:
+    """A verify verdict from a shared address: asked of the firewall team, once per
+    address (decision 0041)."""
+    assessment = finding.assessment
+    assert assessment is not None
+    return not is_cleanup(finding) and assessment.verdict_rule == "V-SHARED-ADDRESS"
+
+
+class SharedAddress(BaseModel):
+    """One address shared by several address-book objects, and the rules it puts in verify."""
+
+    address: str
+    objects: list[str]
+    rules: list[str]  # R12 references
+    evidence: list[str]  # R12.E3 references to the shared_address items
+
+
+def shared_addresses(entries: list[RuleEntry]) -> list[SharedAddress]:
+    """Shared addresses of the V-SHARED-ADDRESS rules, in order of first rule."""
+    found: dict[str, SharedAddress] = {}
+    for entry in entries:
+        if not is_shared(entry.finding):
+            continue
+        for item in entry.finding.evidence:
+            if item.kind != "shared_address":
+                continue
+            match = re.match(r"address (\S+) of ", item.claim)
+            address = match.group(1) if match else item.locator
+            objects = item.locator.removeprefix("address-book objects ").split(", ")
+            shared = found.setdefault(
+                address, SharedAddress(address=address, objects=[], rules=[], evidence=[])
+            )
+            shared.objects = sorted(set(shared.objects) | set(objects))
+            if entry.ref not in shared.rules:
+                shared.rules.append(entry.ref)
+            shared.evidence.append(f"{entry.ref}.{item.id}")
+    return list(found.values())
 
 
 def counters_only(finding: Finding) -> bool:
@@ -589,6 +637,7 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
     counters = sum(1 for e in entries if e.section == "keep" and counters_only(e.finding))
     look = sum(1 for e in entries if worth_a_look(e))
     cleanup = sum(1 for e in entries if is_cleanup(e.finding))
+    shared = shared_addresses(entries)
     sure = [
         Cited(
             text=(
@@ -620,6 +669,15 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
             text=(
                 f"{cleanup} of the rules to verify or remove are deactivated: they are asked "
                 "of the firewall team only (cleanup list), not of application owners."
+            )
+        ),
+        Cited(
+            text=(
+                f"{sum(len(a.rules) for a in shared)} rules to verify have an address shared "
+                f"by several address-book objects ({len(shared)} address"
+                f"{'' if len(shared) == 1 else 'es'}): the firewall team is asked once per "
+                "address which application runs on it today, not the application owners "
+                "rule by rule."
             )
         ),
         Cited(
@@ -670,19 +728,25 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
         ):
             raise ValueError(f"{finding.key}: removal_candidate without a not-live item")
         cleanup = is_cleanup(finding)
+        shared = is_shared(finding)
         question = YES_NO[assessment.verdict_rule] if assessment.verdict != "keep" else ""
+        owner = assessment.ask or ""
+        if cleanup:
+            question, owner = CLEANUP_QUESTION, CLEANUP_ASK
+        elif shared:
+            question, owner = SHARED_QUESTION, SHARED_ASK
         entries.append(
             RuleEntry(
                 ref=ref,
                 key=str(finding.key),
                 section=assessment.verdict,
-                group=FIREWALL_TEAM if cleanup else owner_group(finding),
+                group=FIREWALL_TEAM if cleanup or shared else owner_group(finding),
                 allows=allows(finding, dataset),
                 internet=internet_facing(finding, dataset),
                 why=why(finding, notes, ref),
                 intent=intent(finding),
-                owner=CLEANUP_ASK if cleanup else assessment.ask or "",
-                question=CLEANUP_QUESTION if cleanup else question,
+                owner=owner,
+                question=question,
                 finding=finding,
             )
         )
@@ -828,6 +892,22 @@ def markdown(report: Report) -> str:
         out.append(
             f"- {entry.ref} `{entry.key}`: {item.claim} [{entry.ref}.{item.id}]. "
             f"{CLEANUP_QUESTION} (yes / no)"
+        )
+    out.append("")
+
+    shared = shared_addresses(report.rules)
+    out += [f"## Shared addresses ({len(shared)})", ""]
+    out.append(
+        "Each address below is shared by several address-book objects, named after different "
+        "applications, and puts the rules listed in verify. One question per address goes to "
+        "the firewall team, not one per rule to the application owners."
+    )
+    out.append("")
+    for item in shared:
+        cited = "".join(f"[{e}]" for e in item.evidence)
+        out.append(
+            f"- {item.address}, objects {', '.join(item.objects)}, rules "
+            f"{', '.join(item.rules)} {cited}. {SHARED_QUESTION}"
         )
     out.append("")
 
