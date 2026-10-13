@@ -19,18 +19,23 @@ Hierarchical specifics:
   configuration groups are missing from the model).
 - Terminal captures: prompt, banner and elision lines are ignored. Output of
   `show X Y` in configuration mode, or of `show configuration X Y`, is
-  relative to `X Y`; an `[edit X]` banner adds `X` in front.
+  relative to `X Y`; an `[edit X]` banner adds `X` in front. A noise line
+  ends any statement left open (an echoed command with no prompt).
+- A capture may hold both outputs, `show configuration` and `| display set`
+  (seen on real public configurations): a `set` or `deactivate` line outside
+  any block is read as a set statement, not glued to the next statement.
 """
 
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
-from palimp.formats.junos_set import _Builder
+from palimp.formats.junos_set import _Builder, tokenize
 from palimp.formats.terminal import edit_path, is_terminal_noise, shown_path
 from palimp.models import Config
 
 PREFIXES = ("inactive:", "protect:", "replace:")
+SET_LINE = re.compile(r"^(set|deactivate)\s")
 WORD = re.compile(r'"((?:[^"\\]|\\.)*)"|([{};\[\]])|(/\*)|(#)|([^\s{};\[\]"]+)')
 
 
@@ -102,7 +107,10 @@ def statements(text: str) -> Iterator[Statement]:
             line = line[end + 2 :].strip()
         if not line:
             continue
-        if not w.words and is_terminal_noise(line):
+        if is_terminal_noise(line):
+            if w.words:
+                yield Statement("unknown", w.path() + w.words, w.start, " ".join(w.words))
+                w.words = []
             yield Statement("noise", [], number, line)
             if not w.stack:
                 banner = edit_path(line)
@@ -113,6 +121,13 @@ def statements(text: str) -> Iterator[Statement]:
                 if shown is not None:
                     mode, words = shown
                     w.level = (w.edit if mode == "edit" else []) + words
+            continue
+        if not w.stack and SET_LINE.match(line):
+            if w.words:
+                yield Statement("unknown", w.path() + w.words, w.start, " ".join(w.words))
+                w.words = []
+            tokens = tokenize(line)
+            yield Statement(tokens[0], tokens[1:], number)
             continue
         yield from _line(w, line, number)
     if w.words:

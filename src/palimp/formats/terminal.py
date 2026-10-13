@@ -10,11 +10,18 @@ ignored, never as unknown and never as data.
 
 Published samples also show prompts with no space before the command
 (`user@host#show security zones`).
+
+Real public captures (decision 0032 item 3) also show an operational prompt
+with the host name left out (`user> show configuration`) and the CLI's answer
+to a mistyped command (a `^` marker line, `syntax error, expecting
+<command>.`, `'xy' is ambiguous.`).
 """
 
 import re
 
 PROMPT = re.compile(r"^\S+@[\w.:-]+([>#%])(?:\s|$|(?=[a-z]))")
+USER_PROMPT = re.compile(r"^[\w.-]+(>)(?:\s|$)")
+CLI_ERROR = re.compile(r"^(\^$|syntax error\b|error: |unknown command\.|'[^']*' is ambiguous\.)")
 EDIT_BANNER = re.compile(r"^\[edit(?:\s+(.*))?\]$")
 NODE_BANNER = re.compile(r"^\{[\w:-]+\}$")
 ELISION = re.compile(r"^\.{3}$")
@@ -26,6 +33,8 @@ def is_terminal_noise(line: str) -> bool:
     line = line.strip()
     return bool(
         PROMPT.match(line)
+        or USER_PROMPT.match(line)
+        or CLI_ERROR.match(line)
         or EDIT_BANNER.match(line)
         or NODE_BANNER.match(line)
         or ELISION.match(line)
@@ -50,7 +59,7 @@ def shown_path(line: str) -> tuple[str, list[str]] | None:
     Operational mode (`>`): `show configuration security policies` prints it
     from the top; `show system rollback N` prints a whole configuration.
     """
-    match = PROMPT.match(line.strip())
+    match = PROMPT.match(line.strip()) or USER_PROMPT.match(line.strip())
     if not match:
         return None
     words = line.strip()[match.end() :].split("|")[0].split()

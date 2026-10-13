@@ -570,3 +570,56 @@ def test_unlisted_permit_option_still_leaves_the_action_unset() -> None:
     )
     (policy,) = config.policies
     assert policy.action is None and policy.permit_options == []
+
+
+MIXED_CAPTURE = """\
+show conifg
+            ^
+syntax error, expecting <command>.
+user> show configuration | display set | no-more
+show configuration | display set
+set version 21.4R3
+set security policies from-zone trust to-zone dc policy web-in match source-address any
+set security policies from-zone trust to-zone dc policy web-in match destination-address any
+set security policies from-zone trust to-zone dc policy web-in match application junos-https
+set security policies from-zone trust to-zone dc policy web-in then permit
+set security policies from-zone trust to-zone dc policy extra match source-address any
+set security policies from-zone trust to-zone dc policy extra match destination-address any
+set security policies from-zone trust to-zone dc policy extra match application junos-ssh
+set security policies from-zone trust to-zone dc policy extra then permit
+deactivate security policies from-zone trust to-zone dc policy extra
+
+user> show configuration | no-more
+## Last commit: 2026-01-05 10:00:00 UTC by user
+version 21.4R3;
+security {
+    policies {
+        from-zone trust to-zone dc {
+            policy web-in {
+                match {
+                    source-address any;
+                    destination-address any;
+                    application junos-https;
+                }
+                then {
+                    permit;
+                }
+            }
+        }
+    }
+}
+"""
+
+
+def test_capture_with_both_outputs_reads_each_set_line() -> None:
+    # A saved session holding `| display set` then `show configuration`, with a
+    # mistyped command first: set lines outside any block are set statements, and
+    # the CLI error lines are noise, so nothing is glued into one unknown statement.
+    config = parse_config(MIXED_CAPTURE)
+    assert config.stats.format == "hierarchical"
+    assert config.stats.unknown == 2  # the two commands echoed with no prompt
+    policies = {p.name: p for p in config.policies}
+    assert list(policies) == ["web-in", "extra"]
+    assert policies["web-in"].sources == ["any"]
+    assert policies["web-in"].applications == ["junos-https"]
+    assert policies["extra"].action == "permit" and policies["extra"].deactivated
