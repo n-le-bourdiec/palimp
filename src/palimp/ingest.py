@@ -48,6 +48,7 @@ def _match(policy: Policy) -> tuple:
         tuple(sorted(policy.sources)),
         tuple(sorted(policy.destinations)),
         tuple(sorted(policy.applications)),
+        tuple(sorted(policy.dynamic_applications)),
         policy.action,
         policy.deactivated,
     )

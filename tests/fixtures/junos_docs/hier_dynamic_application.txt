@@ -1,0 +1,44 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/configuring-unified-policies.html
+# Page title: Unified Security Policies | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-13
+# Assumptions: DYNAPP-1 (match dynamic-application, hierarchical format)
+# Note: Two 'show security policies' outputs of the page, in page order: p2 (a bracketed list with commas, url-category, then reject profile) and p3 (two dynamic applications, then permit), as published.
+# Note: Text copied verbatim from the page <pre> blocks (line endings normalized, leading and trailing blank lines dropped).
+# ---
+[edit]
+user@host# show security policies
+
+from-zone trust to-zone untrust {
+    policy p2 {
+        match {
+            source-address any;
+            destination-address any;
+            application junos-defaults;
+            dynamic-application [ junos:GMAIL, junos:FACEBOOK-CHAT ];
+            url-category Enhanced_News_and_Media;
+        }
+        then {
+            reject {
+                profile profile1;
+            }
+        }
+    }
+}
+[edit]
+user@host# show security policies
+
+from-zone trust to-zone untrust {
+    policy p3 {
+        match {
+            source-address any;
+            destination-address any;
+            dynamic-application [ junos:CNN junos:BBC ];
+        }
+        then {
+            permit;
+        }
+    }
+}

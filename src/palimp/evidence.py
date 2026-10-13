@@ -14,7 +14,8 @@ T3 structural: address object names, applications the policy name names
 permit (`then permit application-services`), other permit options (`tunnel`,
 `firewall-authentication`, `destination-address`), policies created in the same
 commit, deactivation, a name, description or annotation that marks the policy as
-temporary, the requesters of the tickets for each application named above (palimp.owners),
+temporary, dynamic applications matched (`junos:SLACK` names slack),
+the requesters of the tickets for each application named above (palimp.owners),
 history lineage from the rollbacks (palimp.lineage): removed or deactivated
 policies whose traffic this one took over, and a migration that left this
 policy pointing to a silent old host.
@@ -289,6 +290,15 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
     return items
 
 
+def dynamic_app(name: str) -> str | None:
+    """The application a dynamic application names: `junos:SLACK` gives `slack`. A group
+    (`junos:web:shopping`), `any` and `none` name no application."""
+    parts = name.lower().split(":")
+    if len(parts) != 2 or parts[1] in ("any", "none", ""):
+        return None
+    return parts[1]
+
+
 def _temporary_words(policy: Policy) -> list[str]:
     """Words of the name, description or annotations that mark the policy as temporary
     (typos included)."""
@@ -414,6 +424,16 @@ def collect(
         locator = f"policy {policy.name} name"
         items.append(Item("T3", "config.set", locator, claim, None, "policy_name", name_apps))
     items += shared_address_items(dataset, policy, vocab)
+    if policy.dynamic_applications:
+        claim = (
+            "the policy matches the dynamic application"
+            + ("s " if len(policy.dynamic_applications) > 1 else " ")
+            + ", ".join(policy.dynamic_applications)
+            + " (application identification: the rule names the application it is for)"
+        )
+        locator = f"policy {policy.name} match dynamic-application"
+        apps = [a for n in policy.dynamic_applications if (a := dynamic_app(n))]
+        items.append(Item("T3", "config.set", locator, claim, None, "dynamic_application", apps))
     if policy.application_services:
         claim = (
             "the permit attaches application services: "

@@ -42,6 +42,9 @@ class Policy(BaseModel):
     sources: list[str] = []
     destinations: list[str] = []
     applications: list[str] = []
+    # `match dynamic-application` (unified policies, DYNAPP-1): application
+    # identification signatures such as `junos:GMAIL`.
+    dynamic_applications: list[str] = []
     action: str | None = None
     log_init: bool = False
     log_close: bool = False

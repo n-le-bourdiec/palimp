@@ -185,6 +185,12 @@ class _Builder:
         if len(rest) == 2 and rest[0] == "description":
             policy.description = rest[1]
             return "parsed"
+        if len(rest) >= 3 and rest[:2] == ["match", "dynamic-application"]:
+            # One name, or a bracketed list, with or without commas (DYNAPP-1).
+            for name in re.split(r"[\s,\[\]]+", " ".join(rest[2:])):
+                if name and name not in policy.dynamic_applications:
+                    policy.dynamic_applications.append(name)
+            return "parsed"
         if len(rest) == 3 and rest[0] == "match":
             field = {
                 "source-address": policy.sources,
@@ -203,6 +209,10 @@ class _Builder:
             return "parsed"
         if len(rest) == 2 and rest[0] == "then" and rest[1] in ("permit", "deny", "reject"):
             policy.action = rest[1]
+            return "parsed"
+        if len(rest) >= 3 and rest[:2] == ["then", "reject"]:
+            # A reject with a redirect profile or an SSL proxy (DYNAPP-1 samples).
+            policy.action = "reject"
             return "parsed"
         if len(rest) >= 4 and rest[:3] == ["then", "permit", "application-services"]:
             # A permit with services attached (decision 0034).

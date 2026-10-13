@@ -623,3 +623,26 @@ def test_capture_with_both_outputs_reads_each_set_line() -> None:
     assert policies["web-in"].sources == ["any"]
     assert policies["web-in"].applications == ["junos-https"]
     assert policies["extra"].action == "permit" and policies["extra"].deactivated
+
+
+def test_dynamic_application_in_both_formats() -> None:
+    flat = parse_config(body("display_set_dynamic_application.txt"))
+    tree = parse_config(body("hier_dynamic_application.txt"))
+    assert flat.stats.unknown == 0 and tree.stats.unknown == 0
+    assert keys(flat) == [
+        "trust/untrust/policy-1",
+        "trust/untrust/p2",
+        "trust/untrust/p3",
+    ]
+    one, two, three = flat.policies
+    assert one.dynamic_applications == ["junos:FACEBOOK-ACCESS"]
+    assert one.action == "reject"  # `then reject profile profile1`
+    # A bracketed list with commas, and one value per line, give the same list.
+    assert two.dynamic_applications == ["junos:GMAIL", "junos:FACEBOOK-CHAT"]
+    assert two.applications == ["junos-defaults"] and two.action == "reject"
+    assert three.dynamic_applications == ["junos:CNN", "junos:BBC"]
+    assert three.action == "permit" and three.applications == []
+    assert keys(tree) == ["trust/untrust/p2", "trust/untrust/p3"]
+    for flat_policy, tree_policy in zip(flat.policies[1:], tree.policies, strict=True):
+        assert tree_policy.dynamic_applications == flat_policy.dynamic_applications
+        assert tree_policy.action == flat_policy.action

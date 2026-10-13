@@ -125,3 +125,22 @@ def test_policy_name_alone_stays_low() -> None:
     found = collect(dataset(policy("to-kelvo", "any", "any")), PolicyKey.parse("a/b/to-kelvo"))
     assert found.assessment.intent_apps == ["kelvo"]
     assert found.assessment.confidence_rule == "C-T3-SINGLE"
+
+
+def test_dynamic_application_names_the_application() -> None:
+    head = "set security policies from-zone a to-zone b policy"
+    rules = (
+        f"{head} chat match source-address any\n"
+        f"{head} chat match destination-address any\n"
+        f"{head} chat match application junos-defaults\n"
+        f"{head} chat match dynamic-application [junos:QUIBBLE, junos:web:shopping]\n"
+        f"{head} chat then permit\n"
+    )
+    found = collect(dataset(rules), PolicyKey.parse("a/b/chat"))
+    item = next(e for e in found.evidence if e.kind == "dynamic_application")
+    assert item.tier == "T3" and item.apps == ["quibble"]  # a group names no application
+    assert "junos:QUIBBLE, junos:web:shopping" in item.claim
+    assert found.assessment.intent_apps == ["quibble"]
+    assert found.assessment.confidence_rule == "C-T3-SINGLE"  # one source only
+    services = next(e for e in found.evidence if e.kind == "services")
+    assert "default ports of the dynamic applications" in services.claim

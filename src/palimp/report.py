@@ -214,6 +214,8 @@ def allows(finding: Finding, dataset: Dataset) -> Cited:
     action = (policy.action or "").lower()
     verb = {"permit": "Allows", "deny": "Blocks", "reject": "Rejects"}.get(action, "Matches")
     services = "; ".join(_service(a, dataset) for a in policy.applications) or "no application"
+    if policy.dynamic_applications:
+        services += ", dynamic application " + ", ".join(policy.dynamic_applications)
     text = (
         f"{verb} {_side(policy.sources, dataset)}, in {policy.zones_text('from')}, "
         f"to reach {_side(policy.destinations, dataset)}, in {policy.zones_text('to')}, "
@@ -221,7 +223,8 @@ def allows(finding: Finding, dataset: Dataset) -> Cited:
     )
     if policy.deactivated:
         text += " The rule is deactivated, so it matches nothing today."
-    cited = [e.id for e in finding.evidence if e.kind in ("address_objects", "services")]
+    shown = ("address_objects", "services", "dynamic_application")
+    cited = [e.id for e in finding.evidence if e.kind in shown]
     cited += [e.id for e in finding.evidence if e.kind == "deactivated"]
     return Cited(text=text, evidence=cited)
 

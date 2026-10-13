@@ -1,0 +1,30 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/configuring-unified-policies.html
+# Page title: Unified Security Policies | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-13
+# Assumptions: DYNAPP-1 (match dynamic-application, set format)
+# Note: Three CLI Quick Configuration blocks of the page, in page order: policy-1 (one dynamic application, then reject profile), p2 (a bracketed list with commas, and url-category) and p3 (two dynamic-application lines), as published.
+# Note: Text copied verbatim from the page <pre> blocks (line endings normalized, leading and trailing blank lines dropped, a trailing space kept).
+# ---
+set security policies from-zone trust to-zone untrust policy policy-1 match source-address any
+set security policies from-zone trust to-zone untrust policy policy-1 match destination-address any
+set security policies from-zone trust to-zone untrust policy policy-1 match application any
+set security policies from-zone trust to-zone untrust policy policy-1 match dynamic-application junos:FACEBOOK-ACCESS
+set security policies from-zone trust to-zone untrust policy policy-1 then reject profile profile1
+set security zones security-zone trust
+set security zones security-zone untrust
+set security policies from-zone trust to-zone untrust policy p2 match source-address any
+set security policies from-zone trust to-zone untrust policy p2 match destination-address any
+set security policies from-zone trust to-zone untrust policy p2 match application junos-defaults
+set security policies from-zone trust to-zone untrust policy p2 match dynamic-application [junos:GMAIL, junos:FACEBOOK-CHAT]
+set security policies from-zone trust to-zone untrust policy p2 match url-category Enhanced_News_and_Media
+set security policies from-zone trust to-zone untrust policy p2 then reject profile profile1
+set security zones security-zone trust
+set security zones security-zone untrust
+set security policies from-zone trust to-zone untrust policy p3 match source-address any
+set security policies from-zone trust to-zone untrust policy p3 match destination-address any
+set security policies from-zone trust to-zone untrust policy p3 match dynamic-application junos:CNN
+set security policies from-zone trust to-zone untrust policy p3 match dynamic-application junos:BBC
+set security policies from-zone trust to-zone untrust policy p3 then permit

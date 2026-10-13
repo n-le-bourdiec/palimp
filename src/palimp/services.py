@@ -107,6 +107,8 @@ def describe(name: str, applications: dict[str, Application], depth: int = 0) ->
     if name in PREDEFINED:
         service, port = PREDEFINED[name]
         return [f"{name}: {service} ({port}, Junos predefined application)"]
+    if name == "junos-defaults":
+        return [f"{name}: the default ports of the dynamic applications matched (DYNAPP-1)"]
     app = applications.get(name)
     if app is None:
         if name.startswith("junos-"):
