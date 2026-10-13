@@ -29,7 +29,7 @@ from palimp import __version__
 from palimp.addresses import is_public
 from palimp.assess import NOT_LIVE_KINDS
 from palimp.counters import clears
-from palimp.evidence import collect_all
+from palimp.evidence import collect_all, shown
 from palimp.lineage import networks
 from palimp.models import Dataset, Evidence, Finding, Policy
 from palimp.services import describe
@@ -189,7 +189,7 @@ def _service(name: str, dataset: Dataset) -> str:
         texts.append(text)
     if name == "any":
         return "any application"
-    return "; ".join(dict.fromkeys(texts))
+    return shown(list(dict.fromkeys(texts)), "; ")
 
 
 def _side(names: list[str], dataset: Dataset) -> str:
@@ -213,9 +213,10 @@ def allows(finding: Finding, dataset: Dataset) -> Cited:
     policy = finding.policy
     action = (policy.action or "").lower()
     verb = {"permit": "Allows", "deny": "Blocks", "reject": "Rejects"}.get(action, "Matches")
-    services = "; ".join(_service(a, dataset) for a in policy.applications) or "no application"
+    services = shown([_service(a, dataset) for a in policy.applications], "; ")
+    services = services or "no application"
     if policy.dynamic_applications:
-        services += ", dynamic application " + ", ".join(policy.dynamic_applications)
+        services += ", dynamic application " + shown(policy.dynamic_applications)
     text = (
         f"{verb} {_side(policy.sources, dataset)}, in {policy.zones_text('from')}, "
         f"to reach {_side(policy.destinations, dataset)}, in {policy.zones_text('to')}, "
@@ -223,8 +224,8 @@ def allows(finding: Finding, dataset: Dataset) -> Cited:
     )
     if policy.deactivated:
         text += " The rule is deactivated, so it matches nothing today."
-    shown = ("address_objects", "services", "dynamic_application")
-    cited = [e.id for e in finding.evidence if e.kind in shown]
+    kinds = ("address_objects", "services", "dynamic_application")
+    cited = [e.id for e in finding.evidence if e.kind in kinds]
     cited += [e.id for e in finding.evidence if e.kind == "deactivated"]
     return Cited(text=text, evidence=cited)
 

@@ -25,8 +25,8 @@ set security address-book global address kelvo-01 10.1.0.7/32
 set security address-book global address sql-node-1 10.1.0.8/32
 set security address-book global address sql-node-2 10.1.0.9/32
 set security address-book global address vpn-gw-01 10.1.0.10/32
-set security applications application kelvo-tcp protocol tcp
-set security applications application kelvo-tcp destination-port 7400
+set applications application kelvo-tcp protocol tcp
+set applications application kelvo-tcp destination-port 7400
 """
 
 
@@ -144,3 +144,22 @@ def test_dynamic_application_names_the_application() -> None:
     assert found.assessment.confidence_rule == "C-T3-SINGLE"  # one source only
     services = next(e for e in found.evidence if e.kind == "services")
     assert "default ports of the dynamic applications" in services.claim
+
+
+def test_long_lists_show_five_and_a_count() -> None:
+    members = "".join(
+        f"set security address-book global address-set zorvex-farm address zorvex-db-0{i}\n"
+        for i in range(1, 8)
+    )
+    apps = "".join(
+        f"set applications application-set wide application svc-{i}\n"
+        f"set applications application svc-{i} protocol tcp\n"
+        f"set applications application svc-{i} destination-port {7000 + i}\n"
+        for i in range(1, 9)
+    )
+    rules = members + apps + policy("p1", "zorvex-app-01", "zorvex-farm", "wide")
+    found = collect(dataset(rules), PolicyKey.parse("a/b/p1"))
+    objects = next(e for e in found.evidence if e.kind == "address_objects")
+    assert "zorvex-db-05, and 2 more}" in objects.claim
+    services = next(e for e in found.evidence if e.kind == "services")
+    assert services.claim.count("svc-") == 5 and services.claim.endswith("; and 3 more")

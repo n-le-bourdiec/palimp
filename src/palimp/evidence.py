@@ -51,12 +51,18 @@ from palimp.services import describe, service_names
 TICKET_REF = re.compile(r"\b(?:CHG|INC|RITM|REQ|CR|SR|TASK)[-_]?\d{4,}\b", re.IGNORECASE)
 
 
+def shown(values: list[str], sep: str = ", ") -> str:
+    """VALUES joined, at most LIST_SHOWN of them, then "and N more"."""
+    more = len(values) - LIST_SHOWN
+    return sep.join(values[:LIST_SHOWN]) + (f"{sep}and {more} more" if more > 0 else "")
+
+
 def _resolve(dataset: Dataset, name: str) -> str:
     obj = dataset.config.addresses.get(name)
     if obj is None:
         return name
     if obj.kind == "address_set":
-        return f"{name} = {{{', '.join(obj.members)}}}"
+        return f"{name} = {{{shown(obj.members)}}}"
     return f"{name} = {obj.value}"
 
 
@@ -404,7 +410,7 @@ def collect(
 
     named = [n for n in policy.sources + policy.destinations if n != "any"]
     if named:
-        claim = "; ".join(_resolve(dataset, n) for n in named)
+        claim = shown([_resolve(dataset, n) for n in named], "; ")
         apps = [a for n in named for a in vocab.in_object(n)]
         apps = list(dict.fromkeys(apps))
         sides = {}
@@ -414,7 +420,7 @@ def collect(
                 apps=list(dict.fromkeys(a for n in names for a in vocab.in_object(n))),
                 roles=list(dict.fromkeys(r for n in names for r in roles(n))),
             )
-        locator = "address objects " + ", ".join(named)
+        locator = "address objects " + shown(named)
         items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps, sides))
     if name_apps := vocab.in_object(policy.name):
         claim = (
@@ -521,7 +527,7 @@ def collect(
             for name in policy.applications
             for line in describe(name, dataset.config.applications)
         ]
-        locator = "applications " + ", ".join(policy.applications)
+        locator = "applications " + shown(policy.applications)
         # A custom application named after a known application names it too.
         custom = [n for n in policy.applications if n != "any" and not n.startswith("junos-")]
         apps = list(dict.fromkeys(a for n in custom for a in vocab.in_object(n)))
@@ -533,7 +539,7 @@ def collect(
                 "T4",
                 "config.set",
                 locator,
-                "; ".join(services),
+                shown(services, "; "),
                 None,
                 "services",
                 apps,
