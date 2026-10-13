@@ -114,3 +114,58 @@ Reading (seeds 0 to 19 only, the tuning set):
 Medium dev seeds 20 to 99 with the same commit: 12553 rules, 92.0% vs best,
 87.1% vs expected, 0 dangerous errors, HIGH 98.2% intent right, unchanged
 from session 21.
+
+## Hard tuning, session 24 (2026-10-13, dev seeds, not a held-out run)
+
+Decision 0039, tuned on Hard seeds 0 to 19 only, checked on 20 to 49.
+Dangerous errors use decision 0038 (live or still needed); the old count
+(live only) is next to it.
+
+- palimp commit: `93df3f6` (session 24), baseline `a9e0ef0`
+- Simulator: 0.3.0, level Hard
+- Command: `uv run python eval/verdicts.py --level hard --seeds 0-19` (and `20-49`)
+
+| Metric | Hard 0-19 before | Hard 0-19 after | Hard 20-49 before | Hard 20-49 after |
+|---|---|---|---|---|
+| Rules | 8260 | 8260 | 12490 | 12490 |
+| Verdict vs best achievable | 98.1% | 97.3% | 98.2% | 97.4% |
+| Dangerous errors (decision 0038) | 0 | 0 | 0 | 0 |
+| Dangerous errors (old, live only) | 0 | 0 | 0 | 0 |
+| Overconfidence | 1.8% (146) | 1.6% (136) | 1.4% (177) | 1.3% (163) |
+| HIGH: intent application right | 56.9% (923 HIGH) | 94.3% (942 HIGH) | 56.6% (1218 HIGH) | 95.5% (1257 HIGH) |
+
+Per trap, verdict vs best (overconfident share), before -> after:
+
+| Trap | Hard 0-19 | Hard 20-49 |
+|---|---|---|
+| (none) | 99.4% (0.0%) -> 97.6% (0.0%) (1866) | 98.6% (0.0%) -> 97.5% (0.0%) (2579) |
+| TRAP-BATCH-COMMIT | 100.0% (1.1%) -> 99.3% (0.0%) (280) | 99.8% (0.0%) -> 98.5% (0.0%) (472) |
+| TRAP-DEACTIVATED | 100.0% (0.0%) -> 100.0% (0.0%) (1368) | 100.0% (0.0%) -> 100.0% (0.0%) (2201) |
+| TRAP-EMERGENCY-LOADBEARING | 100.0% (0.0%) -> 100.0% (0.0%) (36) | 100.0% (0.0%) -> 100.0% (0.0%) (81) |
+| TRAP-HISTORY-HORIZON | 97.9% (1.8%) -> 97.4% (1.8%) (5650) | 98.3% (1.4%) -> 97.5% (1.4%) (8709) |
+| TRAP-IP-REUSE | 0.0% (6.9%) -> 100.0% (0.0%) (72) | 0.0% (7.7%) -> 100.0% (0.0%) (65) |
+| TRAP-LIVE-NOLOG | 100.0% (0.0%) -> 100.0% (0.0%) (36) | 100.0% (0.0%) -> 100.0% (0.0%) (44) |
+| TRAP-MISLEADING-COMMENT | 100.0% (0.0%) -> 88.6% (0.0%) (35) | 97.5% (1.2%) -> 96.3% (0.0%) (81) |
+| TRAP-RARE-JOB | 100.0% (0.0%) -> 100.0% (0.0%) (50) | 100.0% (0.0%) -> 100.0% (0.0%) (61) |
+| TRAP-RENAME-CHAIN | 96.8% (0.0%) -> 95.7% (0.0%) (93) | 98.8% (0.0%) -> 97.7% (0.0%) (172) |
+| TRAP-SCANNER-HITS | 0.0% (28.6%) -> 45.2% (7.1%) (42) | 0.0% (26.7%) -> 36.7% (8.3%) (60) |
+| TRAP-STALE-NAME | 100.0% (80.3%) -> 61.8% (84.7%) (157) | 100.0% (90.6%) -> 52.6% (92.4%) (171) |
+
+Reading:
+
+- HIGH confidence names the right application 94 to 96% of the time
+  (target 90%), from 57%: regional instances are read exactly, and a bare
+  name with instances is capped at MEDIUM with its candidates.
+- TRAP-IP-REUSE is judged `verify` everywhere. The cost: every policy on a
+  shared destination address gets `verify`, including the current
+  application's side and renamed applications (TRAP-STALE-NAME drops to
+  53-62% verdict = best), which is why verdict = best falls about 1 point.
+  No artifact tells the retired side from the current one reliably.
+- TRAP-SCANNER-HITS: logged probe traffic is recognized (all such rules
+  move to `verify`); scanner rules with no logging show only hit counts and
+  stay `keep`.
+- TRAP-STALE-NAME stays overconfident: most renamed applications leave no
+  trace (no object or ticket links the old name to the new one).
+- Dangerous errors: 0 on both sets, both definitions. Medium dev seeds 20 to
+  99 with the same commit: unchanged (12553 rules, 92.0% vs best, 0
+  dangerous errors, HIGH 98.2% intent right).
