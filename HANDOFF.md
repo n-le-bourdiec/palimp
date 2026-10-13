@@ -1,59 +1,69 @@
 # Handoff
 
-## Last session: 24 (2026-10-13), analyzer: decision 0038, anonymize host bits, Hard quality (decision 0039)
+## Last session: 25 (2026-10-13), simulator: spec policy count, observability of unobservable traps (decision 0040), faster Hard distribution test
+
+### Note to analyzer sessions (decision 0017): ground truth schema change
+
+- Hard rules (only Hard) now carry `expected.best_achievable_confidence`
+  (`LOW`, `MEDIUM`, `HIGH`), optional in the schema, `schema_version` still
+  1. It is the highest confidence a perfect analyzer can justify from the
+  artifacts alone: misleading evidence of a trap that no artifact reveals
+  counts as sound. It equals `max_justified_confidence` on every other rule
+  and is never below it. `max_justified_confidence` keeps its meaning.
+- A TRAP-SCANNER-HITS rule that does not log, with no visible end of its
+  application (no exported decommission ticket, no decommission or
+  migration ticket or retained commit), now has `best_achievable_verdict`
+  `keep` (was `verify`): 36 rules on Hard 0-49.
+- Easy and Medium documents are byte-identical (no field). No simulator
+  version bump (the version string is in every document). Regenerate any
+  cached Hard scenario.
+- `eval/verdicts.py` still scores overconfidence against
+  `max_justified_confidence`. Reporting it against the new field (when
+  present) is for an analyzer session.
 
 ### Done
 
-- Part A: session 23 metrics finalized (110 calls, 6.15 USD). Decision
-  0038: a dangerous error is `removal_candidate` on a rule that is live
-  **or** still needed; `eval/verdicts.py` prints both counts. Baseline with
-  the new definition: Hard 0-19, Hard 20-49 and Medium 20-99 all 0 (old
-  and new); the rules where the definitions differ are the TRAP-IP-REUSE
-  rules (72 on 0-19, 65 on 20-49), all `keep` at baseline, none
-  `removal_candidate`. Held-out run 1 noted as scored with the old
-  definition. Anonymize keeps the host bits of `host/prefix` addresses
-  (distinct hosts stay distinct; test on the documentation fixture).
-- Part B (decision 0039), tuned on Hard 0-19, checked on 20-49, Medium
-  20-99 checked after each item (no change on Medium):
-  1. Regional instances (`payroll-pl`, `hr-de`) read exactly; a bare name
-     with instances is ambiguous, candidates listed, MEDIUM at most. HIGH
-     intent right 57% -> 94.3% (0-19), 95.5% (20-49).
-  2. Renamed policies: history joined across names (creation comment,
-     siblings, old-name logs). No metric change (most renames predate the
-     retained history).
-  3. Reused destination addresses: `shared_address` item, conflict,
-     `V-SHARED-ADDRESS` (verify), MEDIUM at most. TRAP-IP-REUSE 0% -> 100%.
-  4. Probe traffic (scanner, monitoring) from close-line packet counts:
-     `V-PROBE-ONLY` (verify). TRAP-SCANNER-HITS 0% -> 45% / 37%.
-  5. Stale names: `shared_source` item lowers confidence only. Small effect.
-  Verdict = best 98.1% -> 97.3% (0-19), 98.2% -> 97.4% (20-49): the cost of
-  item 3 (see open questions). Zero dangerous errors throughout.
+- Part A: session 24 metrics finalized (206 calls, 13.42 USD).
+- Spec 7.1: Hard policy count 415 (measured, decision 0036).
+- Observability audit, Hard seeds 0-49 (text checks on the artifacts):
+  - TRAP-STALE-NAME, 328 rules: 246 have some mention of the new
+    application, 82 none; 60 have no trace at all (neither the new
+    application nor the replacement: repoint in the rollbacks, decommission
+    ticket of the old application). Counting only traces linked to the
+    rule (its address, objects or history): 226 traced, 102 unobservable.
+  - TRAP-SCANNER-HITS, 102 rules: 45 log (observable); 57 hit counts only,
+    21 of them with a visible end of the application, 36 with nothing (25
+    scanner, 11 monitoring).
+- Decision 0040: `best_achievable_confidence` (above the ceiling on 97 of
+  the 102 stale rules: 75 LOW to MEDIUM, 22 LOW to HIGH; on 5 of the 36
+  scanner rules, MEDIUM to HIGH) and best `keep` on the 36 scanner rules.
+  Supersedes part of decision 0035. Spec 6 and 7.4 updated.
+- Hard distribution test: reads stored counts
+  (`simulator/tests/data/hard_trap_counts.json`) and now runs in CI too (it
+  was marked full, so CI never ran it); the 5 fixture seeds are regenerated
+  against the stored counts in every run, the other 45 seeds one test each
+  under `full` (78 s for the 51 tests with `--runslow`, was 350 s for one).
 
 ### Next
 
-- Project lead decisions on the open questions below (reuse cost, not-live
-  reading with instances).
+- Analyzer: report overconfidence against `best_achievable_confidence`
+  (decision 0040), project lead approval on the open questions below.
 - Held-out workflow: add the Hard table (decision 0036) before the second
   held-out run.
 - Decision 0032 item 3: real public configs, local only.
-- Simulator session: update the spec Hard policy count to 415 (decision
-  0036).
+- Simulator: add the observability links as evidence items (decision 0040
+  alternatives), if the project lead wants evidence recall to see them.
 
 ### Open questions
 
-- Reused addresses (decision 0039 item 4): both sides of a shared address
-  get `verify` because nothing tells the retired application from the
-  current one (or from a renamed one). On 0-19 that catches all 72
-  TRAP-IP-REUSE rules and turns 155 rules best judged `keep` into
-  `verify` (TRAP-STALE-NAME verdict = best 100% -> 62%). Keep this trade,
-  or restrict (for example to the side with the older latest ticket:
-  34 caught, 70 flagged)?
-- Not-live signals with regional instances (decision 0039 item 2): reading
-  instances in decommission links would move 3 rules of Hard 0-19 from
-  `verify` to `removal_candidate` (application right, best `verify`, not
-  dangerous). Not done without approval. Approve?
-- Scanner rules without logging show only hit counts: no artifact tells
-  probe hits from business hits. Accept as a known limit?
+- Decision 0040 counts a link only when it is tied to the rule (102
+  unobservable stale rules); counting any mention of the new application
+  would give 60. Confirm the strict reading?
+- Carried over from session 24 (analyzer): reused addresses trade
+  (decision 0039 item 4), not-live signals with regional instances
+  (decision 0039 item 2), scanner rules without logging (now answered on
+  the ground truth side by decision 0040: best `keep` when nothing shows
+  the end of the application).
 - Carried over: decision 0036 point 3 (drawn instances); anonymize prompt
   login and host; `--strip-text` in the issue template; decision 0020
   example without a migration (needs approval); 90% vs best trade; HIGH
@@ -113,9 +123,11 @@
   applications from general knowledge (VSRX-12); VSRX-2b; `svc-ansible`; S2
   and S5; session 2 Part C checks.
 - Test suite runs in parallel (`-n auto`, pytest-xdist): 8 min with
-  `--runslow` on this machine (19 min serial). Wall time is bounded by one
-  simulator test, `test_hard_trap_distribution_over_seeds_0_to_49`
-  (350 s alone); see the simulator backlog.
+  `--runslow` on this machine before session 25 (19 min serial). The Hard
+  distribution test no longer bounds it (session 25).
+- Stored Hard trap counts (`simulator/tests/data/hard_trap_counts.json`)
+  must be regenerated when a simulator change moves Hard trap tags; the
+  fixture seed tests catch a mismatch on 5 seeds in every run.
 
 ## Plan before release (decision 0032)
 
@@ -137,10 +149,6 @@ on held-out or on the real public configs.
 
 For simulator sessions. Analyzer sessions add items here, they never read
 simulator code.
-
-- Test speed (session 23): `test_hard_trap_distribution_over_seeds_0_to_49`
-  takes 350 s alone and bounds the parallel suite (8 min); splitting it
-  per seed (or caching scenarios) would let xdist spread it.
 
 - Service desk tickets: a service desk files tickets on behalf of
   application owners (requester = service desk agent, owner named elsewhere
@@ -189,9 +197,10 @@ in session 21). Session 21 has transcript
 has transcript `3dbc7b1c-2c24-4e93-9d78-317745861978` (finalized in session
 23). Session 23 has transcript `9941fbb6-f557-4a77-95a2-c41b0b29505e` (finalized in
 session 24). Session 24 has transcript
-`6ede7008-8cee-4e93-a9f2-2a82c52771a8`. Finalize it at the start of session
-25 with:
+`6ede7008-8cee-4e93-a9f2-2a82c52771a8` (finalized in session 25). Session 25
+has transcript `1fc8d6dd-973f-4e31-90a8-b193e45219b2`. Finalize it at the
+start of session 26 with:
 
-    uv run python metrics/session_tokens.py 6ede7008-8cee-4e93-a9f2-2a82c52771a8
+    uv run python metrics/session_tokens.py 1fc8d6dd-973f-4e31-90a8-b193e45219b2
 
 Cost is API-equivalent (decision 0006), not a billed amount.
