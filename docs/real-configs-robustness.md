@@ -83,3 +83,38 @@ an application convention, so this did not show. Not changed in session 26:
 extending the role word list changes intent output and needs a dev set
 check and the project lead's approval. A local file with 20 sampled rules
 is ready for review.
+
+## Session 27: intent quality after decision 0042
+
+The project lead reviewed the 20 sampled rules: robustness approved, intent
+quality not (generic words and person first names read as applications,
+policy names ignored, `dynamic-application` not read). Decision 0042 adds
+name filters (short, generic, server role and zone name words), server
+roles, the corroboration rule, the policy name as T3 evidence and
+`dynamic-application` as evidence naming the application.
+
+Same 32 configurations, configuration alone, before (session 26 code) and
+after (session 27 code):
+
+| measure | before | after |
+|---|---|---|
+| MEDIUM rules | 157 | 17 |
+| MEDIUM rules naming a generic word or a person-like token (session 27 classifier, below) | 102 | 0 |
+| rules with a named intent (any level) | 157 | 91 |
+| rules naming a person-like token (all LOW after) | 9 at MEDIUM | 15 at LOW |
+| rules described by server roles, no application named | 0 | 19 |
+| rules with `dynamic-application` | 21 (not read) | 21, 20 with a named intent |
+| verdicts | 290 verify, 2 removal candidates | identical, rule by rule |
+
+The session 26 count (76 of 157) used a hand classification; the session 27
+classifier is a local script with a wider word list (zone names of the
+configuration, words shorter than 3 letters, a generic word list and a list
+of common first names), so it counts 102 on the same output. Both
+classifiers run on the before and after output give the same direction.
+
+Remaining doubts, visible in the new local review file (30 rules, stratified,
+at most 3 any/any rules): a site prefix on both sides of a rule counts as
+two sources (MEDIUM); a policy name is independent only when it does not
+repeat an object name of the rule; person names on both sides of a rule
+would be MEDIUM (not observed). Term-based custom applications (`term`
+statements) show as "protocol unknown": a parser gap, not changed.
