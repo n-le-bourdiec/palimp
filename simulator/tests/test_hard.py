@@ -52,6 +52,11 @@ SEEDS = [0, 2, 3, 4, 11]
 # SHA-256 of manifest.json (which holds the hash of every other file), session
 # 22. Easy and Medium hashes did not change when Hard was added (decision 0035).
 GOLDEN_HARD = {0: "22d16e525fe814feef855f3e2ee5e4ca5afd03701c7e47e82db72e2ec4847583"}
+# Trap counts of Hard seeds 0 to 49 (session 25), so that the distribution
+# check needs no generation. The fixture seeds are regenerated against them in
+# every run, the other seeds one test each under "full" (spread by xdist).
+TRAP_COUNTS = Path(__file__).parent / "data" / "hard_trap_counts.json"
+
 SCOPE = r"(from-zone (\S+) to-zone (\S+)|global) policy (\S+)"
 SET_POLICY = re.compile(rf"^set security policies {SCOPE} (.*)$")
 DEACTIVATE = re.compile(rf"^deactivate security policies {SCOPE}$")
@@ -225,10 +230,25 @@ def test_fixture_seeds_cover_every_trap_and_its_absence() -> None:
         assert any(not c[trap] for c in counts), trap
 
 
+@cache
+def stored_counts() -> dict[int, dict[str, int]]:
+    return {int(seed): c for seed, c in json.loads(TRAP_COUNTS.read_text("utf-8")).items()}
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_stored_trap_counts_match_fixture_seeds(seed: int) -> None:
+    assert trap_counts(seed) == stored_counts()[seed]
+
+
 @pytest.mark.full
+@pytest.mark.parametrize("seed", [s for s in range(50) if s not in SEEDS])
+def test_stored_trap_counts_match_other_seeds(seed: int) -> None:
+    assert trap_counts(seed) == stored_counts()[seed]
+
+
 def test_hard_trap_distribution_over_seeds_0_to_49() -> None:
     """Every drawn trap is absent from some scenarios, with a count that varies."""
-    counts = [trap_counts(seed) for seed in range(50)]
+    counts = [stored_counts()[seed] for seed in range(50)]
     for trap in DRAWN_TRAPS:
         values = [c[trap] for c in counts]
         share = sum(1 for v in values if v) / len(values)
