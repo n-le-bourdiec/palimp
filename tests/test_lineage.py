@@ -342,3 +342,16 @@ def test_unanswered_sessions_from_one_policy_are_not_probes(tmp_path: Path) -> N
     assert dataset.log_window.probe_sources == []
     finding = collect(dataset, PolicyKey.parse("trust/dc/late"))
     assert finding.assessment.verdict_rule == "V-TRAFFIC"
+
+
+def test_shared_source_address_lowers_confidence_not_the_verdict(tmp_path: Path) -> None:
+    # crm-web-01 (source) shares 10.20.30.5 with hr-web-01: the name may be stale.
+    artifacts = write(tmp_path, [SHARED + rule("late", "crm-web-01", "lms-web-01")], [""])
+    finding = collect(ingest(artifacts), PolicyKey.parse("trust/dc/late"))
+    item = kinds(finding)["shared_source"]
+    assert item.apps == ["hr"] and "the name may be stale" in item.claim
+    assert "shared_address" not in kinds(finding)
+    assessment = finding.assessment
+    assert assessment.verdict == "keep"
+    assert assessment.confidence != "HIGH"
+    assert any(item.id in c.evidence for c in assessment.conflicts)

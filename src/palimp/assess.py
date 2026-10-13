@@ -238,14 +238,14 @@ def _capped(
     instances (palimp.apps). Its candidates follow it, and confidence is at most MEDIUM."""
     level, rule, reason, cited, apps, conflicts = found
     objects = next((e for e in finding.evidence if e.kind == "address_objects"), None)
-    for shared in [e for e in finding.evidence if e.kind == "shared_address"]:
+    for shared in [e for e in finding.evidence if e.kind in ("shared_address", "shared_source")]:
         ids = [shared.id] + ([objects.id] if objects else [])
         conflicts = [*conflicts, Conflict(evidence=ids, text=f"{shared.id}: {shared.claim}")]
         apps = list(dict.fromkeys(apps + shared.apps))
         cited = sorted(set(cited) | set(ids), key=_order)
         if level == "HIGH":
             level, rule = "MEDIUM", "C-SHARED-ADDRESS"
-            reason += "; but a destination address is also an object of another application"
+            reason += "; but an address of the policy is also an object of another application"
     found = level, rule, reason, cited, apps, conflicts
     ambiguous = next(
         (e for e in finding.evidence if e.kind == "ambiguous_app" and e.apps[0] in apps[:1]),

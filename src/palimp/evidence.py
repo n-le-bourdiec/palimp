@@ -234,6 +234,8 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
     """One T3 item per destination object whose address is also an object named after
     another application (session 24): the address may have been reused, so the policy
     may carry traffic it was not written for. Which side is current is not known.
+    A source object with such an address gives a `shared_source` item: the name may be
+    stale (the application renamed), which lowers confidence but not the verdict.
     A deactivated policy carries no traffic: no item."""
     if policy.deactivated:
         return []
@@ -242,7 +244,9 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
         if obj.kind == "address" and obj.value:
             by_value.setdefault(obj.value, []).append(name)
     items = []
-    for name in _hosts(dataset, policy.destinations):
+    sides = [(n, "shared_address") for n in _hosts(dataset, policy.destinations)]
+    sides += [(n, "shared_source") for n in _hosts(dataset, policy.sources)]
+    for name, kind in sides:
         value = dataset.config.addresses[name].value or ""
         mine = vocab.in_object(name)
         others = [
@@ -257,13 +261,19 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
             continue
         apps = list(dict.fromkeys(a for _, theirs in others for a in theirs))
         named = ", ".join(f"{o} ({', '.join(t)})" for o, t in others)
-        claim = (
-            f"address {value} of {name} ({', '.join(mine)}) is also the address of {named}: "
-            "the address may have been reused by another application, or the application "
-            "renamed, so this policy may carry traffic it was not written for"
-        )
+        claim = f"address {value} of {name} ({', '.join(mine)}) is also the address of {named}: "
+        if kind == "shared_address":
+            claim += (
+                "the address may have been reused by another application, or the application "
+                "renamed, so this policy may carry traffic it was not written for"
+            )
+        else:
+            claim += (
+                "this source may now be the other application, or the application renamed: "
+                "the name may be stale"
+            )
         locator = f"address-book objects {name}, {', '.join(o for o, _ in others)}"
-        items.append(Item("T3", "config.set", locator, claim, None, "shared_address", apps))
+        items.append(Item("T3", "config.set", locator, claim, None, kind, apps))
     return items
 
 
