@@ -156,3 +156,67 @@ def test_vocabulary_learns_abbreviations_and_skips_role_words() -> None:
     assert vocab.in_object("bkp-01") == ["backup"]
     assert vocab.in_object("bi-db-01") == ["bi"]  # too short to abbreviate billing
     assert vocab.in_text("monitoring of all servers") == ["monitoring"]
+
+
+def regional() -> Dataset:
+    config = parse_set(
+        "set security address-book global address payroll-uk-app-01 10.0.0.1/32\n"
+        "set security address-book global address payroll-pl-app-01 10.0.0.2/32\n"
+        "set security address-book global address host_payroll-app-01 10.0.0.3/32\n"
+        "set security address-book global address hr-de-web-01 10.0.0.4/32\n"
+        "set security address-book global address hr-app-01 10.0.0.5/32\n"
+    )
+    tickets = {
+        "CHG1": Ticket(ticket_id="CHG1", summary="Access request PAYRUK", related_ci="payroll-uk"),
+        "CHG2": Ticket(ticket_id="CHG2", summary="HR access", related_ci="hr"),
+        "CHG3": Ticket(ticket_id="CHG3", summary="HRDE access", related_ci="hr-de"),
+        "CHG4": Ticket(ticket_id="CHG4", summary="TMS access", related_ci="tms-pl"),
+    }
+    return Dataset(source="t", config=config, tickets=tickets)
+
+
+def test_vocabulary_reads_regional_instances() -> None:
+    vocab = vocabulary(regional())
+    assert vocab.regions == {"uk", "de", "pl"}
+    assert vocab.in_object("payroll-uk-app-01") == ["payroll-uk"]
+    # An instance no ticket names is still read from the object name.
+    assert vocab.in_object("payroll-pl-app-01") == ["payroll-pl"]
+    assert vocab.in_text("ansible role fw-payroll-pl v3") == ["payroll-pl"]
+    assert vocab.in_object("hr-de-web-01") == ["hr-de"]
+    assert vocab.in_object("hr-app-01") == ["hr"]
+    assert vocab.in_text("") == [] and vocab.in_text("CHG0001234 / 42") == []
+    # A bare name is never expanded to one of its instances.
+    assert vocab.in_object("host_payroll-app-01") == ["payroll"]
+    assert vocab.candidates("payroll") == ["payroll-pl", "payroll-uk"]
+    assert vocab.candidates("hr") == []  # a related CI itself: an exact match
+    assert vocab.candidates("payroll-pl") == []
+    # The reading kept for not-live signals has no instances.
+    legacy = vocabulary(regional(), instances=False)
+    assert legacy.in_object("payroll-pl-app-01") == ["payroll-uk"]
+
+
+def test_ambiguous_instance_caps_confidence_and_lists_candidates() -> None:
+    found = finding(
+        ("T1", "description", None, ["payroll"]),
+        ("T3", "address_objects", None, ["payroll"]),
+        ("T3", "ambiguous_app", None, ["payroll", "payroll-pl", "payroll-uk"]),
+        ("T2", "hit_count", "present", []),
+    )
+    result = assess(found, DATASET)
+    assert result.confidence == "MEDIUM"
+    assert result.confidence_rule == "C-AMBIGUOUS-INSTANCE"
+    assert result.intent_apps == ["payroll", "payroll-pl", "payroll-uk"]
+    assert "E3" in result.confidence_evidence
+
+
+def test_bare_name_is_compatible_with_its_instance() -> None:
+    found = finding(
+        ("T1", "commit_comment", None, ["ci"]),
+        ("T3", "address_objects", None, ["ci-it"]),
+        ("T3", "ambiguous_app", None, ["ci", "ci-it"]),
+        ("T2", "hit_count", "present", []),
+    )
+    result = assess(found, DATASET)
+    assert result.conflicts == []
+    assert result.confidence == "MEDIUM"
+    assert result.intent_apps[0] == "ci-it"

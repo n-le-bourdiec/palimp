@@ -33,6 +33,10 @@ Confidence rules (about the intent), first match wins:
 - C-T3 (MEDIUM): the address objects name an application.
 - C-WEAK (LOW): nothing names an application (T1 without one, T4 only).
 T4 alone can never exceed LOW.
+Then a cap: C-AMBIGUOUS-INSTANCE (MEDIUM at most): the application named
+first is the bare name of regional instances (`payroll` with `payroll-uk` and
+`payroll-pl`, palimp.apps); its candidates are listed after it. A bare name
+and one of its instances are compatible: neither agreement nor conflict.
 """
 
 from palimp.models import Assessment, Conflict, Dataset, Evidence, Finding
@@ -137,10 +141,14 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
     objects = next((e for e in evidence if e.kind == "address_objects" and e.apps), None)
     object_apps = set(objects.apps) if objects else set()
     agree = [e for e in direct if object_apps & set(e.apps)]
+    # A bare name of regional instances (`ci`) is compatible with one of its
+    # instances (`ci-it`): no conflict, but no agreement either.
+    instances = {e.apps[0]: set(e.apps) for e in evidence if e.kind == "ambiguous_app"}
     conflicts = []
     if objects:
         for item in direct:
-            if not object_apps & set(item.apps):
+            compatible = all(object_apps & instances.get(a, set()) for a in item.apps)
+            if not object_apps & set(item.apps) and not compatible:
                 conflicts.append(
                     Conflict(
                         evidence=[item.id, objects.id],
@@ -187,6 +195,26 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
     return "LOW", "C-WEAK", reason, _ids(weak), [], []
 
 
+def _capped(
+    finding: Finding, found: tuple[str, str, str, list[str], list[str], list[Conflict]]
+) -> tuple[str, str, str, list[str], list[str], list[Conflict]]:
+    """C-AMBIGUOUS-INSTANCE: the application named first is the bare name of regional
+    instances (palimp.apps). Its candidates follow it, and confidence is at most MEDIUM."""
+    level, rule, reason, cited, apps, conflicts = found
+    ambiguous = next(
+        (e for e in finding.evidence if e.kind == "ambiguous_app" and e.apps[0] in apps[:1]),
+        None,
+    )
+    if ambiguous is None:
+        return found
+    apps = list(dict.fromkeys(apps + ambiguous.apps[1:]))
+    cited = sorted(set(cited) | {ambiguous.id}, key=_order)
+    if level == "HIGH":
+        level, rule = "MEDIUM", "C-AMBIGUOUS-INSTANCE"
+        reason += f"; but {ambiguous.apps[0]} may stand for several regional instances"
+    return level, rule, reason, cited, apps, conflicts
+
+
 def _order(evidence_id: str) -> int:
     return int(evidence_id.removeprefix("E"))
 
@@ -213,7 +241,7 @@ QUESTIONS = {
 
 def assess(finding: Finding, dataset: Dataset) -> Assessment:
     verdict, v_rule, v_reason, v_evidence = _verdict(finding)
-    level, c_rule, c_reason, c_evidence, apps, conflicts = _confidence(finding)
+    level, c_rule, c_reason, c_evidence, apps, conflicts = _capped(finding, _confidence(finding))
     question = QUESTIONS[v_rule] if verdict != "keep" else None
     # A flow between two applications may belong to either side: every application
     # the objects name is an owner candidate, not only the one the intent names.

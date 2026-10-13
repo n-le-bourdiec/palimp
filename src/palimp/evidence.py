@@ -208,13 +208,16 @@ def collect(
     found: list[Marker] | None = None,
     moves: list[Migration] | None = None,
     cleared: dict[tuple[str, str], Clear] | None = None,
+    legacy: Vocabulary | None = None,
 ) -> Finding:
     policy = dataset.config.policy(key)
     if policy is None:
         raise KeyError(f"policy {key} not found in config.set")
     vocab = vocab or vocabulary(dataset)
-    found = markers(dataset, vocab) if found is None else found
-    moves = migrations(dataset, vocab) if moves is None else moves
+    # Not-live signals keep the reading without regional instances (palimp.apps).
+    legacy = legacy or vocabulary(dataset, instances=False)
+    found = markers(dataset, legacy) if found is None else found
+    moves = migrations(dataset, legacy) if moves is None else moves
     cleared = clears(dataset) if cleared is None else cleared
     history = dataset.history.get(str(key))
     created = history.created_in_commit if history else None
@@ -280,7 +283,7 @@ def collect(
                 )
 
     for artifact, locator, claim, apps in decommission_items(
-        dataset, policy, created, found, vocab
+        dataset, policy, created, found, legacy
     ):
         items.append(Item("T1", artifact, locator, claim, None, "decommission", apps))
 
@@ -349,6 +352,16 @@ def collect(
         )
 
     named_apps = list(dict.fromkeys(a for item in items for a in item.apps))
+    for app in named_apps:
+        if candidates := vocab.candidates(app):
+            claim = (
+                f"{app} is the bare name of regional instances ({', '.join(candidates)}) and is "
+                "not itself a related CI in tickets.csv: it may stand for any of them"
+            )
+            locator = f"tickets.csv related CIs and address object names starting with {app}"
+            items.append(
+                Item("T3", "tickets.csv", locator, claim, None, "ambiguous_app", [app, *candidates])
+            )
     for locator, claim, apps in requester_items(dataset, named_apps):
         items.append(Item("T3", "tickets.csv", locator, claim, None, "app_requesters", apps))
 
@@ -383,7 +396,11 @@ def collect(
 
 def collect_all(dataset: Dataset) -> list[Finding]:
     vocab = vocabulary(dataset)
-    found = markers(dataset, vocab)
-    moves = migrations(dataset, vocab)
+    legacy = vocabulary(dataset, instances=False)
+    found = markers(dataset, legacy)
+    moves = migrations(dataset, legacy)
     cleared = clears(dataset)
-    return [collect(dataset, p.key, vocab, found, moves, cleared) for p in dataset.config.policies]
+    return [
+        collect(dataset, p.key, vocab, found, moves, cleared, legacy)
+        for p in dataset.config.policies
+    ]
