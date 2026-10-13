@@ -167,6 +167,11 @@ def ingest(directory: Path, log_year: int | None = None) -> Dataset:
         )
     for note in config.stats.notes:
         dataset.warnings.append(f"config.set: {note}")
+    for where in config.stats.not_read:
+        dataset.warnings.append(
+            f"config.set: security policies under {where} are not read (logical systems "
+            "and tenant systems are out of scope)"
+        )
 
     text = _read(directory / "commits.txt")
     if text is None:

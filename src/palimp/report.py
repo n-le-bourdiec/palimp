@@ -523,6 +523,19 @@ def _global(dataset: Dataset, findings: list[Finding]) -> list[GlobalEvidence]:
                 f"all {clear.whole_pair} policies from {src} to {dst} show 0 hits while other "
                 "zone pairs show hits: these counters were probably cleared, at an unknown date",
             )
+    stats = dataset.config.stats
+    gaps = []
+    if stats.apply_groups:
+        gaps.append(
+            f"apply-groups is used in {len(stats.apply_groups)} place(s) and not expanded, so "
+            "policies, addresses or applications inherited from configuration groups are missing"
+        )
+    if stats.not_read:
+        gaps.append(f"security policies under {', '.join(stats.not_read)} are not read")
+    if stats.unknown:
+        gaps.append(f"{stats.unknown} of {stats.total} statements were not understood")
+    if gaps:
+        add("config.set", "statements not read", "; ".join(gaps))
     return found
 
 
@@ -619,6 +632,16 @@ def _blind_spots(
                 rules=refs,
             )
         )
+    for g in found:
+        if g.locator == "statements not read":
+            spots.append(
+                BlindSpot(
+                    topic="Configuration not read",
+                    text=f"In config.set, {g.claim}. Rules defined there are not in this "
+                    "report, and rules here may use objects palimp could not see.",
+                    evidence=[g.id],
+                )
+            )
     missing = [g for g in found if g.locator == "missing"]
     for g in missing:
         spots.append(BlindSpot(topic=f"Missing {g.artifact}", text=g.claim + ".", evidence=[g.id]))

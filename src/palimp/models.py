@@ -112,6 +112,9 @@ class ParseStats(BaseModel):
     apply_groups: list[str] = []
     # Constructs read but not applied, each stated once.
     notes: list[str] = []
+    # Logical systems and tenant systems whose security policies are not read
+    # (out of v1 scope), for example "tenants TSYS1".
+    not_read: list[str] = []
 
     def add_unknown(self, line: str) -> None:
         self.unknown += 1

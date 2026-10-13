@@ -267,3 +267,33 @@ def test_medium_report_writes_cleanup_list(tmp_path: Path) -> None:
     look = (tmp_path / "r" / "report.md").read_text(encoding="utf-8").split("## Worth a look")[1]
     shown = [line for line in look.split("\n## ")[0].splitlines() if line.startswith("- R")]
     assert len(shown) == min(LOOK_SHOWN, len(payload["worth_a_look"]))
+
+
+def test_config_alone_states_what_was_not_read(tmp_path: Path) -> None:
+    # Real public configurations come without history, logs or hit counts
+    # (decision 0032 item 3): every rule is asked, none is HIGH or removed, and
+    # configuration palimp does not read is a blind spot of its own.
+    (tmp_path / "config.set").write_text(
+        "set security address-book global address crm-web-01 10.20.30.5/32\n"
+        "set security policies from-zone trust to-zone dc policy crm match source-address any\n"
+        "set security policies from-zone trust to-zone dc policy crm match destination-address "
+        "crm-web-01\n"
+        "set security policies from-zone trust to-zone dc policy crm match application "
+        "junos-https\n"
+        "set security policies from-zone trust to-zone dc policy crm then permit\n"
+        "set security policies apply-groups shared-rules\n"
+        "set tenants t1 security policies from-zone a to-zone b policy p then permit\n"
+        "set security frobnicate x\n"
+    )
+    report = build(ingest(tmp_path))
+    assessment = report.rules[0].finding.assessment
+    assert assessment is not None and assessment.verdict == "verify"
+    assert assessment.confidence != "HIGH"
+    spot = next(s for s in report.blind_spots if s.topic == "Configuration not read")
+    assert "apply-groups" in spot.text and "tenants t1" in spot.text
+    assert "1 of 8 statements were not understood" in spot.text
+    text = markdown(report)
+    assert "Configuration not read" in text
+    assert {f"Missing {a}" for a in ("commits.txt", "hitcount.txt", "logs/rt_flow.log")} <= {
+        s.topic for s in report.blind_spots
+    }

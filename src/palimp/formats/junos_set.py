@@ -291,6 +291,13 @@ class _Builder:
         top = path[0]
         if top in IGNORED_TOP:
             return "ignored"
+        if top in ("logical-systems", "tenants"):
+            # Each holds its own security policies, out of v1 scope: stated, not read.
+            if len(path) >= 4 and path[2:4] == ["security", "policies"]:
+                where = f"{top} {path[1]}"
+                if where not in self.stats.not_read:
+                    self.stats.not_read.append(where)
+            return "ignored"
         if top == "applications" and not deactivate:
             return self.application(path[1:])
         if top == "security" and len(path) == 1 and deactivate:

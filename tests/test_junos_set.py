@@ -73,3 +73,16 @@ def test_application_set_inside_an_application_set() -> None:
     )
     assert config.stats.unknown == 0
     assert config.applications["all-ports"].members == ["web-ports", "junos-ssh"]
+
+
+def test_tenant_and_logical_system_policies_are_stated_not_read() -> None:
+    # Out of v1 scope: their policies are not modeled, and the reader says so.
+    config = parse_set(
+        "set tenants t1 security policies from-zone a to-zone b policy p match application any\n"
+        "set tenants t1 interfaces ge-0/0/1 unit 0\n"
+        "set logical-systems ls2 security policies from-zone a to-zone b policy q then permit\n"
+        "set security policies from-zone a to-zone b policy r then permit\n"
+    )
+    assert config.stats.unknown == 0
+    assert config.stats.not_read == ["tenants t1", "logical-systems ls2"]
+    assert [p.name for p in config.policies] == ["r"]
