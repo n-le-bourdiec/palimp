@@ -169,3 +169,46 @@ Reading:
 - Dangerous errors: 0 on both sets, both definitions. Medium dev seeds 20 to
   99 with the same commit: unchanged (12553 rules, 92.0% vs best, 0
   dangerous errors, HIGH 98.2% intent right).
+
+## Name filters and corroboration, session 27 (2026-10-13, dev seeds, not a held-out run)
+
+Decision 0042 (name filters, server roles, zone name words, corroboration
+rule, policy name and `dynamic-application` as naming evidence). Not tuned
+against the simulator: the word lists come from the project lead's review of
+real configurations. Underconfidence is confidence below
+`best_achievable_confidence` (else `max_justified_confidence`), computed from
+the `--json` rows.
+
+- palimp commit: `19e3746` (session 27), baseline `33d2602`
+- Command: `uv run python eval/verdicts.py --level medium --seeds 20-99` and
+  `--level hard --seeds 20-49`, with `--json` for the per-rule comparison
+
+| Metric | Medium 20-99 before | Medium 20-99 after | Hard 20-49 before | Hard 20-49 after |
+|---|---|---|---|---|
+| Rules | 12553 | 12553 | 12490 | 12490 |
+| Verdict vs best achievable | 92.0% | 92.0% | 97.6% | 97.7% |
+| Dangerous errors (decision 0038) | 0 | 0 | 0 | 0 |
+| Intent application right (first named) | 97.4% | 93.9% | 94.7% | 91.2% |
+| Overconfidence | 0.0% (0) | 0.0% (0) | 0.9% (116) | 0.5% (64) |
+| Underconfidence | 15.3% (1921) | 48.1% (6032) | 12.5% (1557) | 57.1% (7127) |
+| HIGH / MEDIUM / LOW | 3426 / 8641 / 486 | 3307 / 3886 / 5360 | 1257 / 11032 / 201 | 1214 / 4926 / 6350 |
+| HIGH: intent application right | 98.2% | 98.4% | 95.5% | 95.9% |
+
+Reading:
+
+- Intent accuracy drops 3.5 points on both sets, more than the 1 point the
+  session prompt set as the reporting threshold. The cause is the name
+  filters, not the corroboration rule (which changes confidence only):
+  simulated applications with 2-letter names (`bi`, `ci`) or role names
+  (`dns`, `ntp`, `bkp`) are no longer read from object names when no ticket
+  backs them. Kept as decided (correct on real data); session 29 makes
+  simulated names realistic.
+- Underconfidence rises sharply: simulated object names always start with
+  the application name, on one side only, so most rules have a single name
+  source and fall to LOW (C-T3-SINGLE). Expected from the rule.
+- Verdicts (filters only, through shared addresses and not-live markers),
+  every move toward `keep` or `verify`: Hard 18 V-SHARED-ADDRESS rules move
+  to keep (now = best), 5 move to keep (best was verify), 2 V-NOTLIVE
+  removal candidates move to verify (now = best); Medium 2 V-CONTRADICTION
+  rules move to keep (best was verify). No rule moves toward
+  `removal_candidate`.
