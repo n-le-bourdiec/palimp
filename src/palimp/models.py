@@ -274,6 +274,10 @@ class Evidence(BaseModel):
     sides: dict[str, Side] = {}
     # services only: plain names of the well-known services matched ("SMB file sharing").
     services: list[str] = []
+    # shared_address and shared_source only: the address, and the objects sharing it
+    # (the policy's own object first).
+    address: str = ""
+    objects: list[str] = []
 
 
 Verdict = Literal["keep", "verify", "removal_candidate"]

@@ -277,6 +277,8 @@ def test_reused_address_gives_verify_and_a_conflict(tmp_path: Path) -> None:
     finding = collect(ingest(artifacts), PolicyKey.parse("trust/dc/late"))
     item = kinds(finding)["shared_address"]
     assert item.tier == "T3" and item.apps == ["hrm"]
+    # Structured fields: the report never reads the address from the claim text.
+    assert (item.address, item.objects) == ("10.20.30.5/32", ["crm-web-01", "hrm-web-01"])
     assert "10.20.30.5/32 of crm-web-01 (crm) is also the address of hrm-web-01 (hrm)" in item.claim
     assessment = finding.assessment
     assert assessment.verdict == "verify"

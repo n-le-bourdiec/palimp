@@ -76,6 +76,8 @@ class Item(NamedTuple):
     apps: list[str] = []
     sides: dict[str, Side] = {}
     services: list[str] = []
+    address: str = ""
+    objects: list[str] = []
 
 
 LIST_SHOWN = 5
@@ -292,7 +294,10 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
                 "the name may be stale"
             )
         locator = f"address-book objects {name}, {', '.join(o for o, _ in others)}"
-        items.append(Item("T3", "config.set", locator, claim, None, kind, apps))
+        objects = [name] + [o for o, _ in others]
+        items.append(
+            Item("T3", "config.set", locator, claim, None, kind, apps, {}, [], value, objects)
+        )
     return items
 
 
@@ -559,6 +564,8 @@ def collect(
             apps=item.apps,
             sides=item.sides,
             services=item.services,
+            address=item.address,
+            objects=item.objects,
         )
         for i, item in enumerate(items, start=1)
     ]

@@ -299,9 +299,7 @@ def shared_addresses(entries: list[RuleEntry]) -> list[SharedAddress]:
         for item in entry.finding.evidence:
             if item.kind != "shared_address":
                 continue
-            match = re.match(r"address (\S+) of ", item.claim)
-            address = match.group(1) if match else item.locator
-            objects = item.locator.removeprefix("address-book objects ").split(", ")
+            address, objects = item.address, item.objects
             shared = found.setdefault(
                 address, SharedAddress(address=address, objects=[], rules=[], evidence=[])
             )
