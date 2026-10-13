@@ -3,6 +3,10 @@
 Every output names the rule that produced it and cites evidence IDs.
 
 Verdict rules, first match wins:
+- V-SHARED-ADDRESS (verify): a destination address is also an object named after
+  another application, and traffic is seen or a not-live signal exists: the
+  address may have been reused (or the application renamed). Never keep, never
+  removal_candidate (session 24).
 - V-CONTRADICTION (verify): a positive not-live signal, but traffic is seen.
 - V-NOTLIVE (removal_candidate): a positive not-live signal, no traffic seen.
 - V-TEMPORARY-IN-USE (verify): traffic seen on a policy marked temporary that
@@ -59,6 +63,15 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
     present = [e for e in evidence if e.tier == "T2" and e.signal == "present"]
     absent = [e for e in evidence if e.tier == "T2" and e.signal == "absent"]
     temporary = [e for e in evidence if e.kind == "temporary_marker"]
+    shared = [e for e in evidence if e.kind == "shared_address"]
+    if shared and (present or not_live):
+        return (
+            "verify",
+            "V-SHARED-ADDRESS",
+            "a destination address is also an object of another application: the rule may "
+            "carry traffic it was not written for, or serve an application under a new name",
+            _ids(shared + not_live + present),
+        )
     if not_live and present:
         return (
             "verify",
@@ -201,6 +214,16 @@ def _capped(
     """C-AMBIGUOUS-INSTANCE: the application named first is the bare name of regional
     instances (palimp.apps). Its candidates follow it, and confidence is at most MEDIUM."""
     level, rule, reason, cited, apps, conflicts = found
+    objects = next((e for e in finding.evidence if e.kind == "address_objects"), None)
+    for shared in [e for e in finding.evidence if e.kind == "shared_address"]:
+        ids = [shared.id] + ([objects.id] if objects else [])
+        conflicts = [*conflicts, Conflict(evidence=ids, text=f"{shared.id}: {shared.claim}")]
+        apps = list(dict.fromkeys(apps + shared.apps))
+        cited = sorted(set(cited) | set(ids), key=_order)
+        if level == "HIGH":
+            level, rule = "MEDIUM", "C-SHARED-ADDRESS"
+            reason += "; but a destination address is also an object of another application"
+    found = level, rule, reason, cited, apps, conflicts
     ambiguous = next(
         (e for e in finding.evidence if e.kind == "ambiguous_app" and e.apps[0] in apps[:1]),
         None,
@@ -220,6 +243,9 @@ def _order(evidence_id: str) -> int:
 
 
 QUESTIONS = {
+    "V-SHARED-ADDRESS": "A destination address of this policy is also an object of another "
+    "application. Does that application now use this policy? Ask its owner which flows still "
+    "need it before changing anything.",
     "V-CONTRADICTION": "The artifacts say this policy is unused, yet traffic matches it. "
     "Which systems still use it, and is that traffic expected?",
     "V-NOTLIVE": "Can this policy be removed? Confirm nothing still depends on it.",

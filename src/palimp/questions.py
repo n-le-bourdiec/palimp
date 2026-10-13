@@ -84,6 +84,9 @@ def _plain_reason(entry: RuleEntry) -> str:
         text = "We think this rule is no longer used: " + "; ".join(reasons) + "."
         return text + ref("deactivated", "decommission", "migration_leftover")
     texts = {
+        "V-SHARED-ADDRESS": "A server address it lets through is also registered under another "
+        "application. That application may now use this rule, or the application may have "
+        "been renamed.",
         "V-CONTRADICTION": "One record says this rule is no longer used, yet traffic still "
         "goes through it.",
         "V-TEMPORARY-IN-USE": "It was set up as a temporary opening for any application, and "

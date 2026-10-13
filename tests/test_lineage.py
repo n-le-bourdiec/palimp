@@ -265,3 +265,33 @@ def test_same_match_twice_is_not_a_rename(tmp_path: Path) -> None:
     dataset = ingest(artifacts)
     assert dataset.history["trust/dc/b1"].renames == []
     assert dataset.history["trust/dc/b1"].created_in_commit == 0
+
+
+SHARED = "set security address-book global address hr-web-01 10.20.30.5/32\n"
+
+
+def test_reused_address_gives_verify_and_a_conflict(tmp_path: Path) -> None:
+    # crm-web-01 and hr-web-01 share 10.20.30.5: the policy written for crm may now
+    # carry hr traffic. "late" has 50 hits.
+    artifacts = write(tmp_path, [SHARED + rule("late", "users-all", "crm-web-01")], [""])
+    finding = collect(ingest(artifacts), PolicyKey.parse("trust/dc/late"))
+    item = kinds(finding)["shared_address"]
+    assert item.tier == "T3" and item.apps == ["hr"]
+    assert "10.20.30.5/32 of crm-web-01 (crm) is also the address of hr-web-01 (hr)" in item.claim
+    assessment = finding.assessment
+    assert assessment.verdict == "verify"
+    assert assessment.verdict_rule == "V-SHARED-ADDRESS"
+    assert item.id in assessment.verdict_evidence
+    assert assessment.confidence != "HIGH"
+    assert assessment.intent_apps[:2] == ["crm", "hr"]
+    assert any(item.id in c.evidence for c in assessment.conflicts)
+
+
+def test_no_shared_address_item_on_a_deactivated_policy(tmp_path: Path) -> None:
+    deactivated = (
+        rule("late", "users-all", "crm-web-01")
+        + "deactivate security policies from-zone trust to-zone dc policy late\n"
+    )
+    artifacts = write(tmp_path, [SHARED + deactivated], [""])
+    finding = collect(ingest(artifacts), PolicyKey.parse("trust/dc/late"))
+    assert "shared_address" not in kinds(finding)

@@ -60,6 +60,7 @@ class Item(NamedTuple):
 
 
 LIST_SHOWN = 5
+MAX_SET_DEPTH = 8
 # Words that mark a policy as temporary: a label, not a sign that it is unused.
 TEMPORARY_WORDS = frozenset(
     {"temp", "tmp", "temporary", "test", "testing", "urgent", "emergency", "incident", "hotfix"}
@@ -191,6 +192,57 @@ def _describe(dataset: Dataset, summary: LogSummary) -> str:
     return "; ".join(parts)
 
 
+def _hosts(dataset: Dataset, names: list[str], depth: int = 0) -> list[str]:
+    """Address objects behind NAMES, address sets expanded."""
+    found: list[str] = []
+    for name in names:
+        obj = dataset.config.addresses.get(name)
+        if obj is None:
+            continue
+        if obj.kind == "address_set" and depth < MAX_SET_DEPTH:
+            found += _hosts(dataset, obj.members, depth + 1)
+        elif obj.kind == "address" and obj.value:
+            found.append(name)
+    return list(dict.fromkeys(found))
+
+
+def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) -> list[Item]:
+    """One T3 item per destination object whose address is also an object named after
+    another application (session 24): the address may have been reused, so the policy
+    may carry traffic it was not written for. Which side is current is not known.
+    A deactivated policy carries no traffic: no item."""
+    if policy.deactivated:
+        return []
+    by_value: dict[str, list[str]] = {}
+    for name, obj in dataset.config.addresses.items():
+        if obj.kind == "address" and obj.value:
+            by_value.setdefault(obj.value, []).append(name)
+    items = []
+    for name in _hosts(dataset, policy.destinations):
+        value = dataset.config.addresses[name].value or ""
+        mine = vocab.in_object(name)
+        others = [
+            (other, theirs)
+            for other in by_value.get(value, [])
+            if other != name
+            and (theirs := vocab.in_object(other))
+            and mine
+            and not set(theirs) & set(mine)
+        ]
+        if not others:
+            continue
+        apps = list(dict.fromkeys(a for _, theirs in others for a in theirs))
+        named = ", ".join(f"{o} ({', '.join(t)})" for o, t in others)
+        claim = (
+            f"address {value} of {name} ({', '.join(mine)}) is also the address of {named}: "
+            "the address may have been reused by another application, or the application "
+            "renamed, so this policy may carry traffic it was not written for"
+        )
+        locator = f"address-book objects {name}, {', '.join(o for o, _ in others)}"
+        items.append(Item("T3", "config.set", locator, claim, None, "shared_address", apps))
+    return items
+
+
 def _temporary_words(policy: Policy) -> list[str]:
     """Words of the name, description or annotations that mark the policy as temporary
     (typos included)."""
@@ -301,6 +353,7 @@ def collect(
         apps = list(dict.fromkeys(apps))
         locator = "address objects " + ", ".join(named)
         items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps))
+    items += shared_address_items(dataset, policy, vocab)
     if policy.application_services:
         claim = (
             "the permit attaches application services: "

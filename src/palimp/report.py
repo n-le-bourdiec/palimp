@@ -150,6 +150,7 @@ CLEANUP_ASK = (
 
 # Yes/no questions: "yes" always means the access is still needed.
 YES_NO = {
+    "V-SHARED-ADDRESS": "Does the application now at this address still need this access?",
     "V-CONTRADICTION": "Is the traffic that still uses this rule expected, and still needed?",
     "V-NOTLIVE": "Is this access still needed by anyone?",
     "V-TEMPORARY-IN-USE": "Is this temporary opening still needed?",
