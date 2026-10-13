@@ -1,0 +1,42 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/vpn-ipsec/topics/topic-map/migrate-to-route-based-ipsec-vpn.html
+# Page title: Migrate to Route-Based IPsec VPNs | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-13
+# Assumptions: PERMIT-OPT-1 (then permit tunnel, hierarchical format)
+# Note: The policy-based VPN configuration shown before migration: two policies with then { permit { tunnel { ipsec-vpn NAME; } } } and literal prefixes as match addresses, as published.
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+[edit security policies]
+user@host# show
+from-zone zone1 to-zone zone2 {
+    policy policy1 {
+        match {
+            source-address 192.168.2.0/24;
+            destination-address 10.0.2.0/24;
+        }
+        then {
+            permit {
+                tunnel {
+                    ipsec-vpn vpn1;
+                }
+            }
+        }
+    }
+}
+from-zone zone3 to-zone zone4 {
+    policy policy2 {
+        match {
+            source-address 192.168.3.0/24;
+            destination-address 10.0.3.0/24;
+        }
+        then {
+            permit {
+                tunnel {
+                    ipsec-vpn vpn2;
+                }
+            }
+        }
+    }
+}

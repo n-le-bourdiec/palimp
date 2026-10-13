@@ -1,0 +1,30 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/identity-aware-firewall/topics/topic-map/config-examples-srx-firewall-users.html
+# Page title: Configure Authentication Methods for SRX Firewall Users | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-13
+# Assumptions: PERMIT-OPT-2 (then permit firewall-authentication, hierarchical format)
+# Note: Pass-through authentication example, Results: 'show security policies' with a prompt line and a '...' elision, as published.
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+user@host# show security policies
+...
+from-zone UT-ZONE to-zone T-ZONE {
+    policy P1 {
+        match {
+            source-address any;
+            destination-address any;
+            application junos-telnet;
+        }
+        then {
+            permit {
+                firewall-authentication {
+                    pass-through {
+                        client-match FWClient1;
+                    }
+                }
+            }
+        }
+    }
+}

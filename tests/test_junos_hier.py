@@ -482,3 +482,91 @@ def test_permit_with_application_services_in_both_formats() -> None:
     assert str(policy.key) == "untrust/trust/1"
     assert policy.action == "permit"
     assert policy.application_services == ["application-firewall rule-set rs1"]
+
+
+# Other `then permit <option>` forms (PERMIT-OPT-1 to PERMIT-OPT-3): a permit,
+# with the option kept as written.
+
+
+def test_permit_tunnel_in_both_formats() -> None:
+    flat = parse_config(body("display_set_permit_tunnel.txt"))
+    # The page's last line is `insert ... before policy permit-any` (not a set line).
+    assert flat.stats.unknown == 1
+    assert keys(flat) == [
+        "trust/untrust/vpn-tr-untr",
+        "untrust/trust/vpn-untr-tr",
+        "trust/untrust/permit-any",
+    ]
+    out, back, anyp = flat.policies
+    assert (out.action, back.action, anyp.action) == ("permit", "permit", "permit")
+    assert out.permit_options == [
+        "tunnel ipsec-vpn ike-vpn-chicago",
+        "tunnel pair-policy vpn-untr-tr",
+    ]
+    assert back.permit_options == [
+        "tunnel ipsec-vpn ike-vpn-chicago",
+        "tunnel pair-policy vpn-tr-untr",
+    ]
+    assert anyp.permit_options == [] and out.application_services == []
+    tree = parse_config(body("hier_permit_tunnel.txt"))
+    assert tree.stats.format == "hierarchical" and tree.stats.unknown == 0
+    assert keys(tree) == ["zone1/zone2/policy1", "zone3/zone4/policy2"]
+    assert [p.action for p in tree.policies] == ["permit", "permit"]
+    assert [p.permit_options for p in tree.policies] == [
+        ["tunnel ipsec-vpn vpn1"],
+        ["tunnel ipsec-vpn vpn2"],
+    ]
+
+
+def test_permit_firewall_authentication_in_both_formats() -> None:
+    flat = parse_config(body("display_set_permit_firewall_authentication.txt"))
+    tree = parse_config(body("hier_permit_firewall_authentication.txt"))
+    assert flat.stats.unknown == 0 and tree.stats.unknown == 0
+    for config in (flat, tree):
+        (policy,) = config.policies
+        assert str(policy.key) == "UT-ZONE/T-ZONE/P1"
+        assert policy.action == "permit"
+        assert policy.permit_options == [
+            "firewall-authentication pass-through client-match FWClient1"
+        ]
+
+
+def test_permit_destination_address_from_documented_syntax() -> None:
+    # No published configuration sample: the 13.2 hierarchy page lists
+    # `destination-address { drop-translated; drop-untranslated; }` under
+    # `permit`, and the inline samples below are built from it.
+    syntax = body("syntax_policies_permit_13.2.txt")
+    assert (
+        "    destination-address {\n        drop-translated;\n        drop-untranslated;" in syntax
+    )
+    flat = parse_set(
+        "set security policies from-zone untrust to-zone trust policy web match "
+        "destination-address web-srv\n"
+        "set security policies from-zone untrust to-zone trust policy web then permit "
+        "destination-address drop-untranslated\n"
+    )
+    tree = parse_hierarchical(
+        "security {\n    policies {\n        from-zone untrust to-zone trust {\n"
+        "            policy web {\n                match {\n"
+        "                    destination-address web-srv;\n                }\n"
+        "                then {\n                    permit {\n"
+        "                        destination-address {\n"
+        "                            drop-untranslated;\n"
+        "                        }\n                    }\n                }\n"
+        "            }\n        }\n    }\n}\n"
+    )
+    for config in (flat, tree):
+        assert config.stats.unknown == 0
+        (policy,) = config.policies
+        assert policy.action == "permit"
+        assert policy.permit_options == ["destination-address drop-untranslated"]
+
+
+def test_unlisted_permit_option_still_leaves_the_action_unset() -> None:
+    # Only the three documented options are read as a permit; anything else
+    # stays ignored, as before.
+    config = parse_set(
+        "set security policies from-zone a to-zone b policy p then permit services-offload\n"
+    )
+    (policy,) = config.policies
+    assert policy.action is None and policy.permit_options == []

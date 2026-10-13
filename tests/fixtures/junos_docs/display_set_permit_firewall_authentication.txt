@@ -1,0 +1,23 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/identity-aware-firewall/topics/topic-map/config-examples-srx-firewall-users.html
+# Page title: Configure Authentication Methods for SRX Firewall Users | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-13
+# Assumptions: PERMIT-OPT-2 (then permit firewall-authentication, set format)
+# Note: Pass-through authentication example, CLI quick configuration: policy P1 permits with firewall-authentication pass-through client-match FWClient1 (a firewall user).
+# Note: Text copied verbatim from the page <pre> block (line endings normalized, trailing spaces kept).
+# ---
+set interfaces ge-0/0/1 unit 0 family inet address 203.0.113.35/24
+set interfaces ge-5/0/0 unit 0 family inet address 192.0.2.1/24
+set access profile FWAUTH client FWClient1 firewall-user password password
+set access firewall-authentication pass-through default-profile FWAUTH
+set access firewall-authentication pass-through telnet banner success "WELCOME TO JUNIPER TELNET SESSION"
+set security zones security-zone UT-ZONE host-inbound-traffic system-services all
+set security zones security-zone UT-ZONE interfaces ge-0/0/1.0 host-inbound-traffic protocols all
+set security zones security-zone T-ZONE host-inbound-traffic system-services all
+set security zones security-zone T-ZONE interfaces ge-5/0/0.0 host-inbound-traffic protocols all
+set security policies from-zone UT-ZONE to-zone T-ZONE policy P1 match source-address any
+set security policies from-zone UT-ZONE to-zone T-ZONE policy P1 match destination-address any
+set security policies from-zone UT-ZONE to-zone T-ZONE policy P1 match application junos-telnet
+set security policies from-zone UT-ZONE to-zone T-ZONE policy P1 then permit firewall-authentication pass-through client-match FWClient1

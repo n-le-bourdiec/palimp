@@ -10,7 +10,8 @@ the artifact shows traffic ("present"), could show it and shows none
 ("absent"), or cannot show it for this policy ("blind": no logging,
 deactivated, artifact missing), see decision 0019.
 T3 structural: address object names, application services attached to the
-permit (`then permit application-services`), policies created in the same
+permit (`then permit application-services`), other permit options (`tunnel`,
+`firewall-authentication`, `destination-address`), policies created in the same
 commit, deactivation, a name, description or annotation that marks the policy as
 temporary, the requesters of the tickets for each application named above (palimp.owners),
 history lineage from the rollbacks (palimp.lineage): removed or deactivated
@@ -302,6 +303,14 @@ def collect(
         )
         locator = f"policy {policy.name} then permit application-services"
         items.append(Item("T3", "config.set", locator, claim, None, "application_services"))
+    if policy.permit_options:
+        claim = (
+            "the permit carries options: "
+            + "; ".join(policy.permit_options)
+            + " (how this rule lets traffic through, it names no application)"
+        )
+        locator = f"policy {policy.name} then permit options"
+        items.append(Item("T3", "config.set", locator, claim, None, "permit_options"))
     if policy.deactivated:
         statements = "; ".join(policy.deactivated_statements) or "deactivate statement"
         claim = (

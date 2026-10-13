@@ -198,3 +198,24 @@ def test_application_services_are_t3_evidence(artifacts: Path) -> None:
     assert "application-firewall rule-set rs1" in item.claim
     plain = collect(ingest(artifacts), PolicyKey.parse("dc/dc/CHG0000777-db"))
     assert not [e for e in plain.evidence if e.kind == "application_services"]
+
+
+def test_permit_options_are_t3_evidence(artifacts: Path) -> None:
+    # A permit through a tunnel: one T3 item that keeps the option, no application named.
+    config = artifacts / "config.set"
+    config.write_text(
+        config.read_text().replace(
+            "policy crm-web then permit\n",
+            "policy crm-web then permit tunnel ipsec-vpn vpn-crm\n"
+            "set security policies from-zone trust to-zone dc policy crm-web "
+            "then permit tunnel pair-policy crm-back\n",
+        )
+    )
+    dataset = ingest(artifacts)
+    finding = collect(dataset, PolicyKey.parse("trust/dc/crm-web"))
+    assert finding.policy.action == "permit"
+    (item,) = [e for e in finding.evidence if e.kind == "permit_options"]
+    assert item.tier == "T3" and item.apps == []
+    assert "tunnel ipsec-vpn vpn-crm; tunnel pair-policy crm-back" in item.claim
+    plain = collect(ingest(artifacts), PolicyKey.parse("dc/dc/CHG0000777-db"))
+    assert not [e for e in plain.evidence if e.kind == "permit_options"]

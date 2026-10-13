@@ -1,0 +1,25 @@
+# Source: https://juniper.net/documentation/en_US/junos12.1x46/topics/example/ipsec-policy-based-vpn-configuring.html
+# Page title: Example: Configuring a Policy-Based VPN - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos 12.1x46
+# Junos release shown: not stated
+# Retrieved: 2026-10-13
+# Assumptions: PERMIT-OPT-1 (then permit tunnel, set format)
+# Note: Section 'Configuring Security Policies', CLI Quick Configuration block: a policy-based VPN pair (ipsec-vpn and pair-policy) and a permit-any policy, then an 'insert ... before' command as published.
+# Note: The page renders each command as its own block and wraps long commands inside it: each block is copied as one line (the page asks to remove line breaks before pasting).
+# ---
+set security policies from-zone trust to-zone untrust policy vpn-tr-untr match source-address sunnyvale
+set security policies from-zone trust to-zone untrust policy vpn-tr-untr match destination-address chicago
+set security policies from-zone trust to-zone untrust policy vpn-tr-untr match application any
+set security policies from-zone trust to-zone untrust policy vpn-tr-untr then permit tunnel ipsec-vpn ike-vpn-chicago
+set security policies from-zone trust to-zone untrust policy vpn-tr-untr then permit tunnel pair-policy vpn-untr-tr
+set security policies from-zone untrust to-zone trust policy vpn-untr-tr match source-address chicago
+set security policies from-zone untrust to-zone trust policy vpn-untr-tr match destination-address sunnyvale
+set security policies from-zone untrust to-zone trust policy vpn-untr-tr match application any
+set security policies from-zone untrust to-zone trust policy vpn-untr-tr then permit tunnel ipsec-vpn ike-vpn-chicago
+set security policies from-zone untrust to-zone trust policy vpn-untr-tr then permit tunnel pair-policy vpn-tr-untr
+set security policies from-zone trust to-zone untrust policy permit-any match source-address any
+set security policies from-zone trust to-zone untrust policy permit-any match destination-address any
+set security policies from-zone trust to-zone untrust policy permit-any match application any
+set security policies from-zone trust to-zone untrust policy permit-any then permit
+insert security policies from-zone trust to-zone untrust policy vpn-tr-untr before policy permit-any

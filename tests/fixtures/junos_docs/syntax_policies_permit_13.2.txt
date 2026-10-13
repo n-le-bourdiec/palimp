@@ -1,0 +1,40 @@
+# Source: https://juniper.net/documentation/en_US/junos13.2/topics/reference/statement-hierarchy/security-policies.html
+# Page title: [edit security policies] Hierarchy Level - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos 13.2
+# Junos release shown: not stated
+# Retrieved: 2026-10-13
+# Assumptions: PERMIT-OPT-1 to PERMIT-OPT-3 (options of then permit)
+# Note: Statement syntax, not device output: the 'permit { ... }' block under 'then', which lists destination-address { drop-translated; drop-untranslated; } next to firewall-authentication and tunnel. No published configuration sample of destination-address was found; tests build one from this syntax and say so.
+# Note: The page renders the hierarchy as nested <span> blocks with a left margin per level: the text is copied as published (italic placeholders as plain words, non-breaking spaces as spaces), indentation rebuilt as 4 spaces per level. 'web-authentication (' is published with an opening parenthesis and a closing brace.
+# ---
+permit {
+    application-services {
+        idp;
+        redirect-wx;
+        reverse-redirect-wx;
+        utm-policy;
+    }
+    destination-address {
+        drop-translated;
+        drop-untranslated;
+    }
+    destination-nat nat-name;
+    firewall-authentication {
+        pass-through {
+            access-profile profile-name;
+            client-match user-or-group-name;
+            web-redirect;
+        }
+        web-authentication (
+            client-match user-or-group-name;
+        }
+    }
+    source-nat {
+        (interface | pool pool-name | pool-set pool-set-name);
+    }
+    tunnel {
+        ipsec-vpn vpn-name;
+        pair-policy policy-name;
+    }
+}

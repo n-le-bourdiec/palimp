@@ -57,6 +57,10 @@ class Policy(BaseModel):
     # `then permit application-services ...`: each attached service with its
     # arguments, for example "application-firewall rule-set rs1".
     application_services: list[str] = []
+    # Other `then permit <option> ...` statements (`tunnel ...`,
+    # `firewall-authentication ...`, `destination-address ...`), each with its
+    # arguments, for example "tunnel ipsec-vpn vpn1".
+    permit_options: list[str] = []
 
     @property
     def key(self) -> PolicyKey:

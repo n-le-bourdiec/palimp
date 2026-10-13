@@ -23,6 +23,10 @@ from palimp.models import GLOBAL, AddressObject, Application, Config, ParseStats
 
 TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|(\S+)')
 
+# `then permit <option> ...` forms that are a permit with an option attached
+# (application-services has its own field, decision 0034).
+PERMIT_OPTIONS = {"tunnel", "firewall-authentication", "destination-address"}
+
 # Top-level hierarchies that exist in a Junos config but are outside palimp's scope.
 IGNORED_TOP = {
     "version",
@@ -206,6 +210,14 @@ class _Builder:
             service = " ".join(rest[3:])
             if service not in policy.application_services:
                 policy.application_services.append(service)
+            return "parsed"
+        if len(rest) >= 4 and rest[:2] == ["then", "permit"] and rest[2] in PERMIT_OPTIONS:
+            # A permit through a tunnel, after firewall authentication or with a
+            # destination translation check (PERMIT-OPT-1 to PERMIT-OPT-3).
+            policy.action = "permit"
+            option = " ".join(rest[2:])
+            if option not in policy.permit_options:
+                policy.permit_options.append(option)
             return "parsed"
         if len(rest) == 3 and rest[:2] == ["then", "log"]:
             if rest[2] == "session-init":
