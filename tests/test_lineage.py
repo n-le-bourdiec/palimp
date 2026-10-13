@@ -295,3 +295,50 @@ def test_no_shared_address_item_on_a_deactivated_policy(tmp_path: Path) -> None:
     artifacts = write(tmp_path, [SHARED + deactivated], [""])
     finding = collect(ingest(artifacts), PolicyKey.parse("trust/dc/late"))
     assert "shared_address" not in kinds(finding)
+
+
+def probe(day: int, source: str, destination: str, name: str, session: int, back: int) -> str:
+    return (
+        logline(day, destination, name, session)
+        .replace('source-address="10.10.1.9"', f'source-address="{source}"')
+        .replace("]\n", f' packets-from-client="1" packets-from-server="{back}"]\n')
+    )
+
+
+def test_probe_only_traffic_is_not_in_use(tmp_path: Path) -> None:
+    # 10.10.9.9 reaches three policies and three servers, never answered: a probe.
+    # "late" (50 hits) sees only that probe; "allow-all" also sees an answered session.
+    config = (
+        rule("late", "users-all", "crm-web-01", log=True)
+        + rule("allow-all", "users-all", "lms-web-01", log=True)
+        + rule("dms-left", "users-all", "dms-web-01", log=True)
+    )
+    log = (
+        probe(1, "10.10.9.9", "10.20.30.5", "late", 1, 0)
+        + probe(1, "10.10.9.9", "10.20.10.5", "allow-all", 2, 0)
+        + probe(1, "10.10.9.9", "10.20.42.5", "dms-left", 3, 0)
+        + probe(2, "10.10.1.7", "10.20.10.5", "allow-all", 4, 12)
+    )
+    dataset = ingest(write(tmp_path, [config], [""], log))
+    assert dataset.log_window.probe_sources == ["10.10.9.9"]
+    late = collect(dataset, PolicyKey.parse("trust/dc/late"))
+    assert kinds(late)["session_log"].signal == "absent"
+    assert "probe" in kinds(late)["session_log"].claim
+    assert late.assessment.verdict == "verify"
+    assert late.assessment.verdict_rule == "V-PROBE-ONLY"
+    mixed = collect(dataset, PolicyKey.parse("trust/dc/allow-all"))
+    assert kinds(mixed)["session_log"].signal == "present"
+    assert "1 of the sessions are unanswered probes" in kinds(mixed)["session_log"].claim
+    assert "probe_only" not in kinds(mixed)
+
+
+def test_unanswered_sessions_from_one_policy_are_not_probes(tmp_path: Path) -> None:
+    # A dead server: unanswered, but the source reaches one policy only.
+    config = rule("late", "users-all", "crm-web-01", log=True)
+    log = probe(1, "10.10.1.7", "10.20.30.5", "late", 1, 0) + probe(
+        2, "10.10.1.7", "10.20.30.5", "late", 2, 0
+    )
+    dataset = ingest(write(tmp_path, [config], [""], log))
+    assert dataset.log_window.probe_sources == []
+    finding = collect(dataset, PolicyKey.parse("trust/dc/late"))
+    assert finding.assessment.verdict_rule == "V-TRAFFIC"

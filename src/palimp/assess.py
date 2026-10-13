@@ -8,7 +8,11 @@ Verdict rules, first match wins:
   address may have been reused (or the application renamed). Never keep, never
   removal_candidate (session 24).
 - V-CONTRADICTION (verify): a positive not-live signal, but traffic is seen.
+  When the only logged traffic is probe traffic (scanner or monitoring, see
+  palimp.formats.rt_flow), hits on the counters do not count as traffic seen.
 - V-NOTLIVE (removal_candidate): a positive not-live signal, no traffic seen.
+- V-PROBE-ONLY (verify): the only logged traffic is probe traffic, no
+  not-live signal: not in use as far as the artifacts show, not unused either.
 - V-TEMPORARY-IN-USE (verify): traffic seen on a policy marked temporary that
   permits any application (the shape of an emergency opening). A narrow
   policy with a "temp" label is judged like any other. Policies it took over
@@ -57,10 +61,20 @@ def _ids(items: list[Evidence]) -> list[str]:
     return [e.id for e in items]
 
 
+def _in_use(finding: Finding) -> list[Evidence]:
+    """T2 items that show traffic. When the only logged traffic is probe traffic, hits on
+    the counters are not business use (session 24)."""
+    present = [e for e in finding.evidence if e.tier == "T2" and e.signal == "present"]
+    if any(e.kind == "probe_only" for e in finding.evidence):
+        present = [e for e in present if e.kind != "hit_count"]
+    return present
+
+
 def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
     evidence = finding.evidence
     not_live = [e for e in evidence if e.kind in NOT_LIVE_KINDS]
-    present = [e for e in evidence if e.tier == "T2" and e.signal == "present"]
+    present = _in_use(finding)
+    probe = [e for e in evidence if e.kind == "probe_only"]
     absent = [e for e in evidence if e.tier == "T2" and e.signal == "absent"]
     temporary = [e for e in evidence if e.kind == "temporary_marker"]
     shared = [e for e in evidence if e.kind == "shared_address"]
@@ -85,6 +99,15 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
             "V-NOTLIVE",
             "a positive not-live signal, and no traffic seen",
             _ids(not_live + absent),
+        )
+    if probe and not present:
+        hits = [e for e in evidence if e.kind == "hit_count"]
+        return (
+            "verify",
+            "V-PROBE-ONLY",
+            "the only logged traffic comes from scanner or monitoring probes: the policy is not "
+            "shown to be in use, and that is no proof it is unused",
+            _ids(probe + absent + hits),
         )
     broad = [e for e in evidence if e.kind == "services" and "any" in finding.policy.applications]
     took = [e for e in evidence if e.kind == "takeover"]
@@ -179,13 +202,13 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
         apps = list(dict.fromkeys(a for e in direct for a in e.apps))
 
     if conflicts:
-        in_use = any(e.tier == "T2" and e.signal == "present" for e in evidence)
+        in_use = bool(_in_use(finding))
         base = "HIGH" if agree and in_use else "MEDIUM"
         level = LEVELS[LEVELS.index(base) - 1]
         cited = sorted({i for c in conflicts for i in c.evidence} | set(_ids(agree)), key=_order)
         reason = "tiers contradict each other on the application, confidence lowered"
         return level, "C-T1-T3-CONFLICT", reason, cited, apps, conflicts
-    present = [e for e in evidence if e.tier == "T2" and e.signal == "present"]
+    present = _in_use(finding)
     if agree and present:
         reason = "direct evidence names the same application as the address objects, in use"
         cited = _ids(agree) + [objects.id] + _ids(present)
@@ -243,6 +266,8 @@ def _order(evidence_id: str) -> int:
 
 
 QUESTIONS = {
+    "V-PROBE-ONLY": "Only scanner or monitoring probes were seen on this policy. Does any "
+    "business flow still need it?",
     "V-SHARED-ADDRESS": "A destination address of this policy is also an object of another "
     "application. Does that application now use this policy? Ask its owner which flows still "
     "need it before changing anything.",

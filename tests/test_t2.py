@@ -162,3 +162,17 @@ def test_global_policy_logs_under_real_zones(artifacts: Path) -> None:
     same = collect(dataset, PolicyKey.parse("global/logged"))
     log_item = next(e for e in same.evidence if e.artifact == "logs/rt_flow.log")
     assert log_item.signal == "absent"
+
+
+def test_standard_close_reads_packets_from_server() -> None:
+    from palimp.formats.rt_flow import parse_event
+
+    line = (
+        "Sep 06 15:23:49 10.204.225.164 Sep 6 02:53:49 RT_FLOW: RT_FLOW_SESSION_CLOSE: "
+        "session closed TCP FIN: 1.1.1.2/54164->2.1.1.1/23 junos-telnet "
+        "1.1.1.2/54164->2.1.1.1/23 None None 6 trust-untrust trust untrust 192 60(3307) "
+        "46(2784) 79"
+    )
+    event = parse_event(line)
+    assert event is not None and event.kind == "close"
+    assert event.session_id == "192" and event.server_packets == 46

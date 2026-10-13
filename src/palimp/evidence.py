@@ -128,10 +128,34 @@ def log_items(dataset: Dataset, policy: Policy) -> list[Item]:
         return [Item("T2", artifact, "logs/rt_flow.log missing", claim, "blind", "session_log")]
     summary = log_summary(dataset, policy)
     locator = f'policy-name="{policy.name}"'
-    if summary is not None and (summary.sessions or summary.deny):
-        items = [
-            Item("T2", artifact, locator, _describe(dataset, summary), "present", "session_log")
+    if summary is not None and summary.sessions and summary.probe_sessions >= summary.sessions:
+        probes = [s for s in summary.sources if s in dataset.log_window.probe_sources]
+        claim = (
+            f"{_describe(dataset, summary)}; all {summary.sessions} sessions come from probe "
+            f"sources ({', '.join(probes[:LIST_SHOWN]) or 'not listed'}) that reach many "
+            "policies and destinations, and the server never answered them: scanner or "
+            "monitoring probes, no business traffic logged"
+        )
+        return [
+            Item("T2", artifact, locator, claim, "absent", "session_log"),
+            Item(
+                "T2",
+                artifact,
+                locator,
+                "the only logged traffic is probe traffic: hits on the counters may be probes "
+                "too, so they do not show that the policy is in use",
+                "blind",
+                "probe_only",
+            ),
         ]
+    if summary is not None and (summary.sessions or summary.deny):
+        claim = _describe(dataset, summary)
+        if summary.probe_sessions:
+            claim += (
+                f"; {summary.probe_sessions} of the sessions are unanswered probes from "
+                "sources that reach many policies (scanner or monitoring), not business traffic"
+            )
+        items = [Item("T2", artifact, locator, claim, "present", "session_log")]
         end = dataset.log_window.end
         if end and (silence := stopped(summary.days, end.date())):
             claim = (

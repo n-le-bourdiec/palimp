@@ -29,6 +29,12 @@ Without either, those events are counted and their times left unset.
 
 Only a per-policy summary is kept: counts, first and last timestamps, distinct
 sources, destinations and ports, sessions per hour and weekday, active days.
+
+Probe traffic (session 24): a source whose sessions reach at least
+PROBE_SPREAD policies and PROBE_SPREAD destinations behaves like a scanner or
+a monitoring probe. Its sessions that close with no packet from the server
+(`packets-from-server` 0) are probe sessions, counted apart from business
+traffic in each summary (`probe_sessions`).
 Lines that are not RT_FLOW messages (other daemons, `last message repeated`)
 are ignored.
 """
@@ -57,6 +63,10 @@ CREATE_CLOSE = re.compile(
 DENY = re.compile(
     rf"^session denied {TUPLE}\s+(?:.*?\s)?(\d{{1,3}})\(\d+\) (\S+) (\S+) (\S+)(?:\s|$)"
 )
+# Standard CLOSE, after the session id: packets(bytes) from client, then from server.
+COUNTS = re.compile(r"\s*(\d+)\((\d+)\) (\d+)\((\d+)\)")
+# Policies and destinations a source must reach to be read as a probe.
+PROBE_SPREAD = 3
 KINDS = {
     "RT_FLOW_SESSION_CREATE": "create",
     "RT_FLOW_SESSION_CLOSE": "close",
@@ -85,6 +95,8 @@ class FlowEvent:
     destination_port: str = ""
     protocol: str = ""
     service: str = ""
+    # Close only: packets the server sent back (None when not logged).
+    server_packets: int | None = None
 
 
 def _kind(message_type: str) -> str | None:
@@ -152,6 +164,7 @@ def parse_event(line: str, year: int | None = None) -> FlowEvent | None:
             destination_port=fields.get("destination-port", ""),
             protocol=PROTOCOLS.get(protocol, protocol),
             service=fields.get("service-name", ""),
+            server_packets=_int(fields.get("packets-from-server")),
         )
     if match := STANDARD.search(line):
         kind = _kind(match.group(1))
@@ -163,6 +176,7 @@ def parse_event(line: str, year: int | None = None) -> FlowEvent | None:
             found.groups()
         )
         dated, undated = _timestamp(line[: match.start()], year)
+        counts = COUNTS.match(body, found.end()) if kind == "close" else None
         return FlowEvent(
             kind=kind,
             policy_name=name,
@@ -176,8 +190,13 @@ def parse_event(line: str, year: int | None = None) -> FlowEvent | None:
             destination_port=port,
             protocol=PROTOCOLS.get(protocol, protocol),
             service=service,
+            server_packets=int(counts.group(3)) if counts else None,
         )
     return None
+
+
+def _int(text: str | None) -> int | None:
+    return int(text) if text and text.isdigit() else None
 
 
 def _with_year(moment: datetime, year: int) -> datetime:
@@ -245,13 +264,20 @@ class _Accumulator:
     summary: LogSummary
     sessions: set[str] = field(default_factory=set)
     anonymous: int = 0
+    probes: set[str] = field(default_factory=set)
+    anonymous_probes: int = 0
     sources: set[str] = field(default_factory=set)
     destinations: set[str] = field(default_factory=set)
     ports: set[str] = field(default_factory=set)
     services: set[str] = field(default_factory=set)
     days: set[date] = field(default_factory=set)
 
-    def add(self, event: FlowEvent) -> None:
+    def add(self, event: FlowEvent, probe: bool = False) -> None:
+        if probe:
+            if event.session_id:
+                self.probes.add(event.session_id)
+            else:
+                self.anonymous_probes += 1
         summary = self.summary
         setattr(summary, event.kind, getattr(summary, event.kind) + 1)
         moment = event.timestamp
@@ -289,6 +315,7 @@ class _Accumulator:
         if anonymous and summary.create and summary.close:
             anonymous = max(summary.create, summary.close) - len(self.sessions)
         summary.sessions = len(self.sessions) + max(anonymous, 0)
+        summary.probe_sessions = min(len(self.probes) + self.anonymous_probes, summary.sessions)
         for name, values in (
             ("sources", self.sources),
             ("destinations", self.destinations),
@@ -314,6 +341,7 @@ def merge_summaries(name: str, summaries: list[LogSummary]) -> LogSummary:
         merged.close += one.close
         merged.deny += one.deny
         merged.sessions += one.sessions
+        merged.probe_sessions += one.probe_sessions
         for when in (one.first_seen, one.last_seen):
             if when is None:
                 continue
@@ -336,6 +364,27 @@ def merge_summaries(name: str, summaries: list[LogSummary]) -> LogSummary:
     )
     merged.days = sorted({d for one in summaries for d in one.days})
     return merged
+
+
+def probe_sources(events: list[FlowEvent]) -> set[str]:
+    """Sources that reach PROBE_SPREAD policies and destinations, with at least one
+    session the server never answered."""
+    policies: dict[str, set[str]] = {}
+    targets: dict[str, set[str]] = {}
+    unanswered: set[str] = set()
+    for event in events:
+        if event.kind == "deny" or not event.source:
+            continue
+        key = summary_key(event.policy_name, event.from_zone, event.to_zone)
+        policies.setdefault(event.source, set()).add(key)
+        targets.setdefault(event.source, set()).add(event.destination)
+        if event.kind == "close" and event.server_packets == 0:
+            unanswered.add(event.source)
+    return {
+        s
+        for s in unanswered
+        if len(policies[s]) >= PROBE_SPREAD and len(targets[s]) >= PROBE_SPREAD
+    }
 
 
 def summary_key(policy_name: str, from_zone: str, to_zone: str) -> str:
@@ -365,6 +414,8 @@ def parse_rt_flow(
         events.append(event)
         stats.parsed += 1
     window = assign_years(events, year, reference)
+    probes = probe_sources(events)
+    window.probe_sources = sorted(probes)
     accumulators: dict[str, _Accumulator] = {}
     addresses: set[str] = set()
     for event in events:
@@ -375,7 +426,8 @@ def parse_rt_flow(
                 policy_name=event.policy_name, from_zone=event.from_zone, to_zone=event.to_zone
             )
             accumulators[key] = _Accumulator(summary)
-        accumulators[key].add(event)
+        probe = event.kind == "close" and event.server_packets == 0 and event.source in probes
+        accumulators[key].add(event, probe)
         if event.timestamp is not None:
             if window.start is None or event.timestamp < window.start:
                 window.start = event.timestamp

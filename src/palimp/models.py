@@ -177,6 +177,9 @@ class LogSummary(BaseModel):
     hours: list[int] = Field([0] * 24, description="sessions per hour of day, as logged")
     weekdays: list[int] = Field([0] * 7, description="sessions per weekday, Monday first")
     days: list[date] = Field([], description="distinct days with at least one session")
+    probe_sessions: int = Field(
+        0, description="sessions from probe sources that the server never answered"
+    )
 
 
 class LogWindow(BaseModel):
@@ -189,6 +192,9 @@ class LogWindow(BaseModel):
     year_note: str = ""
     addresses: list[str] = Field(
         [], description="every source and destination address seen in a log line"
+    )
+    probe_sources: list[str] = Field(
+        [], description="sources that behave like a scanner or monitoring probe"
     )
 
 
