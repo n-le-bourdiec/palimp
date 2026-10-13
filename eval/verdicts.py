@@ -6,8 +6,11 @@ by rule, palimp's assessment with the ground truth `expected` block
 
 - verdict accuracy against `expected.verdict` and against
   `expected.best_achievable_verdict` (the fair one: what the artifacts allow);
-- dangerous errors: removal_candidate on a rule whose `status.live` is true.
-  Every one is listed;
+- dangerous errors: removal_candidate on a rule whose `status.live` or
+  `status.still_needed` is true (decision 0038: a rule whose original intent
+  is dead but that now carries other needed traffic counts). Every one is
+  listed. The old count (`status.live` only, used up to held-out run 1) is
+  printed next to it;
 - overconfidence: confidence above `expected.max_justified_confidence`;
 - calibration: per confidence level, how often palimp's intent application
   is the ground truth one (`intent.app_id`), and how often the verdict is the
@@ -68,7 +71,8 @@ class Score:
             verdict = row[who]
             c[f"{who} ok expected"] += verdict == row["expected"]
             c[f"{who} ok best"] += verdict == row["best"]
-            c[f"{who} dangerous"] += verdict == "removal_candidate" and row["live"]
+            c[f"{who} dangerous"] += verdict == "removal_candidate" and row["needed"]
+            c[f"{who} dangerous old"] += verdict == "removal_candidate" and row["live"]
             c[f"{who} removal"] += verdict == "removal_candidate"
         c["overconfident"] += LEVELS[row["confidence"]] > LEVELS[row["max_conf"]]
         c["intent ok"] += row["intent_ok"]
@@ -123,6 +127,7 @@ def evaluate(truth: dict, findings: list[dict], manifest: dict) -> list[dict]:
                 "instance": (truth["scenario_id"], rule["created"]["event_id"]),
                 "formats": formats,
                 "live": rule["status"]["live"],
+                "needed": rule["status"]["live"] or rule["status"]["still_needed"],
                 "expected": expected["verdict"],
                 "best": expected["best_achievable_verdict"],
                 "max_conf": expected["max_justified_confidence"],
@@ -153,10 +158,11 @@ def headline(scores: dict[str, Score]) -> None:
         ("verdict accuracy vs expected.verdict", "ok expected"),
         ("verdict accuracy vs best_achievable_verdict", "ok best"),
         ("removal_candidate verdicts", "removal"),
-        ("dangerous errors (removal_candidate on a live rule)", "dangerous"),
+        ("dangerous errors (removal_candidate on a live or still needed rule)", "dangerous"),
+        ("dangerous errors, old definition (live rule only)", "dangerous old"),
     ):
         p, b = c[f"palimp {key}"], c[f"naive {key}"]
-        if key == "removal" or key == "dangerous":
+        if key in ("removal", "dangerous", "dangerous old"):
             print(f"| {label} | {p} | {b} |")
         else:
             print(f"| {label} | {pct(p, n)} ({p}) | {pct(b, n)} ({b}) |")
@@ -189,7 +195,7 @@ def table(title: str, scores: dict[str, Score], prefix: str, instances: dict | N
     print(f"\n{title}")
     print(
         "| scope | rules | palimp vs expected | palimp vs best | naive vs best | "
-        "dangerous palimp | dangerous naive | overconfident | per instance (best) |"
+        "dangerous palimp (old) | dangerous naive | overconfident | per instance (best) |"
     )
     print("|---|---|---|---|---|---|---|---|---|")
     for scope in sorted(s for s in scores if s.startswith(prefix)):
@@ -203,7 +209,8 @@ def table(title: str, scores: dict[str, Score], prefix: str, instances: dict | N
             per_instance = f"{mean:.1%} of {len(groups)}"
         print(
             f"| {name} | {n} | {pct(c['palimp ok expected'], n)} | {pct(c['palimp ok best'], n)}"
-            f" | {pct(c['naive ok best'], n)} | {c['palimp dangerous']} | {c['naive dangerous']}"
+            f" | {pct(c['naive ok best'], n)}"
+            f" | {c['palimp dangerous']} ({c['palimp dangerous old']}) | {c['naive dangerous']}"
             f" | {pct(c['overconfident'], n)} | {per_instance} |"
         )
 
@@ -299,15 +306,18 @@ def main() -> int:
         + ", ".join(f"{a}->{b} {v}" for (a, b), v in sorted(confusion.items()))
     )
 
-    dangerous = [r for r in rows if r["palimp"] == "removal_candidate" and r["live"]]
-    print(f"\nDangerous errors, palimp ({len(dangerous)}):")
+    dangerous = [r for r in rows if r["palimp"] == "removal_candidate" and r["needed"]]
+    old = sum(r["live"] for r in dangerous)
+    print(f"\nDangerous errors, palimp ({len(dangerous)}; old definition, live only: {old}):")
     for r in dangerous:
         cited = [e for e in r["evidence"] if e["kind"] in ("deactivated", "decommission")]
-        print(f"  {r['scenario']} {r['key']} traps={r['traps']} rule={r['rule']}")
+        why = "live" if r["live"] else "still needed, not live"
+        print(f"  {r['scenario']} {r['key']} traps={r['traps']} rule={r['rule']} ({why})")
         for e in cited:
             print(f"    [{e['id']}] {e['kind']}: {e['locator']} :: {e['claim'][:160]}")
-    naive = sum(r["naive"] == "removal_candidate" and r["live"] for r in rows)
-    print(f"Dangerous errors, naive baseline: {naive}")
+    naive = sum(r["naive"] == "removal_candidate" and r["needed"] for r in rows)
+    naive_old = sum(r["naive"] == "removal_candidate" and r["live"] for r in rows)
+    print(f"Dangerous errors, naive baseline: {naive} (old definition: {naive_old})")
     if args.json:
         for r in rows:
             r.pop("evidence")

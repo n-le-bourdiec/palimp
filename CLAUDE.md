@@ -68,7 +68,7 @@ realistic firewall history plus a ground-truth file (true intent of every rule).
   A vSRX lab stays a later upgrade.
 - Key metrics: intent accuracy, confidence calibration (HIGH must be right
   90%+ of the time), zero unsourced claims, and "removal candidate on a live
-  rule" counted as the most severe error.
+  or still needed rule" counted as the most severe error (decision 0038).
 
 ## Stack and conventions
 

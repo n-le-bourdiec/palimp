@@ -51,6 +51,12 @@ Limit: these are synthetic scenarios from the palimp simulator only. There is
 no real-world validation yet, so these numbers say how palimp does on the
 simulator's model of a firewall history, not on real firewalls.
 
+Note (2026-10-13, decision 0038): this run counted a dangerous error as
+`removal_candidate` on a rule whose `status.live` is true (the old
+definition). From decision 0038 on, a rule whose `status.still_needed` is
+true also counts. The run is not repeated; its "0 dangerous errors" holds
+for the old definition only.
+
 ## Hard dev baseline (2026-10-13, dev seeds, not a held-out run)
 
 Recorded before any Hard tuning (decision 0036): seeds 0 to 19 tune, seeds
