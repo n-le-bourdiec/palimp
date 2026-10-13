@@ -1,69 +1,65 @@
 # Handoff
 
-## Last session: 25 (2026-10-13), simulator: spec policy count, observability of unobservable traps (decision 0040), faster Hard distribution test
-
-### Note to analyzer sessions (decision 0017): ground truth schema change
-
-- Hard rules (only Hard) now carry `expected.best_achievable_confidence`
-  (`LOW`, `MEDIUM`, `HIGH`), optional in the schema, `schema_version` still
-  1. It is the highest confidence a perfect analyzer can justify from the
-  artifacts alone: misleading evidence of a trap that no artifact reveals
-  counts as sound. It equals `max_justified_confidence` on every other rule
-  and is never below it. `max_justified_confidence` keeps its meaning.
-- A TRAP-SCANNER-HITS rule that does not log, with no visible end of its
-  application (no exported decommission ticket, no decommission or
-  migration ticket or retained commit), now has `best_achievable_verdict`
-  `keep` (was `verify`): 36 rules on Hard 0-49.
-- Easy and Medium documents are byte-identical (no field). No simulator
-  version bump (the version string is in every document). Regenerate any
-  cached Hard scenario.
-- `eval/verdicts.py` still scores overconfidence against
-  `max_justified_confidence`. Reporting it against the new field (when
-  present) is for an analyzer session.
+## Last session: 26 (2026-10-13), analyzer: Part A (overconfidence vs best achievable, shared address questions, decision 0041), Part B (robustness on real public configs, decision 0032 item 3)
 
 ### Done
 
-- Part A: session 24 metrics finalized (206 calls, 13.42 USD).
-- Spec 7.1: Hard policy count 415 (measured, decision 0036).
-- Observability audit, Hard seeds 0-49 (text checks on the artifacts):
-  - TRAP-STALE-NAME, 328 rules: 246 have some mention of the new
-    application, 82 none; 60 have no trace at all (neither the new
-    application nor the replacement: repoint in the rollbacks, decommission
-    ticket of the old application). Counting only traces linked to the
-    rule (its address, objects or history): 226 traced, 102 unobservable.
-  - TRAP-SCANNER-HITS, 102 rules: 45 log (observable); 57 hit counts only,
-    21 of them with a visible end of the application, 36 with nothing (25
-    scanner, 11 monitoring).
-- Decision 0040: `best_achievable_confidence` (above the ceiling on 97 of
-  the 102 stale rules: 75 LOW to MEDIUM, 22 LOW to HIGH; on 5 of the 36
-  scanner rules, MEDIUM to HIGH) and best `keep` on the 36 scanner rules.
-  Supersedes part of decision 0035. Spec 6 and 7.4 updated.
-- Hard distribution test: reads stored counts
-  (`simulator/tests/data/hard_trap_counts.json`) and now runs in CI too (it
-  was marked full, so CI never ran it); the 5 fixture seeds are regenerated
-  against the stored counts in every run, the other 45 seeds one test each
-  under `full` (78 s for the 51 tests with `--runslow`, was 350 s for one).
+- Part A:
+  - Session 25 metrics finalized (64 calls, 4.05 USD).
+  - `eval/verdicts.py` scores overconfidence against
+    `expected.best_achievable_confidence` when present, else
+    `max_justified_confidence`, and prints both. Hard 0-19: 1.0% (85) vs
+    best achievable, 1.6% (136) vs max justified; Hard 20-49: 0.9% (116) vs
+    1.3% (163). Verdict = best 97.5% and 97.6% (scanner rules now best
+    `keep`, decision 0040), 0 dangerous.
+  - Shared addresses (V-SHARED-ADDRESS) keep `verify`, but their question
+    goes to the firewall team list (`00-firewall-team-cleanup`), one
+    question per address shared by several objects; no owner email asks
+    them. Report: group "firewall team", new "Shared addresses" section.
+  - README "What palimp could not see": scanner traffic on rules without
+    logging looks like business use (hit counts only); untraced renames;
+    configuration alone.
+  - Decision 0041: strict observability reading confirmed, trace links as
+    ground truth evidence postponed to after release, shared address
+    routing, overconfidence scoring.
+- Part B (details and aggregate numbers in `docs/real-configs-robustness.md`):
+  - 32 real SRX configurations from public GitHub repositories (25
+    hierarchical, 7 set, Junos 10.x to 24.x, 1 to 99 policies), secrets
+    stripped before saving, kept in `../palimp-realconfigs/` (outside the
+    repository, local index of sources `index.tsv` there).
+  - Config alone: 0 crashes, 292 policies found = independent count on all
+    32, unknown 0.28% outside one notes file, 0 HIGH, 2 removal candidates
+    (both deactivated): both invariants hold.
+  - Fixes (each with a synthetic test): nested `application-set`; captures
+    holding both config outputs (set lines at top level of a hierarchical
+    file were glued into one unknown statement), CLI error lines and
+    host-less prompts as noise; tenant and logical system policies stated,
+    and a "Configuration not read" blind spot in the report.
+  - apply-groups (decision 0034): 4 of 32 configurations, none inherits
+    policies, address books or applications. No change needed.
+  - Review file `../palimp-realconfigs/review.md`: 20 rules from 15
+    configurations (config lines, intent, verdict, confidence, evidence),
+    for the project lead.
+  - Hard 0-19 eval identical before and after the parser fixes.
 
 ### Next
 
-- Analyzer: report overconfidence against `best_achievable_confidence`
-  (decision 0040), project lead approval on the open questions below.
+- Project lead review of `../palimp-realconfigs/review.md`.
+- Generic object name words read as applications (76 of 157 MEDIUM rules on
+  the real configs name a zone, role, location or placeholder word: see the
+  quality finding in `docs/real-configs-robustness.md`). Proposal: extend
+  `ROLE_WORDS` (palimp.apps), checked on Hard 0-19 and Medium 20-99 intent
+  accuracy first. Needs approval (changes intent output).
 - Held-out workflow: add the Hard table (decision 0036) before the second
   held-out run.
-- Decision 0032 item 3: real public configs, local only.
-- Simulator: add the observability links as evidence items (decision 0040
-  alternatives), if the project lead wants evidence recall to see them.
+- Release preparation (decision 0032 item 5).
 
 ### Open questions
 
-- Decision 0040 counts a link only when it is tied to the rule (102
-  unobservable stale rules); counting any mention of the new application
-  would give 60. Confirm the strict reading?
+- Approve the generic object word fix above?
 - Carried over from session 24 (analyzer): reused addresses trade
   (decision 0039 item 4), not-live signals with regional instances
-  (decision 0039 item 2), scanner rules without logging (now answered on
-  the ground truth side by decision 0040: best `keep` when nothing shows
-  the end of the application).
+  (decision 0039 item 2).
 - Carried over: decision 0036 point 3 (drawn instances); anonymize prompt
   login and host; `--strip-text` in the issue template; decision 0020
   example without a migration (needs approval); 90% vs best trade; HIGH
@@ -71,6 +67,14 @@
   0015; `commit activate`; CONFIRMED-TEXT; scenario names.
 
 ### Known issues
+
+- Real configs, still unsupported: tenant and logical system policies
+  (stated, not read); `delete:` load tags; `//` comments; operational
+  command output inside a capture; a command echoed without a prompt; a set
+  file with a hierarchical part (not observed).
+- The report's "Shared addresses" section reads the address and objects
+  from the `shared_address` item's claim and locator text (no structured
+  field).
 
 - Hard simulator assumptions, all unverified: a rename keeps the hit
   counter and old log lines keep the old name (VSRX-13); global policies in
@@ -107,7 +111,8 @@
   unverified). Rename detection needs a unique match within one commit.
 - Working-tree files sometimes appear with CRLF line endings on this
   machine (index is LF); Python rewrites keep them. Normalize with
-  `sed -i 's/$//'` before scripted edits (session 24).
+  `sed -i 's/
+$//'` before scripted edits (session 24).
 - The anonymized `## Last commit:` header line is treated as free text
   (the time zone abbreviation is replaced, harmless).
 - Anonymize limits (decision 0031): pseudonymization, not encryption;
@@ -135,7 +140,7 @@
 2. Hard level with 4 new traps: TRAP-RENAME-CHAIN, TRAP-IP-REUSE,
    TRAP-SCANNER-HITS, TRAP-STALE-NAME (session 22, decision 0035).
 3. Robustness on real public configs: local only, never committed, never
-   republished.
+   republished. Done in session 26 (`docs/real-configs-robustness.md`).
 4. End-to-end test on a real vSRX postponed until after release (no
    budget). The README must state plainly that palimp has never been run on
    a real SRX history, only on synthetic scenarios with formats confirmed by
@@ -198,9 +203,10 @@ has transcript `3dbc7b1c-2c24-4e93-9d78-317745861978` (finalized in session
 23). Session 23 has transcript `9941fbb6-f557-4a77-95a2-c41b0b29505e` (finalized in
 session 24). Session 24 has transcript
 `6ede7008-8cee-4e93-a9f2-2a82c52771a8` (finalized in session 25). Session 25
-has transcript `1fc8d6dd-973f-4e31-90a8-b193e45219b2`. Finalize it at the
-start of session 26 with:
+has transcript `1fc8d6dd-973f-4e31-90a8-b193e45219b2` (finalized in session
+26). Session 26 has transcript `1c765544-e3ec-47e1-8473-5ee1cc86ff24`.
+Finalize it at the start of session 27 with:
 
-    uv run python metrics/session_tokens.py 1fc8d6dd-973f-4e31-90a8-b193e45219b2
+    uv run python metrics/session_tokens.py 1c765544-e3ec-47e1-8473-5ee1cc86ff24
 
 Cost is API-equivalent (decision 0006), not a billed amount.
