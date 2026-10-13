@@ -170,3 +170,17 @@ def test_a_policy_name_repeating_an_object_name_is_not_independent() -> None:
     found = collect(dataset(rules), PolicyKey.parse("a/b/Zorvex-DB_to_any"))
     assert not [e for e in found.evidence if e.kind == "policy_name"]
     assert found.assessment.confidence_rule == "C-T3-SINGLE"
+
+
+def test_zone_name_words_are_not_applications() -> None:
+    head = "set security policies from-zone Quarry_7 to-zone b policy"
+    rules = (
+        "set security address-book global address Quarry_7_Clients 10.2.0.0/24\n"
+        f"{head} q1 match source-address Quarry_7_Clients\n"
+        f"{head} q1 match destination-address any\n"
+        f"{head} q1 match application any\n"
+        f"{head} q1 then permit\n"
+    )
+    found = collect(dataset(rules), PolicyKey.parse("Quarry_7/b/q1"))
+    assert found.assessment.intent_apps == []
+    assert "quarry" in vocabulary(dataset(rules)).zone_words

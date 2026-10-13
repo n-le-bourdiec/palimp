@@ -28,7 +28,9 @@ be read.
 
 1. **Name filters.** A name learned from object names alone is never shorter
    than 3 letters, never a generic network word (`GENERIC_WORDS`, one
-   documented list in `palimp.apps`, with a test) and never a server role.
+   documented list in `palimp.apps`, with a test), never a server role and
+   never a word of a zone name of the configuration (`Security_52_Clients` in
+   zone `Security_52`, seen on the real configurations).
    Names that tickets.csv backs (related CIs, their bare regional names,
    ticket short names, abbreviations of a related CI) are kept whatever their
    length or word: a ticket is an explicit source. The old `ROLE_WORDS` list

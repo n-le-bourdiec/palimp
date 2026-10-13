@@ -246,15 +246,13 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
         sure = [a for a in apps if len(named[a]) >= 2]
         if sure:
             apps = sure + [a for a in apps if a not in sure]
-            said = " and ".join(sorted({w for a in sure for w, _ in named[a]}))
-            reason = f"two independent names point to the application: {said}"
+            reason = "two independent names point to the application: " + _sources(sure, named)
             cited = sorted({i for a in sure for _, i in named[a]}, key=_order)
             return "MEDIUM", "C-T3", reason, cited, apps, []
-        said = " and ".join(sorted({w for a in apps for w, _ in named[a]}))
-        reason = (
-            f"only one name points to an application ({said}): a name alone may be a place, "
-            "a person or a generic word, no second source confirms it"
-        )
+        reason = f"only one source names each application ({_sources(apps, named)}), "
+        reason += "no second source confirms it"
+        if any(w != NAMING["dynamic_application"] for a in apps for w, _ in named[a]):
+            reason += "; a name alone may be a place, a person or a generic word"
         cited = sorted({i for a in apps for _, i in named[a]}, key=_order)
         return "LOW", "C-T3-SINGLE", reason, cited, apps, []
     weak = [e for e in evidence if e.tier in ("T1", "T3", "T4") and e.kind != "deactivated"]
@@ -277,6 +275,11 @@ def _named(evidence: list[Evidence]) -> dict[str, set[tuple[str, str]]]:
             for app in item.apps:
                 found.setdefault(app, set()).add((NAMING[item.kind], item.id))
     return found
+
+
+def _sources(apps: list[str], named: dict[str, set[tuple[str, str]]]) -> str:
+    """`crm: the policy name and the source address objects; ...`"""
+    return "; ".join(f"{a}: {' and '.join(sorted({w for w, _ in named[a]}))}" for a in apps)
 
 
 def flow(finding: Finding) -> str | None:

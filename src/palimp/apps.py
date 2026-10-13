@@ -21,7 +21,8 @@ zone, a place, a person or a generic word (`addr-`, `dmz-`, `local-`), not
 with an application. A name learned from object names alone is never shorter
 than MIN_NAME letters, never one of GENERIC_WORDS and never a server role
 (SERVER_ROLES: `sql`, `web`, `jump` say what a host does, not which application
-it serves). Names tickets.csv backs (related CIs, their bare regional names,
+it serves), nor a word of a zone name (`Security_52` names a zone). Names
+tickets.csv backs (related CIs, their bare regional names,
 ticket short names and abbreviations of a related CI) are kept whatever their
 length or word: a ticket is an explicit source.
 
@@ -189,12 +190,14 @@ class Vocabulary:
     instances: dict[str, list[str]] = field(default_factory=dict)
     # Names and aliases tickets.csv backs: kept through the name filters.
     backed: set[str] = field(default_factory=set)
+    # Words of the zone names (`Security_52` gives `security`): a zone, not an application.
+    zone_words: set[str] = field(default_factory=set)
 
     def lookup(self, token: str) -> str | None:
         token = token.lower()
         if token in ROLE_WORDS:
             return None
-        if token not in self.backed and not_an_application(token):
+        if token not in self.backed and (not_an_application(token) or token in self.zone_words):
             return None
         if token in self.names:
             return token
@@ -290,6 +293,10 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
         if len(apps) == 1 and short not in vocab.names and short not in ROLE_WORDS:
             vocab.aliases[short] = next(iter(apps))
     vocab.backed = set(vocab.names) | set(vocab.aliases)
+    for policy in dataset.config.policies:
+        zones = [policy.from_zone, policy.to_zone, *policy.match_from_zones]
+        for zone in zones + policy.match_to_zones:
+            vocab.zone_words.update(re.split(r"[-_.]", zone.lower()))
     for name in dataset.config.addresses:
         first = re.split(r"[-_.]", name.lower())[0]
         if not first.isalpha() or len(first) < 2 or first in ROLE_WORDS:
@@ -304,7 +311,7 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
         if len(first) >= MIN_ABBREVIATION and len(expanded) == 1:
             vocab.aliases[first] = expanded[0]
             vocab.backed.add(first)
-        elif not not_an_application(first):
+        elif not not_an_application(first) and first not in vocab.zone_words:
             vocab.names.add(first)
     found = set(vocab.cis)
     for name in dataset.config.addresses:
