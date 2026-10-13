@@ -582,7 +582,7 @@ Field meanings:
 |---|---|---|---|---|
 | `years` | 2 | 4 | 7 | 10 |
 | applications | 18 | 25 | 60 | 120 |
-| final policy count (approx) | 40 | 150 | 450 (measured: see 7.5) | 1200 |
+| final policy count (approx) | 40 | 150 | 415 (measured, decision 0036: see 7.5) | 1200 |
 | zones | 4 | 5 | 6 | 7 |
 | personas active | senior | senior, operator, automation | all | all, several shared logins |
 | `comment_rate` (weighted mean) | 0.9 | 0.6 | 0.35 | 0.2 |
