@@ -51,7 +51,12 @@ be read.
    `Hosted-Nets`, separators and a trailing number aside) is not independent
    for what that object names: it is not counted (seen on the real
    configurations).
-4. **Anonymize keeps the filtered words**, like it keeps role words
+4. **New naming evidence.** The policy name is T3 evidence (`policy_name`)
+   with the same filters. `match dynamic-application` is read (DYNAPP-1) as
+   T3 evidence that names its application (`junos:SLACK` names `slack`); a
+   dynamic application alone is one source, so LOW (open question for the
+   project lead, session 27).
+5. **Anonymize keeps the filtered words**, like it keeps role words
    (decision 0031), so an anonymized copy gives the same judgments.
 
 Person first names are not listed: no list of names can be complete, and the

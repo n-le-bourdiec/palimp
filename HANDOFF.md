@@ -1,62 +1,58 @@
 # Handoff
 
-## Last session: 26 (2026-10-13), analyzer: Part A (overconfidence vs best achievable, shared address questions, decision 0041), Part B (robustness on real public configs, decision 0032 item 3)
+## Last session: 27 (2026-10-13), analyzer: intent quality on real configs (decision 0042)
 
 ### Done
 
-- Part A:
-  - Session 25 metrics finalized (64 calls, 4.05 USD).
-  - `eval/verdicts.py` scores overconfidence against
-    `expected.best_achievable_confidence` when present, else
-    `max_justified_confidence`, and prints both. Hard 0-19: 1.0% (85) vs
-    best achievable, 1.6% (136) vs max justified; Hard 20-49: 0.9% (116) vs
-    1.3% (163). Verdict = best 97.5% and 97.6% (scanner rules now best
-    `keep`, decision 0040), 0 dangerous.
-  - Shared addresses (V-SHARED-ADDRESS) keep `verify`, but their question
-    goes to the firewall team list (`00-firewall-team-cleanup`), one
-    question per address shared by several objects; no owner email asks
-    them. Report: group "firewall team", new "Shared addresses" section.
-  - README "What palimp could not see": scanner traffic on rules without
-    logging looks like business use (hit counts only); untraced renames;
-    configuration alone.
-  - Decision 0041: strict observability reading confirmed, trace links as
-    ground truth evidence postponed to after release, shared address
-    routing, overconfidence scoring.
-- Part B (details and aggregate numbers in `docs/real-configs-robustness.md`):
-  - 32 real SRX configurations from public GitHub repositories (25
-    hierarchical, 7 set, Junos 10.x to 24.x, 1 to 99 policies), secrets
-    stripped before saving, kept in `../palimp-realconfigs/` (outside the
-    repository, local index of sources `index.tsv` there).
-  - Config alone: 0 crashes, 292 policies found = independent count on all
-    32, unknown 0.28% outside one notes file, 0 HIGH, 2 removal candidates
-    (both deactivated): both invariants hold.
-  - Fixes (each with a synthetic test): nested `application-set`; captures
-    holding both config outputs (set lines at top level of a hierarchical
-    file were glued into one unknown statement), CLI error lines and
-    host-less prompts as noise; tenant and logical system policies stated,
-    and a "Configuration not read" blind spot in the report.
-  - apply-groups (decision 0034): 4 of 32 configurations, none inherits
-    policies, address books or applications. No change needed.
-  - Review file `../palimp-realconfigs/review.md`: 20 rules from 15
-    configurations (config lines, intent, verdict, confidence, evidence),
-    for the project lead.
-  - Hard 0-19 eval identical before and after the parser fixes.
+- Session 26 metrics finalized (131 calls, 7.39 USD).
+- Decision 0042 (approved by the project lead in the session prompt):
+  - Name filters in `palimp.apps`: a name learned from object names alone is
+    never shorter than 3 letters, never in `GENERIC_WORDS` (one documented
+    list, tested in `tests/test_names.py`), never a server role
+    (`SERVER_ROLES`) and never a word of a zone name of the configuration.
+    Names tickets.csv backs are kept. Anonymize keeps these words.
+  - Server roles: with no application named, the intent describes the flow
+    ("SMB file sharing between SQL servers", `Assessment.intent_flow`).
+  - Corroboration rule: an application named by one name source only is LOW
+    (C-T3-SINGLE); C-T3 (MEDIUM) needs two: both sides of the rule, the
+    policy name, a custom application name, a dynamic application. A policy
+    name that repeats an object name of the rule does not count. Confidence
+    only, never a verdict.
+  - Policy name as T3 evidence (`policy_name`), same filters.
+  - `match dynamic-application` read (set and hierarchical, bracketed lists
+    with commas), T3 `dynamic_application` evidence naming the application
+    (`junos:SLACK` names `slack`); `then reject profile X` is a reject.
+    Docs fixtures `display_set_dynamic_application.txt`,
+    `hier_dynamic_application.txt`, format assumption DYNAPP-1.
+  - Evidence lists capped at 5 entries plus "and N more".
+  - Shared address items carry `address` and `objects` fields; the report
+    no longer parses the claim.
+- Dev sets (`docs/evaluation-history.md`, session 27): 0 dangerous errors on
+  Medium 20-99 and Hard 20-49. Intent right 97.4% -> 93.9% (Medium), 94.7%
+  -> 91.2% (Hard), from the filters on simulated 2-letter and role names;
+  underconfidence 15% -> 48% and 12.5% -> 57%; overconfidence Hard 0.9% ->
+  0.5%. Verdict moves only toward keep or verify.
+- Real configs (`docs/real-configs-robustness.md`, aggregates only): MEDIUM
+  157 -> 17, MEDIUM naming a generic or person-like word 102 -> 0, named
+  intents 157 -> 91, verdicts identical. New local review file
+  `../palimp-realconfigs/review-2.md` (30 rules, stratified).
 
 ### Next
 
-- Project lead review of `../palimp-realconfigs/review.md`.
-- Generic object name words read as applications (76 of 157 MEDIUM rules on
-  the real configs name a zone, role, location or placeholder word: see the
-  quality finding in `docs/real-configs-robustness.md`). Proposal: extend
-  `ROLE_WORDS` (palimp.apps), checked on Hard 0-19 and Medium 20-99 intent
-  accuracy first. Needs approval (changes intent output).
+- Project lead review of `../palimp-realconfigs/review-2.md`.
+- Session 29 (simulator): realistic object names (site prefixes, people,
+  generic words, roles), so dev metrics see what real configs show.
 - Held-out workflow: add the Hard table (decision 0036) before the second
   held-out run.
 - Release preparation (decision 0032 item 5).
 
 ### Open questions
 
-- Approve the generic object word fix above?
+- Dynamic application alone gives LOW (one source, like any name). Should a
+  dynamic application, which states what the rule matches, give MEDIUM on
+  its own?
+- A site prefix on both sides of a rule counts as two sources (MEDIUM); seen
+  once in the real sample. Accept, or require two different kinds of source?
 - Carried over from session 24 (analyzer): reused addresses trade
   (decision 0039 item 4), not-live signals with regional instances
   (decision 0039 item 2).
@@ -68,13 +64,19 @@
 
 ### Known issues
 
+- Name filters drop simulated applications with 2-letter names or role
+  names when no ticket backs them (`bi`, `ci`, `dns`, `ntp`, `bkp`): intent
+  accuracy -3.5 points on dev sets until session 29.
+- 2 Medium V-CONTRADICTION rules became keep: their not-live marker named an
+  application the filters now drop (toward keep, flagged).
+- Person names stay possible applications at LOW (no name list, decision
+  0042); a person name on both sides of a rule would reach MEDIUM.
+- Custom applications defined with `term` statements are not read (show as
+  "protocol unknown"), seen on the real configs.
 - Real configs, still unsupported: tenant and logical system policies
   (stated, not read); `delete:` load tags; `//` comments; operational
   command output inside a capture; a command echoed without a prompt; a set
-  file with a hierarchical part (not observed).
-- The report's "Shared addresses" section reads the address and objects
-  from the `shared_address` item's claim and locator text (no structured
-  field).
+  file with a hierarchical part (not observed); `match url-category`.
 
 - Hard simulator assumptions, all unverified: a rename keeps the hit
   counter and old log lines keep the old name (VSRX-13); global policies in
@@ -204,9 +206,11 @@ has transcript `3dbc7b1c-2c24-4e93-9d78-317745861978` (finalized in session
 session 24). Session 24 has transcript
 `6ede7008-8cee-4e93-a9f2-2a82c52771a8` (finalized in session 25). Session 25
 has transcript `1fc8d6dd-973f-4e31-90a8-b193e45219b2` (finalized in session
-26). Session 26 has transcript `1c765544-e3ec-47e1-8473-5ee1cc86ff24`.
-Finalize it at the start of session 27 with:
+26). Session 26 has transcript `1c765544-e3ec-47e1-8473-5ee1cc86ff24`
+(finalized in session 27). Session 27 has transcript
+`4fa256b5-0487-44e9-a639-0af270d28f5c`. Finalize it at the start of session
+28 with:
 
-    uv run python metrics/session_tokens.py 1c765544-e3ec-47e1-8473-5ee1cc86ff24
+    uv run python metrics/session_tokens.py 4fa256b5-0487-44e9-a639-0af270d28f5c
 
 Cost is API-equivalent (decision 0006), not a billed amount.
