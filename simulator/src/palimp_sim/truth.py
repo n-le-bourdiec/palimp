@@ -1,6 +1,7 @@
 """Ground truth (spec section 6), validated against schema/ground_truth.schema.json."""
 
 import json
+import re
 from functools import cache
 from importlib.resources import files
 
@@ -13,6 +14,7 @@ from palimp_sim.traffic import TrafficResult
 
 GENERIC_ADDRESSES = {ANY, "users-all", "servers-net"}
 MIN_WINDOW_FOR_REMOVAL = 90  # days of hit counts needed to call a zero-hit rule removable
+ENDING_EVENTS = {"decommission", "migration", "migration_cleanup"}
 
 
 @cache
@@ -44,6 +46,86 @@ def _mentions(text: str | None, app_id: str) -> bool:
         return False
     lowered = text.lower()
     return app_id in lowered or voice.code(app_id).lower() in lowered
+
+
+def _names(text: str | None, app_id: str) -> bool:
+    """Whether a visible name or text names an application as a whole word (decision 0040)."""
+    if not text:
+        return False
+    words = "|".join(re.escape(w) for w in sorted({app_id, voice.code(app_id)}))
+    return re.search(rf"(?<![a-z0-9])({words})(?![a-z0-9])", text, re.I) is not None
+
+
+def _own_addresses(sim, policy) -> set[str]:
+    """Named address objects of a policy, address sets expanded (generic ones left out)."""
+    config = sim.config
+    names = [
+        n
+        for n in policy.sources + policy.destinations
+        if n not in GENERIC_ADDRESSES and not (sim.level.traps and n.startswith("users-"))
+    ]
+    return {m for n in names for m in config.address_sets.get(n, [n])}
+
+
+def _stale_traced(sim, policy, stale: dict, last_index: int, sessions: list) -> bool:
+    """Whether an artifact ties a TRAP-STALE-NAME rule to its replacement (decision 0040).
+
+    Without one, nothing visible tells that the old application's names are
+    stale: a perfect analyzer reads them as sound.
+    """
+    old, new = stale["old"], stale["new"]
+    repoint = commit_index(sim, stale["seq"])
+    if repoint + 1 <= last_index:
+        return True  # changed address values between two rollback files
+    if repoint < RETAINED and sim.commits[stale["seq"]].comment:
+        return True  # the repoint comment names both applications
+    for ticket in sim.tickets:
+        if ticket.exported and ticket.category == "decommission" and ticket.related_ci == old:
+            return True
+    config = sim.config
+    hierarchical = sim.level.config_format == "hierarchical"
+    own = _own_addresses(sim, policy)
+    prefixes = {str(n) for n in config.resolve_address_list(sorted(own))}
+    for name, prefix in config.addresses.items():
+        if name not in own and prefix in prefixes and _names(name, new):
+            return True  # the same address under the new application's name
+    for other in config.policies:
+        if other.uid == policy.uid:
+            continue
+        theirs = _own_addresses(sim, other)
+        resolved = {str(n) for n in config.resolve_address_list(sorted(theirs))}
+        texts = [other.name, other.description, *theirs]
+        texts += [other.annotation] if hierarchical else []
+        if (theirs & own or prefixes & resolved) and any(_names(t, new) for t in texts):
+            return True  # a rule of the new application uses the same servers
+    hosts = {p.removesuffix("/32") for p in prefixes if p.endswith("/32")}
+    names = {p.uid: p.name for p in config.policies}
+    return any(
+        _names(s.policy_name or names.get(s.policy_uid), new) and hosts & {s.src_ip, s.dst_ip}
+        for s in sessions
+    )
+
+
+def _ending_traced(sim, app_id: str, since: int, last_index: int) -> bool:
+    """Whether an artifact shows that an application's flows ended (decision 0040).
+
+    A decommission ticket, or the ticket or a retained commit of a
+    decommission or migration of the application after the rule was made.
+    """
+    exported = {t.ticket_id for t in sim.tickets if t.exported}
+    for ticket in sim.tickets:
+        if ticket.exported and ticket.category == "decommission" and ticket.related_ci == app_id:
+            return True
+    for event in sim.events:
+        if event.app_id != app_id or event.kind not in ENDING_EVENTS or event.day < since:
+            continue
+        if event.ticket_id in exported:
+            return True
+        for seq in event.commits:
+            index = commit_index(sim, seq)
+            if index + 1 <= last_index or (index < RETAINED and sim.commits[seq].comment):
+                return True
+    return False
 
 
 def _rule(
@@ -104,9 +186,23 @@ def _rule(
         if new in policy.sources + policy.destinations and commit_index(sim, seq) + 1 <= last_index
     ]
 
-    evidence: list[dict] = []
+    # Decision 0040: traps no visible artifact reveals. Their misleading
+    # evidence looks sound to a perfect analyzer (`masked` below).
+    stale_hidden = stale_named and not _stale_traced(
+        sim, policy, stale, last_index, traffic.sessions
+    )
+    probe_hidden = (
+        scanned and not logged and not _ending_traced(sim, meta.app_id, commit.day, last_index)
+    )
 
-    def add(tier: str, artifact: str, locator: str, supports: str, misleading=False) -> None:
+    evidence: list[dict] = []
+    masked: set[str] = set()
+
+    def add(
+        tier: str, artifact: str, locator: str, supports: str, misleading=False, hidden=False
+    ) -> None:
+        if misleading and hidden:
+            masked.add(f"G{len(evidence) + 1}")
         evidence.append(
             {
                 "id": f"G{len(evidence) + 1}",
@@ -120,17 +216,20 @@ def _rule(
 
     if policy.description:
         wrong = stale_named and _mentions(policy.description, old_app)
-        add("T1", "config.set", f"policy {policy.name} description", "intent", wrong)
+        locator = f"policy {policy.name} description"
+        add("T1", "config.set", locator, "intent", wrong, stale_hidden)
     if hierarchical and policy.annotation:
         # `annotate` text shows in hierarchical output only (HIER-1c).
         wrong = stale_named and _mentions(policy.annotation, old_app)
-        add("T1", "config.set", f"policy {policy.name} annotation", "intent", wrong)
+        locator = f"policy {policy.name} annotation"
+        add("T1", "config.set", locator, "intent", wrong, stale_hidden)
     if retained and commit.comment:
         # A copied comment, or a batch comment naming another application,
         # describes another change (TRAP-MISLEADING-COMMENT, TRAP-BATCH-COMMIT).
         # The go-live comment of a replaced application names the old one.
-        wrong = copied or (batch and batch_named != meta.app_id) or stale_named
-        add("T1", "commits.txt", f"commit {index} comment", "intent", wrong)
+        other = copied or (batch and batch_named != meta.app_id)
+        hidden = stale_hidden and not other
+        add("T1", "commits.txt", f"commit {index} comment", "intent", other or stale_named, hidden)
     if ticket and ticket.exported:
         texts = [policy.description or "", commit.comment if retained else ""]
         if any(ticket.ticket_id in text for text in texts):
@@ -157,7 +256,8 @@ def _rule(
         # Hits of a reused address or of a scanner are not business use.
         wrong = hidden_live or reused or scanned
         support = "live" if hits else "not_live"
-        add("T2", "hitcount.txt", f"policy {policy.name}", support, wrong)
+        hidden = probe_hidden and not (hidden_live or reused)
+        add("T2", "hitcount.txt", f"policy {policy.name}", support, wrong, hidden)
         if logged:
             support = "live" if lines else "not_live"
             add("T2", "logs/rt_flow.log", f'policy-name="{policy.name}"', support, wrong)
@@ -168,9 +268,10 @@ def _rule(
     ]
     if named:
         wrong = stale_named and any(_mentions(n, old_app) for n in named)
-        add("T3", "config.set", "address objects " + ", ".join(named), "intent", wrong)
+        locator = "address objects " + ", ".join(named)
+        add("T3", "config.set", locator, "intent", wrong, stale_hidden)
     if stale_named and _mentions(policy.name, old_app):
-        add("T3", "config.set", f"policy {policy.name} name", "intent", True)
+        add("T3", "config.set", f"policy {policy.name} name", "intent", True, stale_hidden)
     if reused:
         # The address of the retired server is also the new server's object.
         config = sim.config
@@ -256,6 +357,20 @@ def _rule(
         verdict = "removal_candidate"
         removable = hits == 0 and window >= MIN_WINDOW_FOR_REMOVAL
         best = "removal_candidate" if removable else "verify"
+        if probe_hidden:
+            # Hit counts only, and nothing visible says the flows ended:
+            # the probe hits read as business use (decision 0040).
+            best = "keep"
+    expected = {
+        "verdict": verdict,
+        "best_achievable_verdict": best,
+        "max_justified_confidence": _confidence(evidence),
+    }
+    if sim.level.name == "hard":
+        # What the artifacts allow (decision 0040); Easy and Medium unchanged.
+        apparent = [e | {"misleading": e["misleading"] and e["id"] not in masked} for e in evidence]
+        expected["best_achievable_confidence"] = _confidence(apparent)
+    expected["owner_to_ask"] = sim.apps[reuse["app"]].owner_id if reused else app.owner_id
     return {
         "rule_uid": policy.uid,
         "key": {"from_zone": policy.from_zone, "to_zone": policy.to_zone, "name": policy.name},
@@ -287,12 +402,7 @@ def _rule(
                 hits, reused, scanned, facts.scanner_targets.get(policy.uid)
             ),
         },
-        "expected": {
-            "verdict": verdict,
-            "best_achievable_verdict": best,
-            "max_justified_confidence": _confidence(evidence),
-            "owner_to_ask": sim.apps[reuse["app"]].owner_id if reused else app.owner_id,
-        },
+        "expected": expected,
         "evidence": evidence,
         "traps": traps,
     }

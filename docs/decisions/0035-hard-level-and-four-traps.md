@@ -1,6 +1,7 @@
 # 0035 Hard level: knobs, four new traps, drawn counts and format variants
 
-- Status: Accepted
+- Status: Accepted; the TRAP-SCANNER-HITS best verdict is partly superseded by
+  decision 0040 (best `keep` with hit counts only and no visible end)
 - Date: 2026-10-06
 - Supersedes: the part of decision 0008 that keeps Hard for v2 (decision
   0032 item 2 already moved it before the release), and the spec 7.2 rule

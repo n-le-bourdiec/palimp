@@ -51,12 +51,14 @@ DRAWN_TRAPS = [t for t in V1_TRAPS + NEW_TRAPS if t not in TIMELINE_TRAPS]
 SEEDS = [0, 2, 3, 4, 11]
 # SHA-256 of manifest.json (which holds the hash of every other file), session
 # 22. Easy and Medium hashes did not change when Hard was added (decision 0035).
-GOLDEN_HARD = {0: "22d16e525fe814feef855f3e2ee5e4ca5afd03701c7e47e82db72e2ec4847583"}
+# Session 25 (decision 0040): best_achievable_confidence added, and best
+# `keep` on unobservable scanner rules; Easy and Medium bytes unchanged.
+GOLDEN_HARD = {0: "dfa5eeddc5353ffbb88a004bb3642375c61ad2ebe1dd4303da5f1d9e02d4622f"}
 # Trap counts of Hard seeds 0 to 49 (session 25), so that the distribution
 # check needs no generation. The fixture seeds are regenerated against them in
 # every run, the other seeds one test each under "full" (spread by xdist).
 TRAP_COUNTS = Path(__file__).parent / "data" / "hard_trap_counts.json"
-
+CONFIDENCE = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
 SCOPE = r"(from-zone (\S+) to-zone (\S+)|global) policy (\S+)"
 SET_POLICY = re.compile(rf"^set security policies {SCOPE} (.*)$")
 DEACTIVATE = re.compile(rf"^deactivate security policies {SCOPE}$")
@@ -527,7 +529,13 @@ def test_scanner_hits_rule_looks_live_but_is_dead(hard: Scenario) -> None:
         assert rule["status"]["hits_reason"] in ("scanner", "monitoring")
         assert rule["expected"]["verdict"] == "removal_candidate"
         # 45 days of counters: too short to call a rule unused (spec 7.4).
-        assert rule["expected"]["best_achievable_verdict"] == "verify"
+        # With hit counts only and no visible end of the application, the
+        # hits read as business use (decision 0040).
+        best = rule["expected"]["best_achievable_verdict"]
+        assert best in ("verify", "keep")
+        if best == "keep":
+            assert not hard.log_lines(key[2])
+            assert not decommission_tickets(hard, rule["intent"]["app_id"])
         assert misleading(rule, "hitcount.txt")
         sources = {
             re.search(r'source-address="([^"]+)"', x).group(1) for x in hard.log_lines(key[2])
@@ -562,3 +570,58 @@ def test_stale_name_points_at_a_retired_application(hard: Scenario) -> None:
         assert rule["expected"]["verdict"] == "keep"
         assert rule["expected"]["best_achievable_verdict"] != "removal_candidate"
         assert misleading(rule)
+
+
+# ------------------------------------------------------------------ observability (decision 0040)
+
+
+def decommission_tickets(hard: Scenario, app_id: str) -> list[dict]:
+    rows = csv.DictReader(io.StringIO(hard.files["artifacts/tickets.csv"]))
+    return [r for r in rows if r["category"] == "decommission" and r["related_ci"] == app_id]
+
+
+def names_app(text: str, app_id: str) -> bool:
+    words = "|".join(re.escape(w) for w in {app_id, code(app_id)})
+    return re.search(rf"(?<![a-z0-9])({words})(?![a-z0-9])", text, re.I) is not None
+
+
+def test_best_achievable_confidence_in_every_hard_rule(hard: Scenario) -> None:
+    traps = {"TRAP-STALE-NAME", "TRAP-SCANNER-HITS"}
+    for rule in hard.truth["rules"]:
+        expected = rule["expected"]
+        best, ceiling = expected["best_achievable_confidence"], expected["max_justified_confidence"]
+        # Above the ceiling only when an unobservable trap makes misleading
+        # evidence look sound; never below it.
+        assert CONFIDENCE[best] >= CONFIDENCE[ceiling]
+        if best != ceiling:
+            assert traps & set(rule["traps"]), rule["key"]
+
+
+def test_best_achievable_confidence_absent_below_hard() -> None:
+    for level in ("easy", "medium"):
+        truth = json.loads(generate(level, 0)["ground_truth.json"])
+        assert all("best_achievable_confidence" not in r["expected"] for r in truth["rules"])
+
+
+def test_unobservable_stale_name_has_no_visible_link(hard: Scenario) -> None:
+    replaced = {
+        e["app_id"]: e["note"].removeprefix("replaces ")
+        for e in hard.truth["events"]
+        if e["kind"] == "migration" and e["note"].startswith("replaces ")
+    }
+    for rule in hard.rules("TRAP-STALE-NAME"):
+        expected = rule["expected"]
+        if expected["best_achievable_confidence"] == expected["max_justified_confidence"]:
+            continue
+        new = rule["intent"]["app_id"]
+        # Nothing ties the old names to the replacement: no repoint in the
+        # rollbacks, no decommission ticket for the old application, no
+        # object of the new one on the same address.
+        assert not any(e["locator"].startswith("address values changed") for e in rule["evidence"])
+        assert not decommission_tickets(hard, replaced[new])
+        stmts = hard.config["policies"][key_of(rule)]["stmts"]
+        addresses, sets = hard.config["addresses"], hard.config["sets"]
+        used = [s.split()[-1] for s in stmts if "-address " in s]
+        prefixes = {addresses.get(m) for n in used for m in sets.get(n, [n])} - {None}
+        twins = [n for n, p in addresses.items() if p in prefixes and names_app(n, new)]
+        assert not twins, twins

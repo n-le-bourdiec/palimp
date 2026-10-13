@@ -207,6 +207,7 @@
             "verdict": {"$ref": "#/$defs/verdict"},
             "best_achievable_verdict": {"$ref": "#/$defs/verdict"},
             "max_justified_confidence": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+            "best_achievable_confidence": {"enum": ["LOW", "MEDIUM", "HIGH"]},
             "owner_to_ask": {"type": "string"}
           }
         },
