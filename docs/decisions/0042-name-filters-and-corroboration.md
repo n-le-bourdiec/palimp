@@ -44,7 +44,11 @@ be read.
    the policy name, a custom application name, a dynamic application. T1
    (description, annotation, commit comment, ticket) agreeing with the
    objects keeps its own rules (C-T1-T3-AGREE and following). This only
-   lowers confidence and never changes a verdict.
+   lowers confidence and never changes a verdict. A policy name that repeats
+   an address object name of the rule (`Hosted-Nets_to_X` with the object
+   `Hosted-Nets`, separators and a trailing number aside) is not independent
+   for what that object names: it is not counted (seen on the real
+   configurations).
 4. **Anonymize keeps the filtered words**, like it keeps role words
    (decision 0031), so an anonymized copy gives the same judgments.
 

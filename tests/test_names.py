@@ -163,3 +163,10 @@ def test_long_lists_show_five_and_a_count() -> None:
     assert "zorvex-db-05, and 2 more}" in objects.claim
     services = next(e for e in found.evidence if e.kind == "services")
     assert services.claim.count("svc-") == 5 and services.claim.endswith("; and 3 more")
+
+
+def test_a_policy_name_repeating_an_object_name_is_not_independent() -> None:
+    rules = policy("Zorvex-DB_to_any", "any", "zorvex-db-01")
+    found = collect(dataset(rules), PolicyKey.parse("a/b/Zorvex-DB_to_any"))
+    assert not [e for e in found.evidence if e.kind == "policy_name"]
+    assert found.assessment.confidence_rule == "C-T3-SINGLE"

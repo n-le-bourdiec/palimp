@@ -301,6 +301,17 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
     return items
 
 
+def _flat(name: str) -> str:
+    return re.sub(r"[-_.\s]+", "-", name.lower()).strip("-")
+
+
+def _echoes(policy_name: str, object_name: str) -> bool:
+    """The policy name contains the object name (separators and a trailing number aside):
+    `Hosted-Networks_to_CCTV` repeats `Hosted-Networks`, `TO-SHARE_X` repeats `SHARE-X-2`."""
+    obj = re.sub(r"-\d+$", "", _flat(object_name))
+    return len(obj) >= 3 and obj in _flat(policy_name)
+
+
 def dynamic_app(name: str) -> str | None:
     """The application a dynamic application names: `junos:SLACK` gives `slack`. A group
     (`junos:web:shopping`), `any` and `none` name no application."""
@@ -427,7 +438,10 @@ def collect(
             )
         locator = "address objects " + shown(named)
         items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps, sides))
-    if name_apps := vocab.in_object(policy.name):
+    # A policy name that repeats an address object name of the rule is not an
+    # independent source for what that object names (decision 0042).
+    echoed = {a for n in named if _echoes(policy.name, n) for a in vocab.in_object(n)}
+    if name_apps := [a for a in vocab.in_object(policy.name) if a not in echoed]:
         claim = (
             f"the policy name names {', '.join(name_apps)}: a name chosen for the rule, "
             "not a statement of why it exists"
