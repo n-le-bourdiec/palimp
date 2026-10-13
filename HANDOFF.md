@@ -1,79 +1,52 @@
 # Handoff
 
-## Last session: 22 (2026-10-06), simulator: Hard level with four new traps (decision 0035)
-
-### Note for analyzer sessions
-
-- No ground truth schema change (decision 0017 does not apply). The schema
-  already had everything Hard uses. New in practice, in Hard ground truth
-  only: `status.still_needed` can be true while `status.live` is false;
-  `name_history` can hold several names (the last one is the key);
-  `hits_reason` takes `scanner`, `monitoring` and `ip_reuse`; global
-  policies are keyed `from_zone` `global`, `to_zone` `global`.
-- `palimp-sim generate --level hard --seed N` exists. Hard scenarios take
-  about 9 s and 14 MB each. About half are hierarchical (file names stay
-  `config.set` and `rollback-NN.set`, the active one starts with a
-  `## Last commit:` header) and about 4 in 10 have global policies. Read
-  only the ground truth schema and the artifacts, as before.
-- Easy and Medium output is byte-identical to session 21 (golden hashes and
-  seeds 0 to 9 of both levels compared): Medium dev scores and the second
-  held-out run on Medium stay comparable.
-- No Hard evaluation was run (simulator session). Before tuning anything on
-  Hard, the project lead decides the Hard dev seed range and whether Hard
-  joins the held-out run (decision 0021).
+## Last session: 23 (2026-10-13), analyzer: xdist, decision 0036, permit options, anonymize terminal lines, Hard dev baseline
 
 ### Done
 
-- Part A: session 21 metrics finalized (124 calls, 6.53 USD); local branch
-  `backup-pre-rewrite-s21` deleted after checking its tree equals the
-  rewritten session 20 commit and every subject is on main.
-- Part B (decision 0035): `levels.HARD`, `hard.HardSimulation` (Medium
-  hooks that draw nothing in Medium), the seven v1 traps with larger drawn
-  counts and the four new traps, each drawn with zero possible, with ground
-  truth tags, verdicts, `max_justified_confidence` from non-misleading
-  evidence, misleading evidence marked, and a naive-reading test
-  (`simulator/tests/test_hard.py`). Format variants drawn and recorded in
-  `format_draw`: hierarchical config (`inactive:`, `/* */` annotations,
-  shapes checked against the `hier_*.txt` fixtures) and global policies.
-  Spec 5.1, 7.1 to 7.5, 11 (VSRX-13 to 15), 12 (S18 to S21) updated.
-- Speed (shared code, bytes unchanged): configuration snapshots without
-  deepcopy and integer address matching; Hard went from 21 s to about 8 s
-  per scenario, Medium from 2.6 s to 1.8 s.
-- Measured over Hard seeds 0 to 49: 415 policies on average (369 to 475),
-  33.7% dead (28 to 41%), 8.5 s (max 10.7 s), 13.9 MB (max 17.3 MB);
-  per-trap table in spec 7.5.
+- Part A: session 22 metrics finalized (130 calls, 13.30 USD). Tests run
+  in parallel with pytest-xdist (`-n auto` in `addopts`, so local and CI):
+  full suite with `--runslow` 18 min 58 s serial, 8 min 8 s parallel (723
+  tests; `--dist worksteal` 7 min 46 s, not kept). Decision 0036 recorded
+  (Hard held-out later as a separate table, Hard dev 0-19 tune and 20-49
+  check, trap tags reflect reality, Medium frozen until the release, 415
+  policies accepted).
+- Part B (decision 0037): `then permit tunnel | firewall-authentication |
+  destination-address ...` is a permit in both formats, the option is kept
+  in `Policy.permit_options` and is one T3 evidence item
+  (`permit_options`). Five documentation fixtures (PERMIT-OPT-1 to 3).
+  Anonymize keeps the CLI words of every terminal noise line (prompts,
+  `[edit ...]`, node banners, completion help, `...`) in every file; only
+  the prompt login and host, known names and IPs are mapped. Names in
+  permit options are known names.
+- Part C: Hard dev baseline in `docs/evaluation-history.md`. Hard 0-19:
+  98.1% vs best, 0 dangerous; Hard 20-49: 98.2%, 0 dangerous. Medium 20-99
+  unchanged (92.0%, 0 dangerous).
 
 ### Next
 
-- Decision 0032 item 3 (analyzer): real public configs, local only, never
-  committed. Check there: `inactive:`, annotations and descriptions on real
-  security policies (HIER-1b to HIER-1d), global policies in hit counts and
-  logs (GLOBAL-1), how `apply-groups` is used on policies (decision 0034).
-- Analyzer: first Hard dev evaluation once the project lead sets the seed
-  range; per-trap metrics for the four new traps.
-- Project lead: try `palimp anonymize` on a real config before
-  recommending it in the issue template; review the limits in decision
-  0031 and the capture issue below.
-- Carried over: remaining dead rules at verify (mostly no logging), owners
-  of applications with no ticket.
+- Analyzer, Hard tuning on seeds 0-19 only (decision 0036), check on
+  20-49: HIGH intent right is 57% (target 90%), mostly regional instances
+  (`payroll-pl` read as `payroll-uk`); TRAP-IP-REUSE and TRAP-SCANNER-HITS
+  get `keep` where `verify` is best; TRAP-STALE-NAME overconfident (80 to
+  90% of its rules); 13 + 30 not-live rules at `removal_candidate` where
+  `verify` is best.
+- Held-out workflow: add the Hard table (decision 0036) before the second
+  held-out run.
+- Decision 0032 item 3: real public configs, local only.
+- Simulator session: update the spec Hard policy count to 415 (decision
+  0036).
 
 ### Open questions
 
-- Hard in the held-out run: which level and how many scenarios (decision
-  0021)? The salt rotation rule (spec 8.2) applies if Hard is added.
-- Hard policy count is 415 on average, under the spec's approximate 450:
-  acceptable, or raise access requests (needs a version bump, which moves
-  the Easy and Medium hashes through the version string)?
-- TRAP-SCANNER-HITS is also tagged on dead rules the scanner reaches by
-  accident (86% of scenarios have one, for 80% drawn): keep tagging by
-  condition, or only the drawn subjects?
-- The Medium column "v2" values of spec 7.1 (IP reuse 0.1, 1 rename a
-  year, cleanup errors 0.02, a contractor period) stay unapplied: applying
-  them changes Medium output. Leave Medium as is until after the release?
-- From the session 22 prompt challenges, still open on the analyzer side:
-  other `then permit` options (`tunnel`, `firewall-authentication`,
-  `destination-address`) read as permit or not; anonymize on terminal
-  captures (prompts and banners treated as names).
+- Decision 0036 point 3: "per-instance metrics count drawn instances". The
+  ground truth has no "drawn" flag, so the evaluation's per-instance column
+  counts tagged instances (accidental scanner rules included). Is that the
+  intended reading, or should a schema field mark drawn instances (decision
+  0017 process)?
+- Anonymize maps the prompt login and host (decision 0037): the prompt said
+  "leaves them unchanged". CLI words are unchanged; login and host are
+  replaced because they identify a person and a device. Confirm.
 - Should the issue template ask for `--strip-text` by default?
 - Carried over: decision 0020 example without a migration (needs
   approval); 90% vs best trade; HIGH with an open ticket; decision 0019
@@ -99,20 +72,19 @@
   the format. An `inactive:` leaf with a value is kept as `description x`
   in `deactivated_statements`, where set output may print only the keyword
   (no sample).
-- Other `then permit <option>` forms (`tunnel ipsec-vpn X`,
-  `firewall-authentication ...`, `destination-address drop-untranslated`)
-  still leave the action unset, both formats (decision 0034, postponed: no
-  fixture, outside the session 21 mission).
+- Other `then permit` children (`destination-nat`, `source-nat`,
+  `services-offload`) still leave the action unset (decision 0037: no
+  sample, not asked). `destination-address` has a syntax reference only
+  (PERMIT-OPT-3), no configuration sample.
 - Global policies: how hit counts and RT_FLOW name them is undocumented
   (GLOBAL-1). Hit count looked up under `global global NAME` (blind when
   absent); logs merged by policy name across zone pairs, except pairs where
   a zone policy has the same name.
-- Anonymize (pre-existing, seen in session 21): in a saved terminal capture,
-  prompt and banner words are treated as names (`[edit]` became `[srwb]`,
-  `show` became `lufh` in `user@host# show security policies global`), so
-  the anonymized capture loses its relative path and parses differently.
-  Not fixed (outside the mission). Workaround: give anonymize a plain
-  `show configuration` output without prompts.
+- Anonymize (pre-existing, seen in session 23, not fixed): an address
+  object written with a host and a prefix length (`192.168.2.2/24`, as in
+  `hier_zone_relative_show.txt`) is mapped as its network: three objects
+  `.2/24`, `.3/24`, `.4/24` all became `192.168.140.0/24`. Judgments were
+  identical on the fixture, but distinct hosts collapse.
 - The anonymized `## Last commit:` header line is treated as free text
   (the time zone abbreviation is replaced, harmless).
 - Anonymize limits (decision 0031): pseudonymization, not encryption;
@@ -127,9 +99,10 @@
   undercount traffic; time of day in logged time zone; Junos predefined
   applications from general knowledge (VSRX-12); VSRX-2b; `svc-ansible`; S2
   and S5; session 2 Part C checks.
-- The test suite is slow on this machine: 16 min with `--runslow`
-  (session 21 Part A), and one plain run took 37 min. Run targeted test
-  files while developing, the full suite before pushing.
+- Test suite runs in parallel (`-n auto`, pytest-xdist): 8 min with
+  `--runslow` on this machine (19 min serial). Wall time is bounded by one
+  simulator test, `test_hard_trap_distribution_over_seeds_0_to_49`
+  (350 s alone); see the simulator backlog.
 
 ## Plan before release (decision 0032)
 
@@ -151,6 +124,10 @@ on held-out or on the real public configs.
 
 For simulator sessions. Analyzer sessions add items here, they never read
 simulator code.
+
+- Test speed (session 23): `test_hard_trap_distribution_over_seeds_0_to_49`
+  takes 350 s alone and bounds the parallel suite (8 min); splitting it
+  per seed (or caching scenarios) would let xdist spread it.
 
 - Service desk tickets: a service desk files tickets on behalf of
   application owners (requester = service desk agent, owner named elsewhere
@@ -196,9 +173,10 @@ has transcript `63a66e24-b7a2-43f0-9fe2-32d2c7b0b4af` (finalized in session 20).
 Session 20 has transcript `1561b174-b703-4305-b4b4-d9a8a844a436` (finalized
 in session 21). Session 21 has transcript
 `1787e2cd-2949-4e20-ab01-cde64c249ddc` (finalized in session 22). Session 22
-has transcript `3dbc7b1c-2c24-4e93-9d78-317745861978`. Finalize it at the
-start of session 23 with:
+has transcript `3dbc7b1c-2c24-4e93-9d78-317745861978` (finalized in session
+23). Session 23 has transcript `9941fbb6-f557-4a77-95a2-c41b0b29505e`.
+Finalize it at the start of session 24 with:
 
-    uv run python metrics/session_tokens.py 3dbc7b1c-2c24-4e93-9d78-317745861978
+    uv run python metrics/session_tokens.py 9941fbb6-f557-4a77-95a2-c41b0b29505e
 
 Cost is API-equivalent (decision 0006), not a billed amount.
