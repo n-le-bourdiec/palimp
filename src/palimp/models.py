@@ -204,13 +204,31 @@ class Ticket(BaseModel):
     related_ci: str | None = None
 
 
+class Rename(BaseModel):
+    """A policy deleted and re-added under a new name with the same match, in one commit."""
+
+    commit: int
+    old_key: str
+    new_key: str
+
+
 class PolicyHistory(BaseModel):
     """Where a policy of the active configuration appears in the retained history."""
 
     created_in_commit: int | None = Field(
-        None, description="commit index that added it; None if it predates the retained history"
+        None,
+        description="commit index that added it, under its first name when it was renamed; "
+        "None if it predates the retained history",
     )
     oldest_retained_index: int
+    renames: list[Rename] = Field(
+        [], description="renames found in the retained history, newest first"
+    )
+
+    @property
+    def named_in_commit(self) -> int | None:
+        """Commit that gave the policy its current name: the last rename, else the creation."""
+        return self.renames[0].commit if self.renames else self.created_in_commit
 
 
 Signal = Literal["present", "absent", "blind"]

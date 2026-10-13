@@ -221,6 +221,11 @@ def collect(
     cleared = clears(dataset) if cleared is None else cleared
     history = dataset.history.get(str(key))
     created = history.created_in_commit if history else None
+    # Not-live signals date the policy from its current name (a rename is a deliberate
+    # touch): the same reading as before renames were joined (session 24).
+    named = history.named_in_commit if history else None
+    renames = history.renames if history else []
+    own_keys = {str(key)} | {r.old_key for r in renames}
     commit = next((c for c in dataset.commits if c.index == created), None)
     items: list[Item] = []
 
@@ -282,12 +287,10 @@ def collect(
                     Item("T1", artifact, locator, "not in tickets.csv", None, "ticket_reference")
                 )
 
-    for artifact, locator, claim, apps in decommission_items(
-        dataset, policy, created, found, legacy
-    ):
+    for artifact, locator, claim, apps in decommission_items(dataset, policy, named, found, legacy):
         items.append(Item("T1", artifact, locator, claim, None, "decommission", apps))
 
-    for locator, claim, objects in leftover_items(dataset, policy, created, moves):
+    for locator, claim, objects in leftover_items(dataset, policy, named, moves):
         apps = list(dict.fromkeys(a for o in objects for a in vocab.in_object(o)))
         items.append(Item("T3", "rollbacks", locator, claim, None, "migration_leftover", apps))
 
@@ -333,7 +336,7 @@ def collect(
             locator += " and annotations"
         items.append(Item("T3", "config.set", locator, claim, None, "temporary_marker"))
     if created is not None:
-        siblings = [k for k in dataset.created_by_commit.get(created, []) if k != str(key)]
+        siblings = [k for k in dataset.created_by_commit.get(created, []) if k not in own_keys]
         if siblings:
             locator = f"commit {created}: rollback-{created + 1:02d} vs " + (
                 "config.set" if created == 0 else f"rollback-{created:02d}"
@@ -341,7 +344,19 @@ def collect(
             claim = "created together with " + ", ".join(siblings)
             items.append(Item("T3", "rollbacks", locator, claim, None, "created_together"))
 
-    if took := takeovers(dataset, policy, created):
+    for rename in renames:
+        changed = next((c for c in dataset.commits if c.index == rename.commit), None)
+        said = f', "{changed.comment}"' if changed and changed.comment else ""
+        locator = f"commit {rename.commit}: rollback-{rename.commit + 1:02d} vs " + (
+            "config.set" if rename.commit == 0 else f"rollback-{rename.commit:02d}"
+        )
+        claim = (
+            f"renamed from {rename.old_key} to {rename.new_key} in commit {rename.commit}{said}: "
+            "deleted and re-added with the same match, the same rule under a new name"
+        )
+        items.append(Item("T3", "rollbacks", locator, claim, None, "renamed"))
+    took = [t for t in takeovers(dataset, policy, created) if t.key not in own_keys]
+    if took:
         commits = sorted({t.commit for t in took})
         locator = ("commit " if len(commits) == 1 else "commits ") + ", ".join(
             str(i) for i in commits

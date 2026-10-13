@@ -220,3 +220,48 @@ def test_stopped_flow() -> None:
     finding = Finding(key=policy.key, policy=policy, created_in_commit=None, evidence=evidence)
     result = assess(finding, Dataset(source="t", config=parse_set("")))
     assert (result.verdict, result.verdict_rule) == ("verify", "V-TRAFFIC-STOPPED")
+
+
+def test_rename_joins_the_history_across_names(tmp_path: Path) -> None:
+    # Commit 2 created users-to-crm-web; commit 0 renamed it (same match) with a
+    # misleading comment; old log lines carry the old name.
+    old = rule("users-to-crm-web", "users-all", "crm-web-01", log=True)
+    new = rule("users_dc_crm_01", "users-all", "crm-web-01", log=True)
+    sibling = rule("users-to-lms-web", "users-all", "lms-web-01")
+    log = logline(1, "10.20.30.5", "users-to-crm-web", 1) + logline(
+        5, "10.20.30.5", "users_dc_crm_01", 2
+    )
+    artifacts = write(
+        tmp_path,
+        [new + sibling, old + sibling, old + sibling, ""],
+        ["remove unused", "", "CRM web access for all users"],
+        log,
+    )
+    dataset = ingest(artifacts)
+    history = dataset.history["trust/dc/users_dc_crm_01"]
+    assert history.created_in_commit == 2
+    assert history.named_in_commit == 0
+    assert [(r.commit, r.old_key) for r in history.renames] == [(0, "trust/dc/users-to-crm-web")]
+    assert 0 not in dataset.created_by_commit  # a rename is not a creation
+    assert 0 not in dataset.removed_by_commit  # nor a removal
+    finding = collect(dataset, PolicyKey.parse("trust/dc/users_dc_crm_01"))
+    found = kinds(finding)
+    assert found["commit_comment"].claim == "CRM web access for all users"
+    assert "renamed from trust/dc/users-to-crm-web" in found["renamed"].claim
+    assert "remove unused" in found["renamed"].claim
+    assert "users-to-crm-web" not in found["created_together"].claim
+    assert "2 sessions logged" in found["session_log"].claim
+    assert "takeover" not in found
+
+
+def test_same_match_twice_is_not_a_rename(tmp_path: Path) -> None:
+    one = rule("a1", "users-all", "crm-web-01")
+    two = rule("a2", "users-all", "crm-web-01")
+    artifacts = write(
+        tmp_path,
+        [rule("b1", "users-all", "crm-web-01") + rule("b2", "users-all", "crm-web-01"), one + two],
+        ["", ""],
+    )
+    dataset = ingest(artifacts)
+    assert dataset.history["trust/dc/b1"].renames == []
+    assert dataset.history["trust/dc/b1"].created_in_commit == 0

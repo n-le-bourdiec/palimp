@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from palimp.formats.rt_flow import merge_summaries
-from palimp.models import Dataset, LogSummary, Policy
+from palimp.models import Dataset, LogSummary, Policy, PolicyKey
 
 MIN_PAIR_POLICIES = 3
 
@@ -55,7 +55,16 @@ def log_summary(dataset: Dataset, policy: Policy) -> LogSummary | None:
         if not found:
             return None
         return found[0] if len(found) == 1 else merge_summaries(policy.name, found)
-    return dataset.logs.get(str(policy.key)) or dataset.logs.get(policy.name)
+    found = [dataset.logs.get(str(policy.key)) or dataset.logs.get(policy.name)]
+    # A renamed policy: lines logged before the rename carry an old name (session 24).
+    history = dataset.history.get(str(policy.key))
+    for rename in history.renames if history else []:
+        old = PolicyKey.parse(rename.old_key)
+        found.append(dataset.logs.get(rename.old_key) or dataset.logs.get(old.name))
+    summaries = [s for s in found if s is not None]
+    if len(summaries) <= 1:
+        return summaries[0] if summaries else None
+    return merge_summaries(policy.name, summaries)
 
 
 def clears(dataset: Dataset) -> dict[tuple[str, str], Clear]:

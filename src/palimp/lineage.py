@@ -146,7 +146,7 @@ def migrations(dataset: Dataset, vocab: Vocabulary) -> list[Migration]:
             PastPolicy.of(p)
             for p in dataset.config.policies
             if (h := dataset.history.get(str(p.key)))
-            and (h.created_in_commit is None or h.created_in_commit > index)
+            and (h.named_in_commit is None or h.named_in_commit > index)
         ]
         existing += [r for j, rs in dataset.removed_by_commit.items() if j < index for r in rs]
         moves: dict[str, dict[str, list[str]]] = {}

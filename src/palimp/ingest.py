@@ -15,7 +15,7 @@ from palimp.formats.junos_config import parse_config
 from palimp.formats.rollbacks import read_rollbacks
 from palimp.formats.rt_flow import parse_rt_flow
 from palimp.formats.tickets import parse_tickets
-from palimp.models import AddressObject, Config, Dataset, PastPolicy, PolicyHistory
+from palimp.models import AddressObject, Config, Dataset, PastPolicy, Policy, PolicyHistory, Rename
 
 
 def resolve_directory(directory: Path) -> Path:
@@ -41,12 +41,47 @@ class History(NamedTuple):
     addresses: dict[str, AddressObject]
 
 
+def _match(policy: Policy) -> tuple:
+    return (
+        policy.from_zone,
+        policy.to_zone,
+        tuple(sorted(policy.sources)),
+        tuple(sorted(policy.destinations)),
+        tuple(sorted(policy.applications)),
+        policy.action,
+        policy.deactivated,
+    )
+
+
+def _renames(before: Config, after: Config, removed: list, added: list) -> dict[str, str]:
+    """New key -> old key, for policies one commit deleted and re-added under a new name
+    with the same match. A match shared by several deleted or added policies is ambiguous
+    and gives no rename."""
+    old: dict[tuple, list[str]] = {}
+    for key in removed:
+        if policy := before.policy(key):
+            old.setdefault(_match(policy), []).append(str(key))
+    new: dict[tuple, list[str]] = {}
+    for key in added:
+        if policy := after.policy(key):
+            new.setdefault(_match(policy), []).append(str(key))
+    return {
+        keys[0]: old[match][0]
+        for match, keys in new.items()
+        if len(keys) == 1 and len(old.get(match, [])) == 1
+    }
+
+
 def history(configs: dict[int, Config]) -> History:
     """Find the commit that added each policy, and what each commit deleted, added
     or deactivated, by diffing consecutive configurations.
 
     configs[i] is the configuration after commit i (0 is the active one). Only
     the contiguous run 0, 1, 2, ... is used.
+
+    A policy deleted and re-added under a new name with the same match in one
+    commit is the same rule renamed (session 24): its history is joined across
+    names, and the rename is neither a creation nor a removal.
     """
     oldest = 0
     while oldest + 1 in configs:
@@ -56,12 +91,17 @@ def history(configs: dict[int, Config]) -> History:
     removed_by: dict[int, list[PastPolicy]] = {}
     added_by: dict[int, list[PastPolicy]] = {}
     deactivated_by: dict[int, list[PastPolicy]] = {}
+    renamed: dict[int, dict[str, str]] = {}
     for i in range(oldest):
         added = sorted(keys[i] - keys[i + 1], key=str)
+        gone = sorted(keys[i + 1] - keys[i], key=str)
+        renamed[i] = _renames(configs[i + 1], configs[i], gone, added)
+        added = [k for k in added if str(k) not in renamed[i]]
+        old_keys = set(renamed[i].values())
         if added:
             created_by[i] = [str(k) for k in added]
             added_by[i] = [PastPolicy.of(p) for k in added if (p := configs[i].policy(k))]
-        removed = [configs[i + 1].policy(k) for k in sorted(keys[i + 1] - keys[i], key=str)]
+        removed = [configs[i + 1].policy(k) for k in gone if str(k) not in old_keys]
         if removed:
             removed_by[i] = [PastPolicy.of(p) for p in removed if p]
         before = {p.key: p for p in configs[i + 1].policies}
@@ -73,14 +113,21 @@ def history(configs: dict[int, Config]) -> History:
         if switched:
             deactivated_by[i] = switched
     result: dict[str, PolicyHistory] = {}
+    by_text = {i: {str(k): k for k in keys[i]} for i in range(oldest + 1)}
     for policy in configs[0].policies:
         created = None
+        renames: list[Rename] = []
+        current = str(policy.key)
         for i in range(oldest):
-            if policy.key in keys[i] and policy.key not in keys[i + 1]:
-                created = i
-                break
+            if current in by_text[i] and current not in by_text[i + 1]:
+                previous = renamed[i].get(current)
+                if previous is None:
+                    created = i
+                    break
+                renames.append(Rename(commit=i, old_key=previous, new_key=current))
+                current = previous
         result[str(policy.key)] = PolicyHistory(
-            created_in_commit=created, oldest_retained_index=oldest
+            created_in_commit=created, oldest_retained_index=oldest, renames=renames
         )
     addresses: dict[str, AddressObject] = {}
     for i in range(oldest + 1):
