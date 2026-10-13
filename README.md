@@ -81,7 +81,10 @@ limits hold for every run:
 palimp has never been run on a real SRX history. It has been tested only on
 synthetic scenarios from its own simulator, with Junos output formats confirmed
 by samples from Juniper's documentation and by published practitioner captures
-(`docs/format-assumptions.md`). If you run it on a real firewall and something
+(`docs/format-assumptions.md`). Its parser has also been run on 32 real
+configurations published on GitHub, configuration alone (no history, logs or
+hit counts): no crash, every policy found, results in
+`docs/real-configs-robustness.md`. If you run it on a real firewall and something
 looks wrong, please open an issue with an anonymized copy (below).
 
 ## Sharing a problem config safely in an issue
