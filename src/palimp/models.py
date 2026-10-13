@@ -243,6 +243,14 @@ class PolicyHistory(BaseModel):
 Signal = Literal["present", "absent", "blind"]
 
 
+class Side(BaseModel):
+    """What the address objects of one side of a policy name (palimp.apps)."""
+
+    apps: list[str] = []
+    # Server roles (`sql`, `web`, `jump`): what the hosts do, not which application.
+    roles: list[str] = []
+
+
 class Evidence(BaseModel):
     id: str
     tier: Tier
@@ -259,6 +267,10 @@ class Evidence(BaseModel):
     kind: str = ""
     # Applications the item names (see palimp.apps), used to check agreement.
     apps: list[str] = []
+    # address_objects only: what each side ("source", "destination") names.
+    sides: dict[str, Side] = {}
+    # services only: plain names of the well-known services matched ("SMB file sharing").
+    services: list[str] = []
 
 
 Verdict = Literal["keep", "verify", "removal_candidate"]
@@ -284,6 +296,11 @@ class Assessment(BaseModel):
     confidence_reason: str
     confidence_evidence: list[str] = []
     intent_apps: list[str] = Field([], description="applications the intent evidence names")
+    intent_flow: str | None = Field(
+        None,
+        description="the flow in words from server roles and services, when no application "
+        "is named (for example 'SMB file sharing between SQL servers')",
+    )
     conflicts: list[Conflict] = []
     question: str | None = None
     ask: str | None = Field(None, description="who to ask about the policy, with the reasons")

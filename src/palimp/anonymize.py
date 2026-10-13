@@ -14,7 +14,8 @@ a secret key with HMAC-SHA256, so the copy keeps what palimp needs:
   that depends on the characters before it in the run. Runs keep their
   length, case and shared prefixes (`mon` stays the start of `monitoring`,
   so palimp still learns abbreviations), and separators stay. Words palimp
-  reads as signals (role words such as `users`, temporary words, ticket
+  reads as signals (role words such as `users`, generic and server role words
+  such as `dmz` and `sql` (decision 0042), temporary words, ticket
   prefixes such as `CHG`, decommission words, zone names such as `untrust`
   read as the internet) and one-letter runs are kept.
 - Free text (descriptions, annotations, commit comments, ticket summaries):
@@ -48,7 +49,7 @@ from pathlib import Path
 
 from palimp import __version__
 from palimp.addresses import NON_PUBLIC
-from palimp.apps import ROLE_WORDS, vocabulary
+from palimp.apps import GENERIC_WORDS, ROLE_WORDS, SERVER_ROLES, vocabulary
 from palimp.evidence import TEMPORARY_WORDS
 from palimp.formats.commits import ACTIVATE, CONFIRMED, ENTRY, RESCUE, REVISION
 from palimp.formats.junos_config import detect_format
@@ -159,6 +160,8 @@ def is_signal(word: str) -> bool:
     return (
         len(word) <= 1
         or word in ROLE_WORDS
+        or word in GENERIC_WORDS
+        or word in SERVER_ROLES
         or word in TEMPORARY_WORDS
         or word in TICKET_PREFIXES
         or word in SIGNAL_WORDS

@@ -38,8 +38,18 @@ Confidence rules (about the intent), first match wins:
 - C-T1-T3-AGREE-NO-TRAFFIC (MEDIUM): the same without traffic seen: the
   documented intent may be stale (deactivated, rare or unlogged policy).
 - C-T1-ONLY (MEDIUM): T1 names an application, the objects name none.
-- C-T3 (MEDIUM): the address objects name an application.
-- C-WEAK (LOW): nothing names an application (T1 without one, T4 only).
+- C-T3 (MEDIUM): two independent names point to the same application
+  (decision 0042): the address objects on both sides of the rule, or an
+  address object and the policy name, a custom application name or a
+  dynamic application.
+- C-T3-SINGLE (LOW): only one of those names points to an application. A name
+  alone may be a place, a person or a generic word (`dan-pc`, `en-srv`), so it
+  stays LOW until a second source names the same application. This only
+  lowers confidence, it never changes a verdict.
+- C-WEAK (LOW): nothing names an application (T1 without one, T4 only). When
+  the object names state server roles (`sql`, `web`, palimp.apps), the intent
+  describes the flow by them ("SMB file sharing between SQL servers") without
+  naming an application.
 T4 alone can never exceed LOW.
 Then a cap: C-AMBIGUOUS-INSTANCE (MEDIUM at most): the application named
 first is the bare name of regional instances (`payroll` with `payroll-uk` and
@@ -55,6 +65,13 @@ NOT_LIVE_KINDS = frozenset({"deactivated", "decommission", "migration_leftover"}
 LEVELS = ("LOW", "MEDIUM", "HIGH")
 # T1 kinds that state why a policy exists (a decommission states why it ended).
 INTENT_KINDS = frozenset({"description", "annotation", "commit_comment", "ticket"})
+# T3 and T4 items whose names may point to an application, each one independent source
+# (decision 0042). Address objects count once per side of the rule.
+NAMING = {
+    "policy_name": "the policy name",
+    "services": "a custom application name",
+    "dynamic_application": "a dynamic application",
+}
 
 
 def _ids(items: list[Evidence]) -> list[str]:
@@ -223,12 +240,66 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
     if direct:
         reason = "direct evidence names an application, the address objects do not confirm it"
         return "MEDIUM", "C-T1-ONLY", reason, _ids(direct), apps, []
-    if objects:
-        reason = "only the address object names point to an application"
-        return "MEDIUM", "C-T3", reason, [objects.id], apps, []
+    named = _named(evidence)
+    if named:
+        apps = list(named)
+        sure = [a for a in apps if len(named[a]) >= 2]
+        if sure:
+            apps = sure + [a for a in apps if a not in sure]
+            said = " and ".join(sorted({w for a in sure for w, _ in named[a]}))
+            reason = f"two independent names point to the application: {said}"
+            cited = sorted({i for a in sure for _, i in named[a]}, key=_order)
+            return "MEDIUM", "C-T3", reason, cited, apps, []
+        said = " and ".join(sorted({w for a in apps for w, _ in named[a]}))
+        reason = (
+            f"only one name points to an application ({said}): a name alone may be a place, "
+            "a person or a generic word, no second source confirms it"
+        )
+        cited = sorted({i for a in apps for _, i in named[a]}, key=_order)
+        return "LOW", "C-T3-SINGLE", reason, cited, apps, []
     weak = [e for e in evidence if e.tier in ("T1", "T3", "T4") and e.kind != "deactivated"]
     reason = "nothing names an application; ports and labels alone"
     return "LOW", "C-WEAK", reason, _ids(weak), [], []
+
+
+def _named(evidence: list[Evidence]) -> dict[str, set[tuple[str, str]]]:
+    """Each application T3 and T4 names point to, with the independent sources naming it
+    (what, evidence ID), in order of first mention."""
+    found: dict[str, set[tuple[str, str]]] = {}
+    for item in evidence:
+        if item.kind == "address_objects" and item.apps:
+            sides = item.sides or {"": None}
+            for side, names in sides.items():
+                for app in names.apps if names else item.apps:
+                    what = f"the {side} address objects" if side else "the address objects"
+                    found.setdefault(app, set()).add((what, item.id))
+        elif item.kind in NAMING:
+            for app in item.apps:
+                found.setdefault(app, set()).add((NAMING[item.kind], item.id))
+    return found
+
+
+def flow(finding: Finding) -> str | None:
+    """The flow in words from server roles and services, when the object names state
+    roles (decision 0042): "SMB file sharing between SQL servers"."""
+    objects = next((e for e in finding.evidence if e.kind == "address_objects"), None)
+    if objects is None:
+        return None
+    source = objects.sides.get("source")
+    target = objects.sides.get("destination")
+    src = source.roles if source else []
+    dst = target.roles if target else []
+    if not src and not dst:
+        return None
+    services = [s for e in finding.evidence if e.kind == "services" for s in e.services]
+    what = " and ".join(services[:2]) if services else "traffic"
+    if src and src == dst:
+        return f"{what} between {' and '.join(src)} servers"
+    if src and dst:
+        return f"{what} from {' and '.join(src)} servers to {' and '.join(dst)} servers"
+    if dst:
+        return f"{what} to {' and '.join(dst)} servers"
+    return f"{what} from {' and '.join(src)} servers"
 
 
 def _capped(
@@ -308,6 +379,7 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
         confidence_reason=c_reason,
         confidence_evidence=c_evidence,
         intent_apps=apps,
+        intent_flow=None if apps else flow(finding),
         conflicts=conflicts,
         question=question,
         ask=owner.text,

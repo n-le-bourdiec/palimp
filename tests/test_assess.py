@@ -90,7 +90,7 @@ def test_confidence_levels() -> None:
     assert level(t1_crm, OBJECTS, HITS) == ("HIGH", "C-T1-T3-AGREE")
     assert level(t1_crm, OBJECTS, HITS_ZERO) == ("MEDIUM", "C-T1-T3-AGREE-NO-TRAFFIC")
     assert level(t1_crm, HITS) == ("MEDIUM", "C-T1-ONLY")
-    assert level(OBJECTS, HITS) == ("MEDIUM", "C-T3")
+    assert level(OBJECTS, HITS) == ("LOW", "C-T3-SINGLE")
     assert level(("T4", "services", None, []), HITS) == ("LOW", "C-WEAK")
     assert level(("T1", "commit_comment", None, []), HITS) == ("LOW", "C-WEAK")
 
@@ -154,7 +154,8 @@ def test_vocabulary_learns_abbreviations_and_skips_role_words() -> None:
     assert vocab.in_object("servers-net") == []
     assert vocab.in_object("mgmt-net") == []
     assert vocab.in_object("bkp-01") == ["backup"]
-    assert vocab.in_object("bi-db-01") == ["bi"]  # too short to abbreviate billing
+    # Too short to abbreviate billing, and to be a name without a ticket (decision 0042).
+    assert vocab.in_object("bi-db-01") == []
     assert vocab.in_text("monitoring of all servers") == ["monitoring"]
 
 

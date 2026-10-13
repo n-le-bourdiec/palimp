@@ -18,7 +18,7 @@ import pytest
 from typer.testing import CliRunner
 
 from palimp.addresses import NON_PUBLIC, is_public, special_range
-from palimp.anonymize import Mapper, Options, anonymize, write
+from palimp.anonymize import RUN, Mapper, Options, anonymize, is_signal, write
 from palimp.cli import app
 from palimp.evidence import collect_all
 from palimp.formats.terminal import PROMPT, is_terminal_noise
@@ -105,8 +105,11 @@ def check_copy(source: Path, out: Path, mapper: Mapper) -> None:
     found = tokens(out)
     assert not (names & found) - image, "original names left in the copy"
     assert not (words & found) - image_words, "words of people's names left in the copy"
-    changed = [n for n in names if mapper.name(n) != n]
-    assert len(changed) >= 0.9 * len(names)
+    # Names made only of signal words (`servers-to-dns`, decision 0042) are kept.
+    words_of = [(n, [r for r in RUN.findall(n.lower()) if not r.isdigit()]) for n in names]
+    private = [n for n, runs in words_of if any(not is_signal(r) for r in runs)]
+    changed = [n for n in private if mapper.name(n) != n]
+    assert len(changed) >= 0.9 * len(private)
 
     ips = all_ips(source)
     mapped_ips = {str(ipaddress.ip_interface(v).ip) for v in mapper.ips.values()}

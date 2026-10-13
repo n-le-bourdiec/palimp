@@ -16,6 +16,15 @@ Plain rules, no scoring. Applications are learned from the input itself:
 A token names an application when it is one of the learned names or aliases.
 Free text gets no prefix matching: `web` must not name `webshop`.
 
+Name filters (session 27, decision 0042). Real object names often start with a
+zone, a place, a person or a generic word (`addr-`, `dmz-`, `local-`), not
+with an application. A name learned from object names alone is never shorter
+than MIN_NAME letters, never one of GENERIC_WORDS and never a server role
+(SERVER_ROLES: `sql`, `web`, `jump` say what a host does, not which application
+it serves). Names tickets.csv backs (related CIs, their bare regional names,
+ticket short names and abbreviations of a related CI) are kept whatever their
+length or word: a ticket is an explicit source.
+
 Regional instances (session 24). Related CIs such as `payroll-uk` and
 `hr-de` end with a two-letter instance suffix; the suffixes seen this way are
 learned. A name followed by a learned suffix (`payroll-pl-app-01`,
@@ -61,6 +70,109 @@ ROLE_WORDS = frozenset(
         "old",
     }
 )
+# Generic network words: where a host sits or what kind of object it is, never
+# which application it serves (decision 0042). The one list used for object
+# names, policy names and application names. ROLE_WORDS above stays filtered
+# everywhere, even for a related CI; these words are filtered unless
+# tickets.csv names them.
+GENERIC_WORDS = frozenset(
+    """
+    addr address addresses obj object objects range ranges set sets list pool prefix
+    ips hst ip ipv4 ipv6 nets subnets vlan vlans segment seg zone zones groups networks
+    main dmz local remote inside outside internal external trust untrust trusted
+    untrusted wan edge core public private priv pub site office branch hq campus corp
+    corporate cloud internet inet guest guests wifi wireless home lab management oob
+    transit
+    prod production dev devel development test testing uat qa stage staging preprod pre
+    sandbox demo dr
+    client clients workstation workstations desktop desktops laptop laptops device
+    devices node nodes vm vms member members partners vendors customer customers staff
+    admin admins employee employees contractor contractors
+    none other others misc default generic common temp tmp bad good allow allowed deny
+    denied block blocked permit src source dst dest destination from to and the for
+    primary secondary vip nat snat dnat static dynamic vpn tunnel ipsec ssl traffic
+    access outbound inbound out in
+    """.split()
+)
+# Server roles: what a host does, not which application it serves. With no
+# application named, an intent may describe the flow by its roles ("SMB file
+# sharing between SQL servers"). Each word maps to the label used in that text.
+SERVER_ROLES: dict[str, str] = {
+    "sql": "SQL",
+    "mssql": "SQL",
+    "mysql": "MySQL",
+    "db": "database",
+    "dbs": "database",
+    "database": "database",
+    "web": "web",
+    "www": "web",
+    "http": "web",
+    "app": "application",
+    "apps": "application",
+    "jump": "jump",
+    "jumphost": "jump",
+    "jumpbox": "jump",
+    "bastion": "jump",
+    "proxy": "proxy",
+    "dns": "DNS",
+    "ns": "DNS",
+    "ntp": "NTP",
+    "mail": "mail",
+    "smtp": "mail",
+    "mx": "mail",
+    "backup": "backup",
+    "bkp": "backup",
+    "file": "file",
+    "fs": "file",
+    "nas": "file",
+    "ftp": "FTP",
+    "sftp": "FTP",
+    "print": "print",
+    "printer": "print",
+    "ldap": "directory",
+    "ad": "directory",
+    "dc": "domain controller",
+    "radius": "RADIUS",
+    "syslog": "log",
+    "log": "log",
+    "nms": "monitoring",
+    "snmp": "monitoring",
+    "storage": "storage",
+    "san": "storage",
+    "lb": "load balancer",
+    "router": "router",
+    "fw": "firewall",
+    "firewall": "firewall",
+}
+# Shortest name read as an application when no ticket backs it.
+MIN_NAME = 3
+
+
+def not_an_application(token: str) -> bool:
+    """A word that never names an application unless tickets.csv backs it (decision 0042)."""
+    token = token.lower()
+    return (
+        len(token) < MIN_NAME
+        or token in ROLE_WORDS
+        or token in GENERIC_WORDS
+        or token in SERVER_ROLES
+    )
+
+
+def roles(name: str) -> list[str]:
+    """Server roles a name states, as labels (`sql01-a` gives `SQL`). A plural or a
+    trailing number is read as the word (`printers`, `web2`)."""
+    found = []
+    for token in re.split(r"[-_.]", name.lower()):
+        word = re.sub(r"\d+$", "", token)
+        label = SERVER_ROLES.get(word) or (
+            SERVER_ROLES.get(word[:-1]) if word.endswith("s") else None
+        )
+        if label and label not in found:
+            found.append(label)
+    return found
+
+
 TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9]*")
 SHORT_NAME = re.compile(r"\b[A-Z][A-Z0-9]{1,9}\b")
 TICKET_ID = re.compile(r"^(?:CHG|INC|RITM|REQ|CR|SR|TASK)\d*$")
@@ -75,10 +187,14 @@ class Vocabulary:
     regions: set[str] = field(default_factory=set)
     # Bare name -> its instances (`payroll` -> `payroll-pl`, `payroll-uk`).
     instances: dict[str, list[str]] = field(default_factory=dict)
+    # Names and aliases tickets.csv backs: kept through the name filters.
+    backed: set[str] = field(default_factory=set)
 
     def lookup(self, token: str) -> str | None:
         token = token.lower()
         if token in ROLE_WORDS:
+            return None
+        if token not in self.backed and not_an_application(token):
             return None
         if token in self.names:
             return token
@@ -173,6 +289,7 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
     for short, apps in seen.items():
         if len(apps) == 1 and short not in vocab.names and short not in ROLE_WORDS:
             vocab.aliases[short] = next(iter(apps))
+    vocab.backed = set(vocab.names) | set(vocab.aliases)
     for name in dataset.config.addresses:
         first = re.split(r"[-_.]", name.lower())[0]
         if not first.isalpha() or len(first) < 2 or first in ROLE_WORDS:
@@ -181,11 +298,13 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
             continue
         if any(vocab.base(ci) == first for ci in cis if ci != first):
             vocab.names.add(first)  # the bare name of regional instances, never one of them
+            vocab.backed.add(first)
             continue
         expanded = [ci for ci in cis if ci.startswith(first)]
         if len(first) >= MIN_ABBREVIATION and len(expanded) == 1:
             vocab.aliases[first] = expanded[0]
-        else:
+            vocab.backed.add(first)
+        elif not not_an_application(first):
             vocab.names.add(first)
     found = set(vocab.cis)
     for name in dataset.config.addresses:

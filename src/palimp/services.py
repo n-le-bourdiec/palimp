@@ -125,3 +125,22 @@ def describe(name: str, applications: dict[str, Application], depth: int = 0) ->
     if service is None:
         return [f"{name}: {port}, no well-known service on this port"]
     return [f"{name}: {service} ({port}, custom application)"]
+
+
+def service_names(name: str, applications: dict[str, Application], depth: int = 0) -> list[str]:
+    """Plain names of the well-known services behind one application (or set): `SMB file
+    sharing` for junos-smb. Empty for `any` and for ports with no well-known service."""
+    if name in PREDEFINED:
+        return [PREDEFINED[name][0]]
+    app = applications.get(name)
+    if app is None:
+        return []
+    if app.kind == "application_set":
+        if depth > 3:
+            return []
+        found = [s for m in app.members for s in service_names(m, applications, depth + 1)]
+        return list(dict.fromkeys(found))
+    if not app.destination_port:
+        return []
+    service = WELL_KNOWN.get(f"{app.protocol or '?'}/{app.destination_port}")
+    return [service] if service else []

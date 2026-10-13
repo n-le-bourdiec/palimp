@@ -89,6 +89,8 @@ def test_explain_cli_json(artifacts: Path) -> None:
         "signal": None,
         "kind": "description",
         "apps": ["crm"],
+        "sides": {},
+        "services": [],
     }
 
 

@@ -234,6 +234,12 @@ def intent(finding: Finding) -> Cited:
             f"Probably for {', '.join(assessment.intent_apps)}, "
             f"{assessment.confidence} confidence: {assessment.confidence_reason}."
         )
+    elif assessment.intent_flow:
+        text = (
+            f"Probably {assessment.intent_flow} (server roles from the object names, no "
+            f"application named), {assessment.confidence} confidence: "
+            f"{assessment.confidence_reason}."
+        )
     else:
         text = (
             f"Purpose unknown, {assessment.confidence} confidence: {assessment.confidence_reason}."

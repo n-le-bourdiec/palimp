@@ -27,15 +27,24 @@ Each item has a stable `kind` and the applications it names (`apps`).
 import re
 from typing import NamedTuple
 
-from palimp.apps import Vocabulary, vocabulary
+from palimp.apps import Vocabulary, roles, vocabulary
 from palimp.assess import assess
 from palimp.behavior import recurrence, stopped, time_of_day
 from palimp.counters import Clear, clears, log_summary, meaning
 from palimp.lineage import Migration, leftover_items, migrations, takeover_claim, takeovers
-from palimp.models import Dataset, Evidence, Finding, LogSummary, Policy, PolicyKey, Signal
+from palimp.models import (
+    Dataset,
+    Evidence,
+    Finding,
+    LogSummary,
+    Policy,
+    PolicyKey,
+    Side,
+    Signal,
+)
 from palimp.notlive import Marker, decommission_items, markers
 from palimp.owners import requester_items
-from palimp.services import describe
+from palimp.services import describe, service_names
 
 TICKET_REF = re.compile(r"\b(?:CHG|INC|RITM|REQ|CR|SR|TASK)[-_]?\d{4,}\b", re.IGNORECASE)
 
@@ -57,6 +66,8 @@ class Item(NamedTuple):
     signal: Signal | None = None
     kind: str = ""
     apps: list[str] = []
+    sides: dict[str, Side] = {}
+    services: list[str] = []
 
 
 LIST_SHOWN = 5
@@ -385,8 +396,15 @@ def collect(
         claim = "; ".join(_resolve(dataset, n) for n in named)
         apps = [a for n in named for a in vocab.in_object(n)]
         apps = list(dict.fromkeys(apps))
+        sides = {}
+        for side, names in (("source", policy.sources), ("destination", policy.destinations)):
+            names = [n for n in names if n != "any"]
+            sides[side] = Side(
+                apps=list(dict.fromkeys(a for n in names for a in vocab.in_object(n))),
+                roles=list(dict.fromkeys(r for n in names for r in roles(n))),
+            )
         locator = "address objects " + ", ".join(named)
-        items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps))
+        items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps, sides))
     items += shared_address_items(dataset, policy, vocab)
     if policy.application_services:
         claim = (
@@ -476,7 +494,24 @@ def collect(
             for line in describe(name, dataset.config.applications)
         ]
         locator = "applications " + ", ".join(policy.applications)
-        items.append(Item("T4", "config.set", locator, "; ".join(services), None, "services"))
+        # A custom application named after a known application names it too.
+        custom = [n for n in policy.applications if n != "any" and not n.startswith("junos-")]
+        apps = list(dict.fromkeys(a for n in custom for a in vocab.in_object(n)))
+        plain = [
+            s for n in policy.applications for s in service_names(n, dataset.config.applications)
+        ]
+        items.append(
+            Item(
+                "T4",
+                "config.set",
+                locator,
+                "; ".join(services),
+                None,
+                "services",
+                apps,
+                services=list(dict.fromkeys(plain)),
+            )
+        )
 
     evidence = [
         Evidence(
@@ -488,6 +523,8 @@ def collect(
             signal=item.signal,
             kind=item.kind,
             apps=item.apps,
+            sides=item.sides,
+            services=item.services,
         )
         for i, item in enumerate(items, start=1)
     ]
