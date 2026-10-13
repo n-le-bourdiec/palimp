@@ -1,36 +1,38 @@
 # Handoff
 
-## Last session: 23 (2026-10-13), analyzer: xdist, decision 0036, permit options, anonymize terminal lines, Hard dev baseline
+## Last session: 24 (2026-10-13), analyzer: decision 0038, anonymize host bits, Hard quality (decision 0039)
 
 ### Done
 
-- Part A: session 22 metrics finalized (130 calls, 13.30 USD). Tests run
-  in parallel with pytest-xdist (`-n auto` in `addopts`, so local and CI):
-  full suite with `--runslow` 18 min 58 s serial, 8 min 8 s parallel (723
-  tests; `--dist worksteal` 7 min 46 s, not kept). Decision 0036 recorded
-  (Hard held-out later as a separate table, Hard dev 0-19 tune and 20-49
-  check, trap tags reflect reality, Medium frozen until the release, 415
-  policies accepted).
-- Part B (decision 0037): `then permit tunnel | firewall-authentication |
-  destination-address ...` is a permit in both formats, the option is kept
-  in `Policy.permit_options` and is one T3 evidence item
-  (`permit_options`). Five documentation fixtures (PERMIT-OPT-1 to 3).
-  Anonymize keeps the CLI words of every terminal noise line (prompts,
-  `[edit ...]`, node banners, completion help, `...`) in every file; only
-  the prompt login and host, known names and IPs are mapped. Names in
-  permit options are known names.
-- Part C: Hard dev baseline in `docs/evaluation-history.md`. Hard 0-19:
-  98.1% vs best, 0 dangerous; Hard 20-49: 98.2%, 0 dangerous. Medium 20-99
-  unchanged (92.0%, 0 dangerous).
+- Part A: session 23 metrics finalized (110 calls, 6.15 USD). Decision
+  0038: a dangerous error is `removal_candidate` on a rule that is live
+  **or** still needed; `eval/verdicts.py` prints both counts. Baseline with
+  the new definition: Hard 0-19, Hard 20-49 and Medium 20-99 all 0 (old
+  and new); the rules where the definitions differ are the TRAP-IP-REUSE
+  rules (72 on 0-19, 65 on 20-49), all `keep` at baseline, none
+  `removal_candidate`. Held-out run 1 noted as scored with the old
+  definition. Anonymize keeps the host bits of `host/prefix` addresses
+  (distinct hosts stay distinct; test on the documentation fixture).
+- Part B (decision 0039), tuned on Hard 0-19, checked on 20-49, Medium
+  20-99 checked after each item (no change on Medium):
+  1. Regional instances (`payroll-pl`, `hr-de`) read exactly; a bare name
+     with instances is ambiguous, candidates listed, MEDIUM at most. HIGH
+     intent right 57% -> 94.3% (0-19), 95.5% (20-49).
+  2. Renamed policies: history joined across names (creation comment,
+     siblings, old-name logs). No metric change (most renames predate the
+     retained history).
+  3. Reused destination addresses: `shared_address` item, conflict,
+     `V-SHARED-ADDRESS` (verify), MEDIUM at most. TRAP-IP-REUSE 0% -> 100%.
+  4. Probe traffic (scanner, monitoring) from close-line packet counts:
+     `V-PROBE-ONLY` (verify). TRAP-SCANNER-HITS 0% -> 45% / 37%.
+  5. Stale names: `shared_source` item lowers confidence only. Small effect.
+  Verdict = best 98.1% -> 97.3% (0-19), 98.2% -> 97.4% (20-49): the cost of
+  item 3 (see open questions). Zero dangerous errors throughout.
 
 ### Next
 
-- Analyzer, Hard tuning on seeds 0-19 only (decision 0036), check on
-  20-49: HIGH intent right is 57% (target 90%), mostly regional instances
-  (`payroll-pl` read as `payroll-uk`); TRAP-IP-REUSE and TRAP-SCANNER-HITS
-  get `keep` where `verify` is best; TRAP-STALE-NAME overconfident (80 to
-  90% of its rules); 13 + 30 not-live rules at `removal_candidate` where
-  `verify` is best.
+- Project lead decisions on the open questions below (reuse cost, not-live
+  reading with instances).
 - Held-out workflow: add the Hard table (decision 0036) before the second
   held-out run.
 - Decision 0032 item 3: real public configs, local only.
@@ -39,19 +41,24 @@
 
 ### Open questions
 
-- Decision 0036 point 3: "per-instance metrics count drawn instances". The
-  ground truth has no "drawn" flag, so the evaluation's per-instance column
-  counts tagged instances (accidental scanner rules included). Is that the
-  intended reading, or should a schema field mark drawn instances (decision
-  0017 process)?
-- Anonymize maps the prompt login and host (decision 0037): the prompt said
-  "leaves them unchanged". CLI words are unchanged; login and host are
-  replaced because they identify a person and a device. Confirm.
-- Should the issue template ask for `--strip-text` by default?
-- Carried over: decision 0020 example without a migration (needs
-  approval); 90% vs best trade; HIGH with an open ticket; decision 0019
-  blind items; on_call persona; decision 0015; `commit activate`;
-  CONFIRMED-TEXT; scenario names.
+- Reused addresses (decision 0039 item 4): both sides of a shared address
+  get `verify` because nothing tells the retired application from the
+  current one (or from a renamed one). On 0-19 that catches all 72
+  TRAP-IP-REUSE rules and turns 155 rules best judged `keep` into
+  `verify` (TRAP-STALE-NAME verdict = best 100% -> 62%). Keep this trade,
+  or restrict (for example to the side with the older latest ticket:
+  34 caught, 70 flagged)?
+- Not-live signals with regional instances (decision 0039 item 2): reading
+  instances in decommission links would move 3 rules of Hard 0-19 from
+  `verify` to `removal_candidate` (application right, best `verify`, not
+  dangerous). Not done without approval. Approve?
+- Scanner rules without logging show only hit counts: no artifact tells
+  probe hits from business hits. Accept as a known limit?
+- Carried over: decision 0036 point 3 (drawn instances); anonymize prompt
+  login and host; `--strip-text` in the issue template; decision 0020
+  example without a migration (needs approval); 90% vs best trade; HIGH
+  with an open ticket; decision 0019 blind items; on_call persona; decision
+  0015; `commit activate`; CONFIRMED-TEXT; scenario names.
 
 ### Known issues
 
@@ -80,11 +87,17 @@
   (GLOBAL-1). Hit count looked up under `global global NAME` (blind when
   absent); logs merged by policy name across zone pairs, except pairs where
   a zone policy has the same name.
-- Anonymize (pre-existing, seen in session 23, not fixed): an address
-  object written with a host and a prefix length (`192.168.2.2/24`, as in
-  `hier_zone_relative_show.txt`) is mapped as its network: three objects
-  `.2/24`, `.3/24`, `.4/24` all became `192.168.140.0/24`. Judgments were
-  identical on the fixture, but distinct hosts collapse.
+- Anonymize: a `host/prefix` address keeps its own mapping (the same as the
+  address written alone), except the one host per subnet whose mapping has
+  zero host bits: it takes the mapped network's host bits instead, so it
+  no longer matches its bare log address (session 24).
+- Probe detection (decision 0039): a source reaching 3 policies and 3
+  destinations with unanswered sessions; tuned on synthetic logs, where an
+  unanswered session to a dead host closes with `idle Timeout` (VSRX-15,
+  unverified). Rename detection needs a unique match within one commit.
+- Working-tree files sometimes appear with CRLF line endings on this
+  machine (index is LF); Python rewrites keep them. Normalize with
+  `sed -i 's/$//'` before scripted edits (session 24).
 - The anonymized `## Last commit:` header line is treated as free text
   (the time zone abbreviation is replaced, harmless).
 - Anonymize limits (decision 0031): pseudonymization, not encryption;
@@ -174,9 +187,11 @@ Session 20 has transcript `1561b174-b703-4305-b4b4-d9a8a844a436` (finalized
 in session 21). Session 21 has transcript
 `1787e2cd-2949-4e20-ab01-cde64c249ddc` (finalized in session 22). Session 22
 has transcript `3dbc7b1c-2c24-4e93-9d78-317745861978` (finalized in session
-23). Session 23 has transcript `9941fbb6-f557-4a77-95a2-c41b0b29505e`.
-Finalize it at the start of session 24 with:
+23). Session 23 has transcript `9941fbb6-f557-4a77-95a2-c41b0b29505e` (finalized in
+session 24). Session 24 has transcript
+`6ede7008-8cee-4e93-a9f2-2a82c52771a8`. Finalize it at the start of session
+25 with:
 
-    uv run python metrics/session_tokens.py 9941fbb6-f557-4a77-95a2-c41b0b29505e
+    uv run python metrics/session_tokens.py 6ede7008-8cee-4e93-a9f2-2a82c52771a8
 
 Cost is API-equivalent (decision 0006), not a billed amount.
