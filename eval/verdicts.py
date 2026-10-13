@@ -11,7 +11,10 @@ by rule, palimp's assessment with the ground truth `expected` block
   is dead but that now carries other needed traffic counts). Every one is
   listed. The old count (`status.live` only, used up to held-out run 1) is
   printed next to it;
-- overconfidence: confidence above `expected.max_justified_confidence`;
+- overconfidence: confidence above `expected.best_achievable_confidence`
+  when present (Hard rules, decision 0040: what a perfect analyzer can justify
+  from the artifacts alone), else `expected.max_justified_confidence`. The
+  count against `max_justified_confidence` alone is printed next to it;
 - calibration: per confidence level, how often palimp's intent application
   is the ground truth one (`intent.app_id`), and how often the verdict is the
   best achievable one;
@@ -74,7 +77,8 @@ class Score:
             c[f"{who} dangerous"] += verdict == "removal_candidate" and row["needed"]
             c[f"{who} dangerous old"] += verdict == "removal_candidate" and row["live"]
             c[f"{who} removal"] += verdict == "removal_candidate"
-        c["overconfident"] += LEVELS[row["confidence"]] > LEVELS[row["max_conf"]]
+        c["overconfident"] += LEVELS[row["confidence"]] > LEVELS[row["best_conf"]]
+        c["overconfident max"] += LEVELS[row["confidence"]] > LEVELS[row["max_conf"]]
         c["intent ok"] += row["intent_ok"]
         c["owner named"] += row["owner_ok"]
         c["owner certain right"] += row["owner_certain"] == "right"
@@ -131,6 +135,9 @@ def evaluate(truth: dict, findings: list[dict], manifest: dict) -> list[dict]:
                 "expected": expected["verdict"],
                 "best": expected["best_achievable_verdict"],
                 "max_conf": expected["max_justified_confidence"],
+                "best_conf": expected.get(
+                    "best_achievable_confidence", expected["max_justified_confidence"]
+                ),
                 "palimp": assessment["verdict"],
                 "rule": assessment["verdict_rule"],
                 "confidence": assessment["confidence"],
@@ -167,8 +174,12 @@ def headline(scores: dict[str, Score]) -> None:
         else:
             print(f"| {label} | {pct(p, n)} ({p}) | {pct(b, n)} ({b}) |")
     print(
-        f"| overconfidence (above max_justified_confidence) | {pct(c['overconfident'], n)} "
-        f"({c['overconfident']}) | n/a |"
+        "| overconfidence (above best_achievable_confidence, else max_justified) | "
+        f"{pct(c['overconfident'], n)} ({c['overconfident']}) | n/a |"
+    )
+    print(
+        f"| overconfidence (above max_justified_confidence) | {pct(c['overconfident max'], n)} "
+        f"({c['overconfident max']}) | n/a |"
     )
     print(f"| intent application right (first named app) | {pct(c['intent ok'], n)} | n/a |")
     print(f"| owner named in `ask` | {pct(c['owner named'], n)} | n/a |")
@@ -195,7 +206,8 @@ def table(title: str, scores: dict[str, Score], prefix: str, instances: dict | N
     print(f"\n{title}")
     print(
         "| scope | rules | palimp vs expected | palimp vs best | naive vs best | "
-        "dangerous palimp (old) | dangerous naive | overconfident | per instance (best) |"
+        "dangerous palimp (old) | dangerous naive | overconfident (vs max justified) | "
+        "per instance (best) |"
     )
     print("|---|---|---|---|---|---|---|---|---|")
     for scope in sorted(s for s in scores if s.startswith(prefix)):
@@ -211,20 +223,25 @@ def table(title: str, scores: dict[str, Score], prefix: str, instances: dict | N
             f"| {name} | {n} | {pct(c['palimp ok expected'], n)} | {pct(c['palimp ok best'], n)}"
             f" | {pct(c['naive ok best'], n)}"
             f" | {c['palimp dangerous']} ({c['palimp dangerous old']}) | {c['naive dangerous']}"
-            f" | {pct(c['overconfident'], n)} | {per_instance} |"
+            f" | {pct(c['overconfident'], n)} ({pct(c['overconfident max'], n)})"
+            f" | {per_instance} |"
         )
 
 
 def calibration(rows: list[dict]) -> None:
     print("\nCalibration (per palimp confidence level)")
-    print("| confidence | rules | intent app right | verdict = best | at or below max justified |")
-    print("|---|---|---|---|---|")
+    print(
+        "| confidence | rules | intent app right | verdict = best | at or below best achievable "
+        "| at or below max justified |"
+    )
+    print("|---|---|---|---|---|---|")
     for level in ("HIGH", "MEDIUM", "LOW"):
         group = [r for r in rows if r["confidence"] == level]
         n = len(group)
         print(
             f"| {level} | {n} | {pct(sum(r['intent_ok'] for r in group), n)}"
             f" | {pct(sum(r['palimp'] == r['best'] for r in group), n)}"
+            f" | {pct(sum(LEVELS[level] <= LEVELS[r['best_conf']] for r in group), n)}"
             f" | {pct(sum(LEVELS[level] <= LEVELS[r['max_conf']] for r in group), n)} |"
         )
 
