@@ -61,3 +61,15 @@ def test_unknown_lines_are_counted_not_fatal() -> None:
     assert stats.unknown == 3
     assert "this is not junos" in stats.unknown_samples
     assert stats.total == stats.parsed + stats.ignored + stats.unknown
+
+
+def test_application_set_inside_an_application_set() -> None:
+    # Junos lets an application-set list other application-sets.
+    config = parse_set(
+        "set applications application-set web-ports application junos-http\n"
+        "set applications application-set web-ports application junos-https\n"
+        "set applications application-set all-ports application-set web-ports\n"
+        "set applications application-set all-ports application junos-ssh\n"
+    )
+    assert config.stats.unknown == 0
+    assert config.applications["all-ports"].members == ["web-ports", "junos-ssh"]

@@ -266,11 +266,14 @@ class _Builder:
                 app.destination_port = path[3]
                 return "parsed"
             return "ignored"
-        if len(path) == 4 and path[0] == "application-set" and path[2] == "application":
+        member = ("application", "application-set")
+        if len(path) == 4 and path[0] == "application-set" and path[2] in member:
+            # A set may hold other sets (resolved by palimp.services).
             app = self.applications.setdefault(
                 path[1], Application(name=path[1], kind="application_set")
             )
-            app.members.append(path[3])
+            if path[3] not in app.members:
+                app.members.append(path[3])
             return "parsed"
         return "unknown"
 
