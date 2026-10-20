@@ -170,6 +170,9 @@ SERVER_ROLES: dict[str, str] = {
 CONDITIONAL_ROLES: dict[str, tuple[str, frozenset[str]]] = {
     "ad": ("directory", frozenset({"ldap", "kerberos"})),
 }
+# Hosting platforms (session 31): where an application runs, not which one it is
+# (`GIT-AZURE-MS-SQL` is SQL hosted in Azure).
+HOSTING = frozenset({"azure", "aws", "gcp", "oci"})
 # Shortest name read as an application when no ticket backs it.
 MIN_NAME = 3
 
@@ -184,6 +187,7 @@ def not_an_application(token: str) -> bool:
         or token in ROLE_WORDS
         or token in GENERIC_WORDS
         or token in SERVER_ROLES
+        or token in HOSTING
     )
 
 
@@ -290,6 +294,16 @@ class Vocabulary:
             joined = nxt is not None and text[m.end() : nxt.start()] in ("-", "_")
             tokens.append((m.group(), joined))
         return self._apps(tokens)
+
+    def in_application(self, name: str) -> list[str]:
+        """Applications named by a custom application or application-set name. A product
+        written in two words (`MS-SQL-PORT-GROUP` gives mssql) names it too (session 31)."""
+        found = self.in_object(name)
+        if found:
+            return found
+        tokens = [t.lower() for t in re.split(r"[-_.]", name) if t.isalpha()]
+        joined = [a + b for a, b in zip(tokens, tokens[1:], strict=False)]
+        return list(dict.fromkeys(j for j in joined if j in PRODUCTS))
 
     def in_object(self, name: str) -> list[str]:
         """Applications named by an address object name, for example `vendor-bi-52`."""

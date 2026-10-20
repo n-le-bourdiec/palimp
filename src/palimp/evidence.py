@@ -35,6 +35,7 @@ from palimp.behavior import recurrence, stopped, time_of_day
 from palimp.counters import Clear, clears, log_summary, meaning
 from palimp.lineage import Migration, leftover_items, migrations, takeover_claim, takeovers
 from palimp.models import (
+    AddressObject,
     Dataset,
     Evidence,
     Finding,
@@ -46,7 +47,12 @@ from palimp.models import (
 )
 from palimp.notlive import Marker, decommission_items, markers
 from palimp.owners import requester_items
-from palimp.semantics import is_broad_permit, is_catch_all_deny, is_factory_default
+from palimp.semantics import (
+    factory_source,
+    is_broad_permit,
+    is_catch_all_deny,
+    is_factory_default,
+)
 from palimp.services import NAME_FAMILIES, describe, families, port_names, service_names
 
 TICKET_REF = re.compile(r"\b(?:CHG|INC|RITM|REQ|CR|SR|TASK)[-_]?\d{4,}\b", re.IGNORECASE)
@@ -338,27 +344,27 @@ def name_service_items(dataset: Dataset, policy: Policy) -> list[Item]:
     return [Item("T3", "config.set", locator, claim, None, "name_service_mismatch")]
 
 
-def semantic_items(policy: Policy) -> list[Item]:
+def semantic_items(policy: Policy, addresses: dict[str, AddressObject]) -> list[Item]:
     """T3 items for what the rule's action and match alone say (palimp.semantics): a
     catch-all deny, a Junos factory default policy, a broad permit."""
     zones = f"from {policy.zones_text('from')} to {policy.zones_text('to')}"
     locator = f"policy {policy.name} match and then"
-    if is_catch_all_deny(policy):
+    if is_catch_all_deny(policy, addresses):
         verb = "rejects" if (policy.action or "").lower() == "reject" else "denies"
         claim = (
             f"the rule {verb} any source to any destination for any application, {zones}: "
             "a cleanup rule, it blocks whatever no rule above it permits"
         )
         return [Item("T3", "config.set", locator, claim, None, "catch_all_deny")]
-    if is_factory_default(policy):
+    if is_factory_default(policy, addresses):
         claim = (
             f"the zones, name and match ({policy.name}, permit any source to any destination "
             f"for any application, {zones}) are those of a Junos factory default policy "
-            "(Juniper SRX210 factory default sample and SRX300 factory default table): it may "
-            "have been kept from the initial setup rather than written for a flow"
+            f"({factory_source(policy)}): it may have been kept from the initial setup rather "
+            "than written for a flow"
         )
         return [Item("T3", "config.set", locator, claim, None, "factory_default")]
-    if is_broad_permit(policy):
+    if is_broad_permit(policy, addresses):
         claim = (
             f"the rule permits any source to any destination for any application, {zones}: "
             "a broad permit, it lets through flows no one may have asked for"
@@ -602,7 +608,7 @@ def collect(
         )
         locator = f"policy {policy.name} deactivated"
         items.append(Item("T3", "config.set", locator, claim, None, "deactivated"))
-    items += semantic_items(policy)
+    items += semantic_items(policy, dataset.config.addresses)
     if words := _temporary_words(policy):
         where = "name, description or annotation" if policy.annotations else "name or description"
         claim = (
@@ -669,10 +675,10 @@ def collect(
         locator = "applications " + shown(policy.applications)
         # A custom application named after a known application names it too.
         custom = [n for n in policy.applications if n != "any" and not n.startswith("junos-")]
-        apps = list(dict.fromkeys(a for n in custom for a in vocab.in_object(n)))
+        apps = list(dict.fromkeys(a for n in custom for a in vocab.in_application(n)))
         short = list(
             dict.fromkeys(
-                a for n in custom if not vocab.in_object(n) for a in vocab.short_in(n)[:1]
+                a for n in custom if not vocab.in_application(n) for a in vocab.short_in(n)[:1]
             )
         )
         plain = [

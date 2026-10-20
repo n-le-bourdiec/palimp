@@ -36,9 +36,10 @@ from palimp.assess import (
     ticket_lookup,
 )
 from palimp.counters import clears
-from palimp.evidence import collect_all, shown
+from palimp.evidence import TICKET_REF, collect_all, shown
 from palimp.lineage import networks
 from palimp.models import Dataset, Evidence, Finding, Policy
+from palimp.semantics import is_deny
 from palimp.services import describe
 
 SHOWN = 3
@@ -236,14 +237,25 @@ def allows(finding: Finding, dataset: Dataset) -> Cited:
     return Cited(text=text, evidence=cited)
 
 
+def ticket_only(text: str) -> bool:
+    """Free text made of ticket references alone (`CR576958`, `[CHG0012345]`)."""
+    return bool(TICKET_REF.search(text)) and not re.search(r"\w", TICKET_REF.sub("", text))
+
+
 # Longest stated purpose quoted in the intent sentence.
 QUOTE_SHOWN = 160
 
 
 def stated_purpose(finding: Finding) -> tuple[str, list[str]]:
     """Free text of the description and annotations, quoted as the stated purpose
-    (session 29): a claim, it never raises confidence. Empty when there is none."""
-    items = [e for e in finding.evidence if e.kind in ("description", "annotation")]
+    (session 29): a claim, it never raises confidence. Empty when there is none. A text
+    that is only a ticket reference (`CR576958`) states no purpose: the ticket look-up
+    question asks about it (session 31)."""
+    items = [
+        e
+        for e in finding.evidence
+        if e.kind in ("description", "annotation") and not ticket_only(e.claim)
+    ]
     quotes = []
     for item in items:
         # Untrusted text (decision 0028): no quote mark or bracket that could close the
@@ -283,6 +295,12 @@ def intent(finding: Finding, quote: bool = True) -> Cited:
         text = (
             "Junos factory default policy: permits all traffic from "
             f"{policy.zones_text('from')} to {policy.zones_text('to')}, {level}"
+        )
+    elif "broad_permit" in kinds:
+        text = (
+            f"Permits all traffic from {policy.zones_text('from')} to "
+            f"{policy.zones_text('to')} (broad permit: any source, any destination, any "
+            f"application), {level}"
         )
     elif deny and assessment.intent_flow:
         named = (
@@ -396,11 +414,15 @@ def name_mismatch(finding: Finding) -> bool:
 
 def team_finding(finding: Finding) -> str:
     """`factory_default` or `broad_permit` when the rule is one (session 29), a finding
-    for the firewall team list whatever its verdict; "" otherwise or when deactivated."""
+    for the firewall team list whatever its verdict; `deny` for an active deny or reject
+    rule asked about (session 31); "" otherwise or when deactivated."""
     if is_cleanup(finding):
         return ""
     kinds = {e.kind for e in finding.evidence}
-    return next((k for k in ("factory_default", "broad_permit") if k in kinds), "")
+    found = next((k for k in ("factory_default", "broad_permit") if k in kinds), "")
+    if not found and is_deny(finding.policy) and finding.assessment.verdict != "keep":  # type: ignore[union-attr]
+        found = "deny"
+    return found
 
 
 def is_shared(finding: Finding) -> bool:
@@ -446,6 +468,14 @@ def counters_only(finding: Finding) -> bool:
 
 
 INTERNET_ZONES = {"internet", "untrust", "outside", "external", "wan"}
+
+
+def from_untrusted(policy: Policy) -> bool:
+    """Traffic enters from a zone named like the internet (`untrust`, `WAN`)."""
+    zones = [policy.from_zone, *policy.match_from_zones]
+    return any((z or "").lower() in INTERNET_ZONES for z in zones)
+
+
 LOOK_SHOWN = 20
 RISKS = (
     "any application or any source",
@@ -895,7 +925,7 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
             question = DENY_QUESTION
         owner = assessment.ask or ""
         team = cleanup or shared or assessment.verdict_rule == "V-NAME-SERVICE"
-        team = team or assessment.verdict_rule in TEAM_ASK
+        team = team or assessment.verdict_rule in TEAM_ASK or team_finding(finding) == "deny"
         if cleanup:
             question, owner = CLEANUP_QUESTION, CLEANUP_ASK
         elif shared:

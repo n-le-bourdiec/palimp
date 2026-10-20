@@ -52,6 +52,7 @@ from palimp.addresses import NON_PUBLIC
 from palimp.apps import (
     CONDITIONAL_ROLES,
     GENERIC_WORDS,
+    HOSTING,
     PRODUCTS,
     ROLE_WORDS,
     SERVER_ROLES,
@@ -171,6 +172,7 @@ def is_signal(word: str) -> bool:
         or word in SERVER_ROLES
         or word in CONDITIONAL_ROLES
         or word in PRODUCTS
+        or word in HOSTING
         or word in TEMPORARY_WORDS
         or word in TICKET_PREFIXES
         or word in SIGNAL_WORDS

@@ -23,6 +23,9 @@ only reason to verify it (V-NAME-SERVICE), its owners are not asked.
 Session 29: Junos factory default policies and broad permits (any source, any
 destination, any application) are listed for the firewall team too. When that is the
 reason to verify them (V-FACTORY-DEFAULT, V-BROAD-PERMIT), owners are not asked.
+
+Session 31: broad permits from a zone named like the internet open the list; active deny
+and reject rules asked about go to the firewall team only (is the block still wanted?).
 """
 
 import csv
@@ -31,6 +34,7 @@ import re
 
 from pydantic import BaseModel
 
+from palimp.assess import DENY_QUESTION
 from palimp.models import Finding
 from palimp.report import (
     FIREWALL_TEAM,
@@ -40,6 +44,7 @@ from palimp.report import (
     Report,
     RuleEntry,
     SharedAddress,
+    from_untrusted,
     is_cleanup,
     is_shared,
     name_mismatch,
@@ -270,6 +275,18 @@ def _named_items(entries: list[RuleEntry], start: int) -> list[str]:
 
 
 TEAM_SECTIONS = {
+    "broad_inbound": (
+        "Broad permits from an untrusted zone",
+        "Each rule below permits any source to any destination for any application, from a "
+        "zone named like the internet. It lets anyone in: is it wanted as it is, or should it "
+        "be narrowed?",
+    ),
+    "deny": (
+        "Rules that block traffic",
+        "Each rule below denies or rejects traffic. Removing a block opens that traffic, so "
+        "whether it is still wanted is a question about the firewall itself, not for an "
+        "application owner.",
+    ),
     "factory_default": (
         "Junos factory default policies",
         "Each rule below has the zones, name and match of a policy of the Junos factory "
@@ -288,13 +305,25 @@ TEAM_SECTIONS = {
 def _team_items(entries: list[RuleEntry], kind: str, start: int) -> list[str]:
     lines = []
     for number, entry in enumerate(entries, start=start):
-        item = next(e for e in entry.finding.evidence if e.kind == kind)
-        rule = "V-FACTORY-DEFAULT" if kind == "factory_default" else "V-BROAD-PERMIT"
+        assessment = entry.finding.assessment
+        assert assessment is not None
+        if kind == "deny":
+            refs = ", ".join(f"{entry.ref}: {i}" for i in assessment.verdict_evidence)
+            found = (
+                f"{assessment.verdict_reason} (ref {refs})" if refs else assessment.verdict_reason
+            )
+            question = DENY_QUESTION
+        else:
+            what = "broad_permit" if kind == "broad_inbound" else kind
+            item = next(e for e in entry.finding.evidence if e.kind == what)
+            found = f"{item.claim} (ref {entry.ref}: {item.id})"
+            rule = "V-FACTORY-DEFAULT" if kind == "factory_default" else "V-BROAD-PERMIT"
+            question = YES_NO[rule]
         lines += [
             f"{number}. Rule {entry.ref} ({entry.finding.policy.name})",
             f"   What it allows: {entry.allows.text}",
-            f"   What we found: {item.claim} (ref {entry.ref}: {item.id})",
-            f"   Question: {YES_NO[rule]}",
+            f"   What we found: {found}",
+            f"   Question: {question}",
             "   Answer: [ ] yes   [ ] no   Comment:",
             "",
         ]
@@ -309,6 +338,9 @@ def _cleanup_letter(
 ) -> str:
     team = team or {}
     parts = []
+    inbound = team.get("broad_inbound", [])
+    if inbound:
+        parts.append(f"{len(inbound)} {TEAM_SECTIONS['broad_inbound'][0].lower()}")
     if entries:
         parts.append(f"{len(entries)} deactivated rule{'s' if len(entries) != 1 else ''}")
     if shared:
@@ -316,9 +348,20 @@ def _cleanup_letter(
     if named:
         parts.append(f"{len(named)} rule name{'s' if len(named) != 1 else ''} to check")
     for kind, listed in team.items():
-        if listed:
+        if listed and kind != "broad_inbound":
             parts.append(f"{len(listed)} {TEAM_SECTIONS[kind][0].lower()}")
     lines = [f"Subject: Firewall cleanup list: {', '.join(parts)}", "", "Hello firewall team,", ""]
+    start = 1
+
+    def section(kind: str, listed: list[RuleEntry]) -> list[str]:
+        title, text = TEAM_SECTIONS[kind]
+        items = _team_items(listed, kind, start)
+        return [f"{title} ({len(listed)})", "", text, NO_REMOVAL, "", *items]
+
+    # Broad permits that let traffic in from an untrusted zone come first (session 31).
+    if inbound:
+        lines += section("broad_inbound", inbound)
+        start += len(inbound)
     if entries:
         lines += [
             "These rules are deactivated: they are still in the configuration but match no "
@@ -327,8 +370,9 @@ def _cleanup_letter(
             "A 'yes' keeps it, a 'no' makes it a candidate for deletion.",
             NO_REMOVAL,
             "",
-            *_items(entries, 1),
+            *_items(entries, start),
         ]
+        start += len(entries)
     if shared:
         lines += [
             f"Addresses shared by several objects ({len(shared)})",
@@ -339,8 +383,9 @@ def _cleanup_letter(
             "us which application runs on each address today.",
             NO_REMOVAL,
             "",
-            *_shared_items(shared, len(entries) + 1),
+            *_shared_items(shared, start),
         ]
+        start += len(shared)
     if named:
         lines += [
             f"Rule names that contradict what the rule matches ({len(named)})",
@@ -349,22 +394,13 @@ def _cleanup_letter(
             "Either the name is stale, or the rule matches the wrong application.",
             NO_REMOVAL,
             "",
-            *_named_items(named, len(entries) + len(shared) + 1),
+            *_named_items(named, start),
         ]
-    start = len(entries) + len(shared) + len(named) + 1
+        start += len(named)
     for kind, listed in team.items():
-        if not listed:
-            continue
-        title, text = TEAM_SECTIONS[kind]
-        lines += [
-            f"{title} ({len(listed)})",
-            "",
-            text,
-            NO_REMOVAL,
-            "",
-            *_team_items(listed, kind, start),
-        ]
-        start += len(listed)
+        if listed and kind != "broad_inbound":
+            lines += section(kind, listed)
+            start += len(listed)
     return "\n".join(lines + CLOSING)
 
 
@@ -381,19 +417,27 @@ def build(report: Report) -> list[Questionnaire]:
     cleanup = []
     team_shared: list[RuleEntry] = []
     named: list[RuleEntry] = []
-    team: dict[str, list[RuleEntry]] = {"factory_default": [], "broad_permit": []}
+    team: dict[str, list[RuleEntry]] = {
+        "broad_inbound": [],
+        "broad_permit": [],
+        "factory_default": [],
+        "deny": [],
+    }
     for entry in sorted(asked, key=lambda r: r.section != "removal_candidate"):
         assessment = entry.finding.assessment
         assert assessment is not None
         if name_mismatch(entry.finding):
             named.append(entry)
         if kind := team_finding(entry.finding):
-            team[kind].append(entry)
+            if kind == "broad_permit" and from_untrusted(entry.finding.policy):
+                team["broad_inbound"].append(entry)
+            else:
+                team[kind].append(entry)
         if is_cleanup(entry.finding):
             cleanup.append(entry)
         elif is_shared(entry.finding):
             team_shared.append(entry)
-        elif assessment.verdict_rule in TEAM_RULES:
+        elif assessment.verdict_rule in TEAM_RULES or kind == "deny":
             continue
         elif assessment.owner:
             owned.setdefault(assessment.owner, []).append(entry)

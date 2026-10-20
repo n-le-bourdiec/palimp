@@ -615,6 +615,9 @@ TEAM_ASK = {
     "V-BROAD-PERMIT": "firewall team: a broad permit (any source, any destination, any "
     "application), a question about the rule itself",
 }
+# Who decides a block is still wanted (session 31): the firewall team, not the owner of
+# what the rule names.
+DENY_ASK = "firewall team: a rule that blocks traffic, a question about the block itself"
 
 
 def ticket_lookup(finding: Finding) -> str:
@@ -647,7 +650,7 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
     if v_rule in TEAM_ASK:
         ask = TEAM_ASK[v_rule]
     elif is_deny(finding.policy) and verdict == "verify":
-        question = DENY_QUESTION
+        question, ask = DENY_QUESTION, DENY_ASK
     if finding.policy.deactivated and verdict != "keep":
         question, ask = CLEANUP_QUESTION, CLEANUP_ASK
     if question:

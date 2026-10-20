@@ -179,3 +179,104 @@ def test_a_deny_on_a_dynamic_application_names_what_it_blocks(tmp_path: Path) ->
     text = intent(found).text
     assert text.startswith("Blocks dynamic application junos:QUIBVID from anywhere in zone a")
     assert "the rule names quibvid" in text and "protect" not in text
+
+
+# Session 31, review-4 fixes.
+
+
+def test_a_description_that_is_only_a_ticket_reference_is_not_a_stated_purpose(
+    tmp_path: Path,
+) -> None:
+    head = "set security policies from-zone a to-zone b policy p1"
+    config = policy("p1", "any", "qorv-web-01", "junos-https", "permit")
+    config += f"{head} description CR576958\n"
+    found = collect(run(tmp_path, config), PolicyKey.parse("a/b/p1"))
+    assert "Stated purpose" not in intent(found).text
+    assert found.assessment.question.startswith("Look up CR576958")
+
+
+def test_factory_default_evidence_cites_its_real_source(tmp_path: Path) -> None:
+    config = rule("trust", "untrust", "trust-to-untrust", "any", "any", "any", "permit")
+    config += rule("trust", "trust", "default-permit", "any", "any", "any", "permit")
+    data = run(tmp_path, config)
+    claims = {
+        key: next(e.claim for e in collect(data, PolicyKey.parse(key)).evidence if e.kind == kind)
+        for key, kind in (
+            ("trust/untrust/trust-to-untrust", "factory_default"),
+            ("trust/trust/default-permit", "factory_default"),
+        )
+    }
+    assert (
+        "as in the Juniper SRX210 factory default sample"
+        in claims["trust/untrust/trust-to-untrust"]
+    )
+    other = claims["trust/trust/default-permit"]
+    assert "SRX300 factory default table" in other
+    assert "practitioner usage" in other and "no Juniper sample shows it" in other
+    assert "SRX210" not in other
+
+
+def test_a_broad_permit_says_what_it_permits_and_inbound_ones_come_first(
+    tmp_path: Path,
+) -> None:
+    config = rule("trust", "dmz", "open-dmz", "any", "any", "any", "permit")
+    config += rule("untrust", "LAN", "untrust_to_LAN", "any", "any", "any", "permit")
+    data = run(tmp_path, config)
+    found = collect(data, PolicyKey.parse("untrust/LAN/untrust_to_LAN"))
+    assert intent(found).text.startswith("Permits all traffic from zone untrust to zone LAN")
+    report = build_report(data)
+    (team,) = [q for q in build_questions(report) if q.name == CLEANUP_NAME]
+    first = team.text.index("Broad permits from an untrusted zone (1)")
+    assert first < team.text.index("Broad permits (1)")
+    assert team.text.index("1. Rule R2 (untrust_to_LAN)") < team.text.index("2. Rule R1")
+
+
+def test_hosting_platforms_are_a_location_and_application_groups_a_name(
+    tmp_path: Path,
+) -> None:
+    config = (
+        "set security address-book global address GIT-AZURE-SQL-100.112.37.32/28 "
+        "100.112.37.32/28\n"
+        "set security address-book global address azure-files 10.40.0.5/32\n"
+        "set applications application-set MS-SQL-PORT-GROUP application junos-ms-sql\n"
+        + policy(
+            "ON-PREM-to-AZURE-SQL", "any", "GIT-AZURE-SQL-100.112.37.32/28", "junos-https", "permit"
+        )
+        + policy("p2", "any", "qorv-web-01", "MS-SQL-PORT-GROUP", "permit")
+    )
+    data = run(tmp_path, config)
+    a = collect(data, PolicyKey.parse("a/b/ON-PREM-to-AZURE-SQL")).assessment
+    assert "azure" not in a.intent_apps
+    found = collect(data, PolicyKey.parse("a/b/p2"))
+    services = next(e for e in found.evidence if e.kind == "services")
+    assert services.apps == ["mssql"]
+
+
+def test_an_object_named_any_is_read_by_its_contents(tmp_path: Path) -> None:
+    config = (
+        "set security address-book global address ANY_0 10.0.0.0/8\n"
+        "set security address-book global address-set ANY address ANY_0\n"
+        "set security address-book global address ALL-V4 0.0.0.0/0\n"
+        "set security address-book global address-set EVERYTHING address ALL-V4\n"
+        + policy("p1", "ANY", "any", "any", "deny")
+        + policy("p2", "EVERYTHING", "any", "any", "deny")
+    )
+    data = run(tmp_path, config)
+    kinds = {
+        name: {e.kind for e in collect(data, PolicyKey.parse(f"a/b/{name}")).evidence}
+        for name in ("p1", "p2")
+    }
+    assert "catch_all_deny" not in kinds["p1"]
+    assert "catch_all_deny" in kinds["p2"]
+
+
+def test_deny_questions_go_to_the_firewall_team(tmp_path: Path) -> None:
+    data = run(tmp_path, policy("no-ftp", "any", "qorv-lan", "junos-ftp", "deny"))
+    a = collect(data, PolicyKey.parse("a/b/no-ftp")).assessment
+    assert a.ask.startswith("firewall team: a rule that blocks traffic")
+    report = build_report(data)
+    assert report.rules[0].group == FIREWALL_TEAM
+    questionnaires = build_questions(report)
+    assert [q.name for q in questionnaires] == [CLEANUP_NAME]
+    assert "Rules that block traffic (1)" in questionnaires[0].text
+    assert "Question: Is this block still wanted?" in questionnaires[0].text

@@ -68,3 +68,30 @@ anonymize tests failed on it, in two ways:
    are sources that are not names, like a description: either one confirms
    a two-letter name an object or application name gives. The policy name
    still never does. Confidence only (LOW to MEDIUM), no verdict moves.
+5. Review-4 fixes (`../palimp-realconfigs/review-4.md`):
+   - a description or annotation made only of ticket references
+     (`CR576958`) is not quoted as a stated purpose; the ticket look-up
+     question already asks about it;
+   - factory default evidence cites its real source: `trust-to-untrust` is
+     the SRX210 factory default sample; the trust to trust pair is the SRX300
+     factory default table (no name); `default-permit` is practitioner usage,
+     in no Juniper sample;
+   - a broad permit's intent says what it permits ("Permits all traffic from
+     zone untrust to zone LAN"); broad permits from a zone named like the
+     internet open the firewall team list, in their own section;
+   - hosting platforms (`azure`, `aws`, `gcp`, `oci`) are where an
+     application runs, never an application unless tickets.csv backs the
+     name; anonymize keeps them like other signal words. A product written in
+     two words in a custom application or application-set name
+     (`MS-SQL-PORT-GROUP`) names the product (mssql);
+   - an address-book object named like the keyword (`ANY`) is read by its
+     contents: any only when it holds 0.0.0.0/0 or ::/0. The keyword itself
+     is lowercase `any`;
+   - deny and reject rules asked about go to the firewall team only (Ask
+     line and a "Rules that block traffic" section of the team list), not to
+     the owner of what they name.
+   Direction: confidence and routing only. Broad permits and factory
+   defaults are already at most verify. A rule using an object `ANY` that is
+   not 0.0.0.0/0 is no longer read as catch-all deny (keep) or broad permit
+   (verify): its verdict follows the usual rules (keep, verify, or
+   removal_candidate only on a positive not-live signal, as for any rule).
