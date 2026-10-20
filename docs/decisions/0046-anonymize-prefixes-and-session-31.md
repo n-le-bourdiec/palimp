@@ -95,3 +95,12 @@ anonymize tests failed on it, in two ways:
    not 0.0.0.0/0 is no longer read as catch-all deny (keep) or broad permit
    (verify): its verdict follows the usual rules (keep, verify, or
    removal_candidate only on a positive not-live signal, as for any rule).
+6. Shadowed rules: an active rule placed after an active catch-all deny of
+   the same zone pair can never match (Junos evaluates a zone pair's
+   policies in order; zone policies before global ones, so a global deny
+   shadows only later global policies of the same zone match). A T3
+   `shadowed` item says so; a keep verdict becomes verify (`V-SHADOWED`),
+   asked of the firewall team in a "Rules placed after a catch-all deny"
+   section. Other verdicts are unchanged, and the finding never gives
+   removal_candidate: that would need the project lead's approval, not
+   before release. Deactivated rules are neither shadowed nor shadowing.

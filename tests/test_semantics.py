@@ -280,3 +280,31 @@ def test_deny_questions_go_to_the_firewall_team(tmp_path: Path) -> None:
     assert [q.name for q in questionnaires] == [CLEANUP_NAME]
     assert "Rules that block traffic (1)" in questionnaires[0].text
     assert "Question: Is this block still wanted?" in questionnaires[0].text
+
+
+def test_a_rule_after_a_catch_all_deny_is_shadowed_at_most_verify(tmp_path: Path) -> None:
+    # Session 31: a rule placed after a catch-all deny of the same zone pair never matches.
+    config = policy("to-web", "any", "qorv-web-01", "junos-https", "permit")
+    config += policy("deny-rest", "any", "any", "any", "deny")
+    config += policy("late-web", "any", "qorv-web-01", "junos-http", "permit")
+    config += policy("old-late", "any", "qorv-web-01", "junos-ftp", "permit")
+    config += "deactivate security policies from-zone a to-zone b policy old-late\n"
+    config += rule("a", "c", "other-pair", "any", "qorv-web-01", "junos-http", "permit")
+    hits = (
+        "1   a   b   to-web   50   Permit\n2   a   b   deny-rest   9   Deny\n"
+        "3   a   b   late-web   40   Permit\n4   a   c   other-pair   40   Permit\n"
+    )
+    data = run(tmp_path, config, hits)
+    late = collect(data, PolicyKey.parse("a/b/late-web"))
+    assert any(e.kind == "shadowed" and "deny-rest" in e.claim for e in late.evidence)
+    a = late.assessment
+    assert (a.verdict, a.verdict_rule) == ("verify", "V-SHADOWED")
+    assert a.ask.startswith("firewall team")
+    for key in ("a/b/to-web", "a/b/deny-rest", "a/c/other-pair", "a/b/old-late"):
+        found = collect(data, PolicyKey.parse(key))
+        assert not any(e.kind == "shadowed" for e in found.evidence), key
+    assert collect(data, PolicyKey.parse("a/b/to-web")).assessment.verdict == "keep"
+    report = build_report(data)
+    assert all(r.section != "removal_candidate" or r.key == "a/b/old-late" for r in report.rules)
+    (team,) = [q for q in build_questions(report) if q.name == CLEANUP_NAME]
+    assert "Rules placed after a catch-all deny (1)" in team.text

@@ -176,6 +176,7 @@ YES_NO = {
     "V-DENY-NOTLIVE": DENY_QUESTION,
     "V-FACTORY-DEFAULT": "Was this factory default kept on purpose?",
     "V-BROAD-PERMIT": "Is this broad access wanted as it is?",
+    "V-SHADOWED": "Is this rule still needed (it would have to move above the deny)?",
 }
 
 
@@ -419,7 +420,7 @@ def team_finding(finding: Finding) -> str:
     if is_cleanup(finding):
         return ""
     kinds = {e.kind for e in finding.evidence}
-    found = next((k for k in ("factory_default", "broad_permit") if k in kinds), "")
+    found = next((k for k in ("factory_default", "broad_permit", "shadowed") if k in kinds), "")
     if not found and is_deny(finding.policy) and finding.assessment.verdict != "keep":  # type: ignore[union-attr]
         found = "deny"
     return found

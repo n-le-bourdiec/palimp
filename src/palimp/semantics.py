@@ -11,7 +11,7 @@ Plain rules, no scoring:
 - a broad permit permits any source to any destination for any application.
 """
 
-from palimp.models import AddressObject, Policy
+from palimp.models import AddressObject, Config, Policy
 
 DENY_ACTIONS = frozenset({"deny", "reject"})
 # Zone pair -> policy names of a Junos factory default policy (any/any/any permit).
@@ -97,3 +97,28 @@ def factory_source(policy: Policy) -> str:
         f"{pair}; the name {policy.name} comes from practitioner usage on real "
         "configurations, no Juniper sample shows it"
     )
+
+
+def shadowing_deny(policy: Policy, config: Config) -> Policy | None:
+    """The active catch-all deny placed before POLICY in the same zone pair, if any
+    (session 31): Junos evaluates the policies of a zone pair in order, so POLICY can
+    never match. A global deny shadows only later global policies of the same zone match
+    (zone policies are evaluated before global ones). A deactivated rule is not read."""
+    if policy.deactivated:
+        return None
+    for other in config.policies:
+        if other is policy:
+            return None
+        if other.deactivated or other.is_global != policy.is_global:
+            continue
+        if policy.is_global:
+            same = not other.match_from_zones and not other.match_to_zones
+            same = same or (
+                other.match_from_zones == policy.match_from_zones
+                and other.match_to_zones == policy.match_to_zones
+            )
+        else:
+            same = (other.from_zone, other.to_zone) == (policy.from_zone, policy.to_zone)
+        if same and is_catch_all_deny(other, config.addresses):
+            return other
+    return None

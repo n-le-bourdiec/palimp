@@ -68,7 +68,7 @@ ANSWER_COLUMNS = [
 
 CLEANUP_NAME = "00-firewall-team-cleanup"
 # Verdict rules asked of the firewall team only, never of the owners.
-TEAM_RULES = frozenset({"V-NAME-SERVICE", "V-FACTORY-DEFAULT", "V-BROAD-PERMIT"})
+TEAM_RULES = frozenset({"V-NAME-SERVICE", "V-FACTORY-DEFAULT", "V-BROAD-PERMIT", "V-SHADOWED"})
 
 
 class Questionnaire(BaseModel):
@@ -281,6 +281,12 @@ TEAM_SECTIONS = {
         "zone named like the internet. It lets anyone in: is it wanted as it is, or should it "
         "be narrowed?",
     ),
+    "shadowed": (
+        "Rules placed after a catch-all deny",
+        "Each rule below comes after a catch-all deny of the same zone pair. Policies are "
+        "evaluated in order, so it never matches: should it move above the deny, or is it a "
+        "leftover?",
+    ),
     "deny": (
         "Rules that block traffic",
         "Each rule below denies or rejects traffic. Removing a block opens that traffic, so "
@@ -317,8 +323,8 @@ def _team_items(entries: list[RuleEntry], kind: str, start: int) -> list[str]:
             what = "broad_permit" if kind == "broad_inbound" else kind
             item = next(e for e in entry.finding.evidence if e.kind == what)
             found = f"{item.claim} (ref {entry.ref}: {item.id})"
-            rule = "V-FACTORY-DEFAULT" if kind == "factory_default" else "V-BROAD-PERMIT"
-            question = YES_NO[rule]
+            rule = {"factory_default": "V-FACTORY-DEFAULT", "shadowed": "V-SHADOWED"}
+            question = YES_NO[rule.get(kind, "V-BROAD-PERMIT")]
         lines += [
             f"{number}. Rule {entry.ref} ({entry.finding.policy.name})",
             f"   What it allows: {entry.allows.text}",
@@ -421,6 +427,7 @@ def build(report: Report) -> list[Questionnaire]:
         "broad_inbound": [],
         "broad_permit": [],
         "factory_default": [],
+        "shadowed": [],
         "deny": [],
     }
     for entry in sorted(asked, key=lambda r: r.section != "removal_candidate"):

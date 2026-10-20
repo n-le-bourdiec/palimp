@@ -604,12 +604,16 @@ QUESTIONS = {
     "V-DENY-NOTLIVE": "This rule blocks traffic, and a record says what it protects is gone. "
     "Is this block still wanted?",
     "V-FACTORY-DEFAULT": "Was this factory default kept on purpose?",
+    "V-SHADOWED": "This rule comes after a catch-all deny of its zone pair, so it never "
+    "matches. Should it move above the deny, or is it a leftover?",
     "V-BROAD-PERMIT": "This rule permits any source to any destination for any application. "
     "Is it wanted as it is, or should it be narrowed?",
 }
 # Deny and reject rules (session 29): the question is about the block itself.
 DENY_QUESTION = "Is this block still wanted?"
 TEAM_ASK = {
+    "V-SHADOWED": "firewall team: the rule comes after a catch-all deny, a question about the "
+    "order of the rules",
     "V-FACTORY-DEFAULT": "firewall team: a Junos factory default policy, a question about the "
     "setup of the firewall itself",
     "V-BROAD-PERMIT": "firewall team: a broad permit (any source, any destination, any "
@@ -634,8 +638,22 @@ def ticket_lookup(finding: Finding) -> str:
     return f"Look up {listed} in your change system: it may say why this rule exists. "
 
 
+def _shadowed(verdict: tuple[str, str, str, list[str]], finding: Finding) -> tuple:
+    """A rule placed after a catch-all deny of its zone pair can never match (session 31):
+    a keep becomes verify, a question for the firewall team. Never a removal candidate
+    (that needs the project lead's approval); other verdicts are unchanged."""
+    shadowed = [e for e in finding.evidence if e.kind == "shadowed"]
+    if not shadowed or verdict[0] != "keep":
+        return verdict
+    hits = [e for e in finding.evidence if e.tier == "T2" and e.signal == "present"]
+    reason = "the rule comes after a catch-all deny of its zone pair, so it can never match"
+    if hits:
+        reason += "; traffic seen on it contradicts that, the order may differ on the device"
+    return "verify", "V-SHADOWED", reason, _ids(shadowed + hits)
+
+
 def assess(finding: Finding, dataset: Dataset) -> Assessment:
-    verdict, v_rule, v_reason, v_evidence = _verdict(finding)
+    verdict, v_rule, v_reason, v_evidence = _shadowed(_verdict(finding), finding)
     level, c_rule, c_reason, c_evidence, apps, conflicts = _capped(finding, _confidence(finding))
     question = QUESTIONS[v_rule] if verdict != "keep" else None
     # A flow between two applications may belong to either side: every application

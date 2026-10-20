@@ -52,6 +52,7 @@ from palimp.semantics import (
     is_broad_permit,
     is_catch_all_deny,
     is_factory_default,
+    shadowing_deny,
 )
 from palimp.services import NAME_FAMILIES, describe, families, port_names, service_names
 
@@ -609,6 +610,15 @@ def collect(
         locator = f"policy {policy.name} deactivated"
         items.append(Item("T3", "config.set", locator, claim, None, "deactivated"))
     items += semantic_items(policy, dataset.config.addresses)
+    if deny := shadowing_deny(policy, dataset.config):
+        claim = (
+            f"the rule comes after {deny.name}, a catch-all deny of the same zone pair "
+            f"({policy.zones_text('from')} to {policy.zones_text('to')}): policies are "
+            "evaluated in order, so this rule can never match; the order may be a mistake, "
+            "or the rule a leftover"
+        )
+        locator = f"policy {policy.name} position after policy {deny.name}"
+        items.append(Item("T3", "config.set", locator, claim, None, "shadowed"))
     if words := _temporary_words(policy):
         where = "name, description or annotation" if policy.annotations else "name or description"
         claim = (
