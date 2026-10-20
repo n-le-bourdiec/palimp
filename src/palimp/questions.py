@@ -15,6 +15,10 @@ References (R12, E3) point to the report, for the person who tracks the answers.
 Decision 0041: rules whose verdict comes from a shared address go to the
 firewall team list as well, one question per address shared by several
 objects, never one question per rule to owners.
+
+Decision 0043: a rule whose name names a service it does not match is asked of the
+firewall team as well (is the name stale, or the match wrong?). When that is the
+only reason to verify it (V-NAME-SERVICE), its owners are not asked.
 """
 
 import csv
@@ -26,12 +30,14 @@ from pydantic import BaseModel
 from palimp.models import Finding
 from palimp.report import (
     FIREWALL_TEAM,
+    NAME_SERVICE_QUESTION,
     SHARED_QUESTION,
     Report,
     RuleEntry,
     SharedAddress,
     is_cleanup,
     is_shared,
+    name_mismatch,
     shared_addresses,
 )
 
@@ -108,6 +114,7 @@ def _plain_reason(entry: RuleEntry) -> str:
         "traffic still uses it. It may now be needed for flows it was not written for.",
         "V-TAKEOVER-IN-USE": "It lets any application through, and it now carries traffic that "
         "other rules, since removed, used to carry.",
+        "V-NAME-SERVICE": "It is used, but its name names a service it does not let through.",
         "V-TRAFFIC-STOPPED": "Traffic went through it regularly, then stopped several weeks "
         "before the end of the period we looked at.",
         "V-TRAFFIC-NOT-RECENT": "It was used at some point, but no use was recorded in the "
@@ -232,12 +239,31 @@ def _shared_items(shared: list[SharedAddress], start: int) -> list[str]:
     return lines
 
 
-def _cleanup_letter(entries: list[RuleEntry], shared: list[SharedAddress]) -> str:
+def _named_items(entries: list[RuleEntry], start: int) -> list[str]:
+    lines = []
+    for number, entry in enumerate(entries, start=start):
+        item = next(e for e in entry.finding.evidence if e.kind == "name_service_mismatch")
+        lines += [
+            f"{number}. Rule {entry.ref} ({entry.finding.policy.name})",
+            f"   What it allows: {entry.allows.text}",
+            f"   What we found: {item.claim} (ref {entry.ref}: {item.id})",
+            f"   Question: {NAME_SERVICE_QUESTION}",
+            "   Answer:",
+            "",
+        ]
+    return lines
+
+
+def _cleanup_letter(
+    entries: list[RuleEntry], shared: list[SharedAddress], named: list[RuleEntry]
+) -> str:
     parts = []
     if entries:
         parts.append(f"{len(entries)} deactivated rule{'s' if len(entries) != 1 else ''}")
     if shared:
         parts.append(f"{len(shared)} shared address{'es' if len(shared) != 1 else ''}")
+    if named:
+        parts.append(f"{len(named)} rule name{'s' if len(named) != 1 else ''} to check")
     lines = [f"Subject: Firewall cleanup list: {', '.join(parts)}", "", "Hello firewall team,", ""]
     if entries:
         lines += [
@@ -261,6 +287,16 @@ def _cleanup_letter(entries: list[RuleEntry], shared: list[SharedAddress]) -> st
             "",
             *_shared_items(shared, len(entries) + 1),
         ]
+    if named:
+        lines += [
+            f"Rule names that contradict what the rule matches ({len(named)})",
+            "",
+            "The name of each rule below names a service the rule does not let through. "
+            "Either the name is stale, or the rule matches the wrong application.",
+            NO_REMOVAL,
+            "",
+            *_named_items(named, len(entries) + len(shared) + 1),
+        ]
     return "\n".join(lines + CLOSING)
 
 
@@ -276,13 +312,18 @@ def build(report: Report) -> list[Questionnaire]:
     unnamed: dict[str, list[RuleEntry]] = {}
     cleanup = []
     team_shared: list[RuleEntry] = []
+    named: list[RuleEntry] = []
     for entry in sorted(asked, key=lambda r: r.section != "removal_candidate"):
         assessment = entry.finding.assessment
         assert assessment is not None
+        if name_mismatch(entry.finding):
+            named.append(entry)
         if is_cleanup(entry.finding):
             cleanup.append(entry)
         elif is_shared(entry.finding):
             team_shared.append(entry)
+        elif assessment.verdict_rule == "V-NAME-SERVICE":
+            continue
         elif assessment.owner:
             owned.setdefault(assessment.owner, []).append(entry)
         elif assessment.owner_candidates:
@@ -292,14 +333,14 @@ def build(report: Report) -> list[Questionnaire]:
             unnamed.setdefault(entry.group, []).append(entry)
     found = []
     shared = shared_addresses(team_shared)
-    if cleanup or shared:
+    if cleanup or shared or named:
         found.append(
             Questionnaire(
                 name=CLEANUP_NAME,
                 group=FIREWALL_TEAM,
                 recipients=[FIREWALL_TEAM],
-                owned=[e.ref for e in cleanup + team_shared],
-                text=_cleanup_letter(cleanup, shared),
+                owned=list(dict.fromkeys(e.ref for e in cleanup + team_shared + named)),
+                text=_cleanup_letter(cleanup, shared, named),
             )
         )
     number = 0

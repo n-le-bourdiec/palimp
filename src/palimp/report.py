@@ -160,6 +160,7 @@ YES_NO = {
     "V-NOTLIVE": "Is this access still needed by anyone?",
     "V-TEMPORARY-IN-USE": "Is this temporary opening still needed?",
     "V-TAKEOVER-IN-USE": "Is this broad access still needed as it is?",
+    "V-NAME-SERVICE": "Is the access this rule matches today still needed?",
     "V-TRAFFIC-STOPPED": "Is this flow still needed (paused rather than ended)?",
     "V-TRAFFIC-NOT-RECENT": "Is this flow still needed, even if it runs rarely?",
     "V-NO-TRAFFIC-SEEN": "Is this flow still needed, even if it runs rarely?",
@@ -266,6 +267,24 @@ def is_cleanup(finding: Finding) -> bool:
     assessment = finding.assessment
     assert assessment is not None
     return finding.policy.deactivated and assessment.verdict != "keep"
+
+
+NAME_SERVICE_QUESTION = (
+    "The name of this rule names a service it does not match: is the name stale, or does "
+    "the rule match the wrong application?"
+)
+NAME_SERVICE_ASK = (
+    "firewall team: the policy name names a service the rule does not match, a question "
+    "about the rule itself (decision 0043)"
+)
+
+
+def name_mismatch(finding: Finding) -> bool:
+    """The policy name names a service the rule does not match (decision 0043): a
+    question for the firewall team list."""
+    return not is_cleanup(finding) and any(
+        e.kind == "name_service_mismatch" for e in finding.evidence
+    )
 
 
 def is_shared(finding: Finding) -> bool:
@@ -757,16 +776,19 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
         shared = is_shared(finding)
         question = YES_NO[assessment.verdict_rule] if assessment.verdict != "keep" else ""
         owner = assessment.ask or ""
+        team = cleanup or shared or assessment.verdict_rule == "V-NAME-SERVICE"
         if cleanup:
             question, owner = CLEANUP_QUESTION, CLEANUP_ASK
         elif shared:
             question, owner = SHARED_QUESTION, SHARED_ASK
+        elif assessment.verdict_rule == "V-NAME-SERVICE":
+            question, owner = NAME_SERVICE_QUESTION, NAME_SERVICE_ASK
         entries.append(
             RuleEntry(
                 ref=ref,
                 key=str(finding.key),
                 section=assessment.verdict,
-                group=FIREWALL_TEAM if cleanup or shared else owner_group(finding),
+                group=FIREWALL_TEAM if team else owner_group(finding),
                 allows=allows(finding, dataset),
                 internet=internet_facing(finding, dataset),
                 why=why(finding, notes, ref),

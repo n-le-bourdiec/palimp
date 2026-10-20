@@ -25,6 +25,9 @@ Verdict rules, first match wins:
   Never removal_candidate: old hits are still hits.
 - V-TRAFFIC-STOPPED (verify): logged traffic was dense, then stopped well
   before the end of the log window.
+- V-NAME-SERVICE (verify): traffic seen, but the policy name names a service
+  the matched applications do not offer (`ALLOW-SNMP` on junos-https,
+  decision 0043). Never keep; the question goes to the firewall team.
 - V-TRAFFIC (keep): traffic seen.
 - V-NO-TRAFFIC-SEEN (verify): artifacts could show traffic and show none.
   Absence is never evidence of absence: this never gives removal_candidate.
@@ -178,6 +181,15 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
             "V-TRAFFIC-STOPPED",
             "logged traffic stopped well before the end of the log window: the flow may have ended",
             _ids(stop),
+        )
+    mismatch = [e for e in evidence if e.kind == "name_service_mismatch"]
+    if present and mismatch:
+        return (
+            "verify",
+            "V-NAME-SERVICE",
+            "traffic seen, but the policy name names a service the rule does not match: "
+            "the rule may not do what its name says",
+            _ids(mismatch + present),
         )
     if present:
         return "keep", "V-TRAFFIC", "traffic seen", _ids(present)
@@ -410,6 +422,12 @@ def _capped(
         if level == "HIGH":
             level, rule = "MEDIUM", "C-SHARED-ADDRESS"
             reason += "; but an address of the policy is also an object of another application"
+    for item in [e for e in finding.evidence if e.kind == "name_service_mismatch"]:
+        conflicts = [*conflicts, Conflict(evidence=[item.id], text=f"{item.id}: {item.claim}")]
+        cited = sorted(set(cited) | {item.id}, key=_order)
+        if level == "HIGH":
+            level, rule = "MEDIUM", "C-NAME-SERVICE"
+            reason += "; but the policy name names a service the rule does not match"
     found = level, rule, reason, cited, apps, conflicts
     ambiguous = next(
         (e for e in finding.evidence if e.kind == "ambiguous_app" and e.apps[0] in apps[:1]),
@@ -451,6 +469,8 @@ QUESTIONS = {
     "V-TAKEOVER-IN-USE": "This policy permits any application and now carries the traffic of "
     "policies that were removed or deactivated. Which flows does it serve, and should they get "
     "narrower rules?",
+    "V-NAME-SERVICE": "The name of this policy names a service it does not match. Is the "
+    "name stale, or does the policy match the wrong application?",
     "V-TRAFFIC-STOPPED": "Traffic on this policy stopped some weeks ago. Has the flow ended "
     "(migration, retirement), or is it paused?",
     "V-TRAFFIC-NOT-RECENT": "Traffic matched this policy in the past but none was logged "

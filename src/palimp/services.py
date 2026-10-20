@@ -299,3 +299,89 @@ def aliases(name: str) -> frozenset[str]:
         if name in names:
             return frozenset(names)
     return frozenset({name})
+
+
+# Service families (session 28, decision 0043): what a policy name may say about the
+# service it is for, and the ports of each family. A name naming a family that no
+# matched application belongs to contradicts the match ("ALLOW-SNMP" on junos-https).
+FAMILY_PORTS: dict[str, frozenset[str]] = {
+    "SNMP": frozenset({"udp/161", "udp/162", "tcp/161", "tcp/162"}),
+    "SSH": frozenset({"tcp/22"}),
+    "Telnet": frozenset({"tcp/23"}),
+    "RDP": frozenset({"tcp/3389", "udp/3389"}),
+    "web": frozenset({"tcp/80", "tcp/443", "tcp/8080", "tcp/8443", "udp/443"}),
+    "DNS": frozenset({"udp/53", "tcp/53"}),
+    "NTP": frozenset({"udp/123"}),
+    "mail": frozenset({"tcp/25", "tcp/465", "tcp/587", "tcp/110", "tcp/143", "tcp/993", "tcp/995"}),
+    "LDAP": frozenset({"tcp/389", "tcp/636", "tcp/3268", "udp/389"}),
+    "syslog": frozenset({"udp/514", "tcp/514", "tcp/6514"}),
+    "ICMP": frozenset({"icmp"}),
+    "FTP": frozenset({"tcp/20", "tcp/21", "tcp/990", "tcp/22"}),
+    "TFTP": frozenset({"udp/69"}),
+    "SMB": frozenset({"tcp/445", "tcp/139", "udp/137", "udp/138", "tcp/137"}),
+    "RADIUS": frozenset({"udp/1812", "udp/1813", "udp/1645", "udp/1646"}),
+    "NFS": frozenset({"tcp/2049", "udp/2049", "tcp/111", "udp/111"}),
+    "Kerberos": frozenset({"tcp/88", "udp/88"}),
+    "BGP": frozenset({"tcp/179"}),
+    "VNC": frozenset({"tcp/5900", "tcp/5800"}),
+}
+# Words of a policy name that name a family. `web` and `mail` are server roles,
+# not service names, and are left out.
+NAME_FAMILIES: dict[str, str] = {
+    "snmp": "SNMP",
+    "ssh": "SSH",
+    "sftp": "FTP",
+    "scp": "SSH",
+    "telnet": "Telnet",
+    "rdp": "RDP",
+    "http": "web",
+    "https": "web",
+    "dns": "DNS",
+    "ntp": "NTP",
+    "smtp": "mail",
+    "imap": "mail",
+    "pop3": "mail",
+    "ldap": "LDAP",
+    "ldaps": "LDAP",
+    "syslog": "syslog",
+    "icmp": "ICMP",
+    "ping": "ICMP",
+    "ftp": "FTP",
+    "tftp": "TFTP",
+    "smb": "SMB",
+    "cifs": "SMB",
+    "radius": "RADIUS",
+    "nfs": "NFS",
+    "kerberos": "Kerberos",
+    "bgp": "BGP",
+    "vnc": "VNC",
+}
+
+
+def families(name: str, applications: dict[str, Application], depth: int = 0) -> set[str] | None:
+    """Service families of one application (or set). None when one port is not known
+    (`any`, a custom port in no family, an undefined name): nothing can be compared."""
+    if name in PREDEFINED:
+        ports = [PREDEFINED[name][1]]
+    else:
+        app = applications.get(name)
+        if app is None:
+            return None
+        if app.kind == "application_set":
+            if depth > 3:
+                return None
+            found: set[str] = set()
+            for member in app.members:
+                part = families(member, applications, depth + 1)
+                if part is None:
+                    return None
+                found |= part
+            return found
+        ports = [f"{p or '?'}/{d}" if d else (p or "?") for p, d in app.ports()]
+    found = set()
+    for port in ports:
+        part = {f for f, known in FAMILY_PORTS.items() if port in known}
+        if not part:
+            return None
+        found |= part
+    return found

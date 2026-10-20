@@ -46,7 +46,7 @@ from palimp.models import (
 )
 from palimp.notlive import Marker, decommission_items, markers
 from palimp.owners import requester_items
-from palimp.services import describe, port_names, service_names
+from palimp.services import NAME_FAMILIES, describe, families, port_names, service_names
 
 TICKET_REF = re.compile(r"\b(?:CHG|INC|RITM|REQ|CR|SR|TASK)[-_]?\d{4,}\b", re.IGNORECASE)
 
@@ -303,6 +303,29 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
     return items
 
 
+def name_service_items(dataset: Dataset, policy: Policy) -> list[Item]:
+    """A T3 item when the policy name names a service (`ALLOW-SNMP`) that none of the
+    matched applications offers (`junos-https`), decision 0043. Nothing when an
+    application cannot be compared (`any`, an unknown port)."""
+    words = re.split(r"[^a-z0-9]+", policy.name.lower())
+    named = list(dict.fromkeys(NAME_FAMILIES[w] for w in words if w in NAME_FAMILIES))
+    if not named or not policy.applications:
+        return []
+    matched = [families(n, dataset.config.applications) for n in policy.applications]
+    if any(m is None for m in matched):
+        return []
+    offered = set().union(*[m for m in matched if m is not None])
+    if set(named) & offered:
+        return []
+    claim = (
+        f"the policy name names {', '.join(named)}, while the rule matches "
+        f"{', '.join(policy.applications)} ({', '.join(sorted(offered))}): the name or the "
+        "match may be stale, the rule may not do what its name says"
+    )
+    locator = f"policy {policy.name} name and match application"
+    return [Item("T3", "config.set", locator, claim, None, "name_service_mismatch")]
+
+
 def _flat(name: str) -> str:
     return re.sub(r"[-_.\s]+", "-", name.lower()).strip("-")
 
@@ -479,6 +502,7 @@ def collect(
                 short_apps=name_short,
             )
         )
+    items += name_service_items(dataset, policy)
     items += shared_address_items(dataset, policy, vocab)
     if policy.dynamic_applications:
         claim = (

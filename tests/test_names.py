@@ -1,5 +1,7 @@
 """Name filters, server roles and the corroboration rule (decision 0042). Invented names."""
 
+from pathlib import Path
+
 from palimp.apps import (
     GENERIC_WORDS,
     PRODUCTS,
@@ -310,3 +312,44 @@ def test_a_flow_is_described_when_nothing_names_an_application() -> None:
     assert intent(found).text.startswith("Probably SNMP traps from the management range")
     # Nothing to describe: no service, no role.
     assert collect(dataset(rules), PolicyKey.parse("a/b/p2")).assessment.intent_flow is None
+
+
+def test_a_name_naming_another_service_is_a_conflict_for_the_firewall_team(
+    tmp_path: Path,
+) -> None:
+    # Decision 0043: ALLOW-SNMP-QORV matches junos-https and carries traffic: verify,
+    # never keep, a conflict, and the question goes to the firewall team list.
+    from palimp.ingest import ingest
+    from palimp.questions import CLEANUP_NAME
+    from palimp.questions import build as build_questions
+    from palimp.report import FIREWALL_TEAM, NAME_SERVICE_QUESTION
+    from palimp.report import build as build_report
+
+    config = (
+        ADDRESSES
+        + policy("ALLOW-SNMP-QORV", "any", "kelvo-01", "junos-https")
+        + policy("SNMP-POLL", "any", "kelvo-01", "junos-snmp-get")
+    )
+    (tmp_path / "config.set").write_text(config)
+    (tmp_path / "hitcount.txt").write_text(
+        "Index   From zone   To zone   Name     Policy count  Action\n"
+        "1   a   b   ALLOW-SNMP-QORV   50   Permit\n"
+        "2   a   b   SNMP-POLL   50   Permit\n"
+    )
+    dataset = ingest(tmp_path)
+    found = collect(dataset, PolicyKey.parse("a/b/ALLOW-SNMP-QORV"))
+    item = next(e for e in found.evidence if e.kind == "name_service_mismatch")
+    assert "names SNMP" in item.claim and "junos-https" in item.claim
+    a = found.assessment
+    assert (a.verdict, a.verdict_rule) == ("verify", "V-NAME-SERVICE")
+    assert any(item.id in c.evidence for c in a.conflicts)
+    matching = collect(dataset, PolicyKey.parse("a/b/SNMP-POLL"))
+    assert not [e for e in matching.evidence if e.kind == "name_service_mismatch"]
+    assert matching.assessment.verdict == "keep"
+    report = build_report(dataset)
+    entry = next(r for r in report.rules if r.finding.policy.name == "ALLOW-SNMP-QORV")
+    assert entry.group == FIREWALL_TEAM and entry.question == NAME_SERVICE_QUESTION
+    questionnaires = build_questions(report)
+    (team,) = [q for q in questionnaires if q.name == CLEANUP_NAME]
+    assert entry.ref in team.rules and NAME_SERVICE_QUESTION in team.text
+    assert all(entry.ref not in q.rules for q in questionnaires if q is not team)

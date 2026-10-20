@@ -79,8 +79,19 @@ bugs and answered two questions:
     guest, VPN, partner, vendor) or the zones ("SNMP traps from the
     management range to anywhere in zone b"). Confidence stays LOW (C-WEAK).
     "Purpose unknown" remains only when neither a service nor a role is known.
+11. **Name and service contradiction.** When the policy name names a service
+    (`NAME_FAMILIES`: snmp, ssh, rdp, dns, ntp and similar) that none of the
+    matched applications offers (`FAMILY_PORTS`), a T3
+    `name_service_mismatch` item is a conflict (HIGH becomes MEDIUM,
+    C-NAME-SERVICE), and the question "is the name stale, or does the rule
+    match the wrong application?" goes to the firewall team list. With
+    traffic seen, the verdict is verify (V-NAME-SERVICE) instead of keep,
+    and the owners are not asked. Other verdicts are unchanged: a removal
+    candidate stays one (its not-live signal does not depend on the name).
+    `any`, `junos-defaults` and ports in no family are never compared.
 
-All of these change confidence or the intent text, never a verdict.
+Items 1 to 10 change confidence or the intent text, never a verdict. Item 11
+moves keep to verify only.
 
 ## Alternatives considered
 
