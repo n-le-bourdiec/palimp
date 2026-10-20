@@ -381,3 +381,10 @@ def test_a_known_two_letter_name_is_not_read_twice() -> None:
     assert vocab.short_in("zq-de-web-01") == []
     (item,) = shared_address_items(data, data.config.policies[0], vocab)
     assert item.kind == "shared_address" and item.apps == ["zq"]
+
+
+def test_single_source_names_leave_the_intent_once_one_name_is_confirmed() -> None:
+    # Session 29: kelvo is confirmed (object and custom application name); the person
+    # name of the source object, a single source, is not an intent application.
+    rules = policy("p1", "dan-pc-07", "kelvo-01", "kelvo-tcp")
+    assert confidence(rules, "p1")[:3] == ("MEDIUM", "C-T3", ["kelvo"])

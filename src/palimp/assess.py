@@ -44,7 +44,8 @@ Confidence rules (about the intent), first match wins:
 - C-T3 (MEDIUM): two independent names point to the same application
   (decisions 0042 and 0043): the address objects (both sides together count
   once: one naming convention), the policy name, a custom application or
-  application-set name.
+  application-set name. Only the confirmed applications make the intent:
+  names a single source gives are left out (decision 0044).
   A well-known port counts as a source for the product it stands for
   (`tcp/8834` and an object naming nessus), and a server role that offers the
   service of the port names that service with two sources when no name names
@@ -276,7 +277,9 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
             cited = sorted({i for a in dynamic for _, i in named[a]}, key=_order)
             return "MEDIUM", "C-DYNAMIC-APP", reason, cited, apps, []
         if sure:
-            apps = sure + [a for a in apps if a not in sure]
+            # Names only one source gives leave the intent once one name is confirmed
+            # (session 29): `mb` confirmed, the person names of the sources do not follow.
+            apps = sure
             reason = "two independent names point to the application: " + _sources(sure, named)
             cited = sorted({i for a in sure for _, i in named[a]}, key=_order)
             return "MEDIUM", "C-T3", reason, cited, apps, []
