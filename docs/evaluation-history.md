@@ -352,3 +352,29 @@ Hard), the safe direction; block confidence is LOW where the ground truth
 says MEDIUM (99% underconfident). Intent application right is low on all
 kinds because firewall team rules have `app_id` `firewall` and 33% to 37% of
 application rules have no naming source (decision 0045).
+
+## Session 31 changes (2026-10-20, dev seeds, not a held-out run)
+
+Decision 0046 (two-letter names confirmed by commit comments and tickets,
+review-4 fixes, shadowed rules, deny tuning). Tuning on Medium 0-19 and
+Hard 0-19 only; the table reports Medium 20-99 and Hard 20-49 before
+(`487de86`, the baseline above) and after (`2b31281`).
+
+| metric | Medium before | Medium after | Hard before | Hard after |
+|---|---|---|---|---|
+| verdict vs expected | 86.7% | 86.9% | 82.4% | 82.7% |
+| verdict vs best achievable | 91.5% | 91.7% | 97.8% | 98.1% |
+| dangerous errors | 0 | 0 | 0 | 0 |
+| overconfidence | 9.5% | 9.5% | 7.6% | 7.6% |
+| underconfidence | 12.2% | 11.3% | 10.1% | 9.5% |
+| intent application right | 44.3% | 44.3% | 39.9% | 39.9% |
+| block vs best | 80.9% | 100.0% | 64.4% | 100.0% |
+| HIGH intent right / verdict = best | 96.1% / 97.7% | unchanged | 94.1% / 99.0% | unchanged |
+
+Verdict moves, all verify to keep on active deny rules that see no traffic
+(`V-DENY-QUIET`), all equal to the best achievable verdict: Medium 27, Hard
+31. MEDIUM intent right falls (Medium 71.6% to 68.7%) only because deny
+rules now reach MEDIUM by their block while their ground truth `app_id` is
+the pseudo application `firewall`. No simulator rule is shadowed (the
+simulator always places the catch-all deny last); one real configuration
+rule is.
