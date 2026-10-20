@@ -319,3 +319,36 @@ verdicts of the new rules and the confidence ceilings all changed. Compare
 analyzer versions only on the same simulator version. The next analyzer
 session measures palimp on 0.4.0 dev seeds; the second held-out run uses
 0.4.0.
+
+## Simulator 0.4.0 baseline, session 31 (2026-10-20, dev seeds, not a held-out run)
+
+palimp at `487de86` (anonymize fix only, no analyzer tuning), simulator
+0.4.0. Not comparable with earlier Medium and Hard numbers (realistic names,
+naming-source confidence, firewall team rules, decision 0045).
+
+| metric | Medium 20-99 | Hard 20-49 |
+|---|---|---|
+| rules | 12836 | 12659 |
+| verdict vs expected | 86.7% | 82.4% |
+| verdict vs best achievable | 91.5% | 97.8% |
+| dangerous errors (old definition) | 0 (0) | 0 (0) |
+| naive baseline dangerous errors | 187 | 139 |
+| overconfidence (vs best achievable) | 9.5% | 7.6% |
+| underconfidence (vs best achievable) | 12.2% | 10.1% |
+| intent application right | 44.3% | 39.9% |
+| HIGH: intent right / verdict = best | 96.1% / 97.7% | 94.1% / 99.0% |
+
+New rule kinds (verdict vs best; all recognized by palimp, 0 dangerous):
+
+| kind | Medium rules | Medium vs best | Hard rules | Hard vs best |
+|---|---|---|---|---|
+| block | 141 | 80.9% | 87 | 64.4% |
+| cleanup_deny | 72 | 100.0% | 42 | 100.0% |
+| broad_permit | 49 | 100.0% | 30 | 100.0% |
+| factory_default | 21 | 100.0% | 10 | 100.0% |
+
+Every `block` miss is keep -> verify (V-NO-TRAFFIC-SEEN: 27 Medium, 31
+Hard), the safe direction; block confidence is LOW where the ground truth
+says MEDIUM (99% underconfident). Intent application right is low on all
+kinds because firewall team rules have `app_id` `firewall` and 33% to 37% of
+application rules have no naming source (decision 0045).
