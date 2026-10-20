@@ -286,7 +286,7 @@ def intent(finding: Finding, quote: bool = True) -> Cited:
         )
     elif deny and assessment.intent_flow:
         named = (
-            f", probably to protect {', '.join(assessment.intent_apps)}"
+            f", the rule names {', '.join(assessment.intent_apps)}"
             if assessment.intent_apps
             else ""
         )

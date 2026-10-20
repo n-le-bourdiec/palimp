@@ -510,7 +510,11 @@ def blocked(finding: Finding, dataset: Dataset) -> str:
     untrust to the 192.168.1.0/24 network (addr-192-168-1-0-24)"."""
     policy = finding.policy
     services = [s for e in finding.evidence if e.kind == "services" for s in e.services]
-    if policy.applications == ["any"] or not services:
+    if policy.dynamic_applications:
+        listed = ", ".join(policy.dynamic_applications[:3])
+        more = " and more" if len(policy.dynamic_applications) > 3 else ""
+        what = f"dynamic application {listed}{more}"
+    elif policy.applications == ["any"] or not services:
         what = "all traffic"
     else:
         what = " and ".join(services[:2]) + (" and more" if len(services) > 2 else "")

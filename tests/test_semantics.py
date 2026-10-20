@@ -169,3 +169,13 @@ def test_a_ticket_reference_not_found_is_cited_in_the_question(tmp_path: Path) -
     lookup = "Look up CHG0991234 in your change system: it may say why this rule exists. "
     assert a.question.startswith(lookup)
     assert build_report(data).rules[0].question.startswith(lookup)
+
+
+def test_a_deny_on_a_dynamic_application_names_what_it_blocks(tmp_path: Path) -> None:
+    head = "set security policies from-zone a to-zone b policy no-video"
+    config = policy("no-video", "any", "any", "junos-defaults", "deny")
+    config += f"{head} match dynamic-application junos:QUIBVID\n"
+    found = collect(run(tmp_path, config), PolicyKey.parse("a/b/no-video"))
+    text = intent(found).text
+    assert text.startswith("Blocks dynamic application junos:QUIBVID from anywhere in zone a")
+    assert "the rule names quibvid" in text and "protect" not in text
