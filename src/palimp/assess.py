@@ -342,6 +342,14 @@ def _order(evidence_id: str) -> int:
     return int(evidence_id.removeprefix("E"))
 
 
+# Decision 0026: a deactivated rule not kept is asked of the firewall team, whatever
+# its verdict rule. One question for `explain`, the report and the questionnaires.
+CLEANUP_QUESTION = "Is this deactivated rule kept on purpose, as a rollback switch?"
+CLEANUP_ASK = (
+    "firewall team: the rule is deactivated, so the application owner's answer would not "
+    "change the action (decision 0026)"
+)
+
 QUESTIONS = {
     "V-PROBE-ONLY": "Only scanner or monitoring probes were seen on this policy. Does any "
     "business flow still need it?",
@@ -375,6 +383,9 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
     # the objects name is an owner candidate, not only the one the intent names.
     objects = [a for e in finding.evidence if e.kind == "address_objects" for a in e.apps]
     owner = find_owner(finding, dataset, list(dict.fromkeys(apps + objects)), bool(conflicts))
+    ask = owner.text
+    if finding.policy.deactivated and verdict != "keep":
+        question, ask = CLEANUP_QUESTION, CLEANUP_ASK
     return Assessment(
         verdict=verdict,
         verdict_rule=v_rule,
@@ -388,7 +399,7 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
         intent_flow=None if apps else flow(finding),
         conflicts=conflicts,
         question=question,
-        ask=owner.text,
+        ask=ask,
         owner=owner.owner,
         owner_candidates=owner.candidates,
     )

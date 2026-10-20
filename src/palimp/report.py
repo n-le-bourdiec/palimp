@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from palimp import __version__
 from palimp.addresses import is_public
-from palimp.assess import NOT_LIVE_KINDS
+from palimp.assess import CLEANUP_ASK, CLEANUP_QUESTION, NOT_LIVE_KINDS
 from palimp.counters import clears
 from palimp.evidence import collect_all, shown
 from palimp.lineage import networks
@@ -150,11 +150,6 @@ SHARED_QUESTION = "These objects share this address: which application runs on i
 SHARED_ASK = (
     "firewall team: an address of this rule is shared by several address-book objects, "
     "asked once per address (decision 0041)"
-)
-CLEANUP_QUESTION = "Is this deactivated rule kept on purpose, as a rollback switch?"
-CLEANUP_ASK = (
-    "firewall team: the rule is deactivated, so the application owner's answer would not "
-    "change the action (decision 0026)"
 )
 
 # Yes/no questions: "yes" always means the access is still needed.

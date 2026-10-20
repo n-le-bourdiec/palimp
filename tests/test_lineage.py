@@ -409,3 +409,23 @@ def test_a_shared_source_never_names_the_intent(tmp_path: Path) -> None:
     assert assessment.intent_apps == ["hosted"]
     assert "brindle" not in assessment.intent_apps
     assert any(item.id in c.evidence for c in assessment.conflicts)
+
+
+def test_a_deactivated_rule_keeps_its_own_question(tmp_path: Path) -> None:
+    # Session 28: the assessment itself carries the cleanup question (decision 0026),
+    # so `explain`, the report and any other reader ask the same thing.
+    from palimp.assess import CLEANUP_QUESTION
+    from palimp.report import build as build_report
+
+    deactivated = (
+        rule("late", "users-all", "crm-web-01")
+        + "deactivate security policies from-zone trust to-zone dc policy late\n"
+    )
+    dataset = ingest(write(tmp_path, [deactivated], [""]))
+    finding = collect(dataset, PolicyKey.parse("trust/dc/late"))
+    assessment = finding.assessment
+    assert assessment.verdict != "keep"
+    assert assessment.question == CLEANUP_QUESTION
+    assert assessment.ask.startswith("firewall team")
+    entry = build_report(dataset).rules[0]
+    assert entry.question == CLEANUP_QUESTION
