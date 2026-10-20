@@ -136,7 +136,7 @@ Same 32 configurations, configuration alone, before (session 27 code,
 |---|---|---|
 | MEDIUM rules | 17 | 57 |
 | of which C-T3 (two sources) / C-DYNAMIC-APP | 15 / 0 | 35 / 20 |
-| MEDIUM rules naming a generic, short or person-like word (session 27 classifier) | 0 | 9 |
+| MEDIUM rules naming a generic, short or person-like word (session 27 classifier) | 0 | 8 |
 | rules with a named intent (any level) | 91 | 107 |
 | rules naming a person-like word (all LOW) | 12 | 8 |
 | rules with a flow described, no application named | 19 | 54 |
@@ -146,7 +146,7 @@ Same 32 configurations, configuration alone, before (session 27 code,
 | deactivated rules with the cleanup question | 0 of 2 | 2 of 2 |
 | verdicts | 290 verify, 2 removal candidates | identical, rule by rule |
 
-The 9 flagged MEDIUM rules are all two-letter names confirmed by a policy
+The 8 flagged MEDIUM rules are all two-letter names confirmed by a policy
 name and an object that start with the same code (`LT-Gates-Paxton`,
 `FG-MB-AIRCON`, `FG_Server_EG_Camera`, `AZURE-MS-SQL`): the rule as asked
 (two sources), but the codes look like site or team prefixes, a question for

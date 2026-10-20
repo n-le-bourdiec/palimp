@@ -212,3 +212,52 @@ Reading:
   removal candidates move to verify (now = best); Medium 2 V-CONTRADICTION
   rules move to keep (best was verify). No rule moves toward
   `removal_candidate`.
+
+## Naming sources and services, session 28 (2026-10-20, dev seeds, not a held-out run)
+
+Decision 0043 (a conflict never sets the intent, products and application
+names, address objects counted once, dynamic application MEDIUM, predefined
+applications, product ports, server roles matching the service, two-letter
+names only when confirmed, flows, `term` applications, name/service
+contradiction) and two safe fixes for shared addresses. Not tuned against
+the simulator: every rule comes from the project lead's review of real
+configurations. Two bugs the dev sets showed were fixed before this run (a
+server role naming `mssql` ahead of the application, intent 93.9% to 80.6%
+on Medium; a two-letter name read twice, which moved one Hard rule to keep).
+
+- palimp commit: `8bccb19` (session 28), baseline `a5f4b8c` (session 27,
+  same analyzer code as `19e3746`)
+- Command: `uv run python eval/verdicts.py --level medium --seeds 20-99` and
+  `--level hard --seeds 20-49`, with `--json` for the per-rule comparison
+
+| Metric | Medium 20-99 before | Medium 20-99 after | Hard 20-49 before | Hard 20-49 after |
+|---|---|---|---|---|
+| Rules | 12553 | 12553 | 12490 | 12490 |
+| Verdict vs best achievable | 92.0% (11551) | 92.0% (11544) | 97.7% (12207) | 97.7% (12199) |
+| Dangerous errors (decision 0038) | 0 | 0 | 0 | 0 |
+| Intent application right (first named) | 93.9% | 95.3% | 91.2% | 92.1% |
+| Overconfidence | 0.0% (0) | 0.0% (0) | 0.5% (64) | 0.4% (47) |
+| Underconfidence | 48.1% (6032) | 56.9% (7138) | 57.1% (7127) | 67.6% (8440) |
+| HIGH / MEDIUM / LOW | 3307 / 3886 / 5360 | 3300 / 2718 / 6535 | 1214 / 4926 / 6350 | 1208 / 3593 / 7689 |
+| HIGH: intent application right | 98.4% | 98.4% | 95.9% | 95.9% |
+
+Reading:
+
+- Intent: 177 Medium and 110 Hard rules gain a right intent (server roles
+  matching the service, `dns` or `ntp` objects on their port; two-letter
+  names confirmed by the policy name), none loses it.
+- Underconfidence rises: address objects on both sides now count once
+  (1503 Medium and 1601 Hard rules move from C-T3 to C-T3-SINGLE), as the
+  project lead decided. Simulated objects name the application on both
+  sides of most rules.
+- Verdicts, every move toward verify: Medium 7 rules `*-to-bank-sftp` on
+  junos-https go from keep to verify (V-NAME-SERVICE, best keep: the name
+  names the destination host's protocol, the simulator says keep); Hard 24
+  rules go to verify through shared addresses (8 now = best, the
+  TRAP-IP-REUSE rules of session 27 included; 16 with best keep). No rule
+  moves toward keep or `removal_candidate`.
+- Session 27 left 2 Medium V-CONTRADICTION rules at keep (`medium-000053`
+  `rule-258` and `allow-new-11`): the commit comment "CI decom" names `ci`,
+  a two-letter name filtered since decision 0042, so the decommission marker
+  no longer reaches `ci-app-servers`. Not changed: reading a two-letter name
+  in a not-live signal would move rules toward removal (needs approval).
