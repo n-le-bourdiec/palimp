@@ -378,3 +378,21 @@ rules now reach MEDIUM by their block while their ground truth `app_id` is
 the pseudo application `firewall`. No simulator rule is shadowed (the
 simulator always places the catch-all deny last); one real configuration
 rule is.
+
+## Simulator 0.5.0, session 32 (2026-10-20, no evaluation run)
+
+Simulator session; the analyzer was not run. Decision 0047 adds
+`expected.rule_kind` and `expected.best_achievable_intent` to every rule,
+shadowed rules (`TRAP-SHADOWED-BY-DENY`) and `ANY` address sets in Medium
+and Hard. The 0.4.0 numbers above (sessions 30 and 31) were never
+published: no release and no held-out run used simulator 0.4.0. Simulator
+0.5.0 is the release basis; the next held-out run uses it.
+
+Intent application right on 0.4.0 (44.3% Medium, 39.9% Hard) scored every
+"purpose unknown" as wrong. On 0.5.0, 33.4% of Medium and 36.5% of Hard
+application rules have a null `best_achievable_intent` (nothing in the
+artifacts names their application), and the 337 Medium and 279 Hard
+firewall team rules are scored on `rule_kind`. Easy artifacts are
+byte-identical; every 0.4.0 rule of Medium 0-99 and Hard 0-49 keeps its
+expected values, so verdict numbers stay comparable except on the 10
+Medium and 21 Hard shadowed rules (spec 7.7).

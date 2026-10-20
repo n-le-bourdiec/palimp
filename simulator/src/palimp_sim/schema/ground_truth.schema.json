@@ -177,7 +177,10 @@
           "required": ["kind", "app_id", "flows", "summary"],
           "properties": {
             "kind": {"$ref": "#/$defs/intent_kind"},
-            "app_id": {"type": "string"},
+            "app_id": {
+              "description": "The true application. Firewall team rules hold the pseudo application firewall, kept only because this field is a required string (decision 0047); never score intent on it for them.",
+              "type": "string"
+            },
             "flows": {"type": "array", "items": {"type": "string"}, "minItems": 1},
             "summary": {"type": "string"}
           }
@@ -210,9 +213,14 @@
             "max_justified_confidence": {"enum": ["LOW", "MEDIUM", "HIGH"]},
             "best_achievable_confidence": {"enum": ["LOW", "MEDIUM", "HIGH"]},
             "owner_to_ask": {"type": "string"},
-            "rule_kind": {"enum": ["application", "block", "cleanup_deny", "broad_permit",
-                                   "factory_default"]},
-            "best_achievable_intent": {"type": ["string", "null"]}
+            "rule_kind": {
+              "description": "From simulator 0.5.0 (decision 0047): application for a rule made for an application, else the firewall team kind (equal to intent.kind). Score the intent of firewall team rules on this field.",
+              "enum": ["application", "block", "cleanup_deny", "broad_permit", "factory_default"]
+            },
+            "best_achievable_intent": {
+              "description": "From simulator 0.5.0 (decision 0047): the application a perfect analyzer can name from the artifacts. Application rules: intent.app_id when at least one counted naming source (spec 6.1) names it, null when none does (purpose unknown is then right); Hard, a hidden stale name: the replaced application (decision 0040). Firewall team rules: always null.",
+              "type": ["string", "null"]
+            }
           }
         },
         "evidence": {
