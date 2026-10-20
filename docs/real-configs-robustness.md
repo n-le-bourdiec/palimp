@@ -134,8 +134,8 @@ Same 32 configurations, configuration alone, before (session 27 code,
 
 | measure | before | after |
 |---|---|---|
-| MEDIUM rules | 17 | 58 |
-| of which C-T3 (two sources) / C-DYNAMIC-APP | 15 / 0 | 36 / 20 |
+| MEDIUM rules | 17 | 57 |
+| of which C-T3 (two sources) / C-DYNAMIC-APP | 15 / 0 | 35 / 20 |
 | MEDIUM rules naming a generic, short or person-like word (session 27 classifier) | 0 | 9 |
 | rules with a named intent (any level) | 91 | 107 |
 | rules naming a person-like word (all LOW) | 12 | 8 |
