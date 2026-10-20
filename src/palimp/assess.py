@@ -601,6 +601,20 @@ TEAM_ASK = {
 }
 
 
+def ticket_lookup(finding: Finding) -> str:
+    """The "Look up CHG0142136 in your change system" prefix for ticket references not found in
+    tickets.csv, the policy name included (session 29). Empty when there are none."""
+    refs = [
+        e.locator.split()[2]
+        for e in finding.evidence
+        if e.kind == "ticket_reference" and e.locator.startswith("ticket reference ")
+    ]
+    if not refs:
+        return ""
+    listed = ", ".join(dict.fromkeys(refs))
+    return f"Look up {listed} in your change system: it may say why this rule exists. "
+
+
 def assess(finding: Finding, dataset: Dataset) -> Assessment:
     verdict, v_rule, v_reason, v_evidence = _verdict(finding)
     level, c_rule, c_reason, c_evidence, apps, conflicts = _capped(finding, _confidence(finding))
@@ -620,6 +634,8 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
         question = DENY_QUESTION
     if finding.policy.deactivated and verdict != "keep":
         question, ask = CLEANUP_QUESTION, CLEANUP_ASK
+    if question:
+        question = ticket_lookup(finding) + question
     return Assessment(
         verdict=verdict,
         verdict_rule=v_rule,

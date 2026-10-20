@@ -33,6 +33,7 @@ from palimp.assess import (
     DENY_QUESTION,
     NOT_LIVE_KINDS,
     TEAM_ASK,
+    ticket_lookup,
 )
 from palimp.counters import clears
 from palimp.evidence import collect_all, shown
@@ -901,6 +902,8 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
             question, owner = SHARED_QUESTION, SHARED_ASK
         elif assessment.verdict_rule == "V-NAME-SERVICE":
             question, owner = NAME_SERVICE_QUESTION, NAME_SERVICE_ASK
+        if question:
+            question = ticket_lookup(finding) + question
         entries.append(
             RuleEntry(
                 ref=ref,

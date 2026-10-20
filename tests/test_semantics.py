@@ -161,3 +161,11 @@ def test_a_description_is_quoted_as_a_claim_without_raising_confidence(tmp_path:
     ) in stated.text
     assert description.id in stated.evidence and "[E7]" not in stated.text
     assert "Stated purpose" not in intent(found, quote=False).text
+
+
+def test_a_ticket_reference_not_found_is_cited_in_the_question(tmp_path: Path) -> None:
+    data = run(tmp_path, policy("CHG0991234", "any", "qorv-web-01", "junos-https", "permit"))
+    a = collect(data, PolicyKey.parse("a/b/CHG0991234")).assessment
+    lookup = "Look up CHG0991234 in your change system: it may say why this rule exists. "
+    assert a.question.startswith(lookup)
+    assert build_report(data).rules[0].question.startswith(lookup)
