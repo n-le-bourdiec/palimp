@@ -79,6 +79,8 @@ class Score:
             c[f"{who} removal"] += verdict == "removal_candidate"
         c["overconfident"] += LEVELS[row["confidence"]] > LEVELS[row["best_conf"]]
         c["overconfident max"] += LEVELS[row["confidence"]] > LEVELS[row["max_conf"]]
+        c["underconfident"] += LEVELS[row["confidence"]] < LEVELS[row["best_conf"]]
+        c["kind recognized"] += row["kind_recognized"]
         c["intent ok"] += row["intent_ok"]
         c["owner named"] += row["owner_ok"]
         c["owner certain right"] += row["owner_certain"] == "right"
@@ -90,6 +92,24 @@ class Score:
 
 def pct(part: int, whole: int) -> str:
     return f"{part / whole:.1%}" if whole else "n/a"
+
+
+# Firewall team rule kinds (decision 0045) -> palimp evidence kinds or verdict rules that
+# show palimp read the rule as that kind. A deny rule is recognized by its action: any
+# verdict rule of a deny (`V-CLEANUP-RULE`, `V-DENY-*`) or an action-based keep.
+KIND_SIGNS = {
+    "cleanup_deny": {"catch_all_deny"},
+    "factory_default": {"factory_default"},
+    "broad_permit": {"broad_permit", "factory_default"},
+}
+FIREWALL_KINDS = ("block", "cleanup_deny", "broad_permit", "factory_default")
+
+
+def kind_recognized(kind: str, finding: dict) -> bool:
+    if kind == "block":
+        return finding["policy"].get("action") in ("deny", "reject")
+    signs = KIND_SIGNS.get(kind)
+    return bool(signs) and any(e.get("kind") in signs for e in finding["evidence"])
 
 
 def owner_certain(assessment: dict, owner: str, names: set[str]) -> str:
@@ -128,6 +148,8 @@ def evaluate(truth: dict, findings: list[dict], manifest: dict) -> list[dict]:
                 "scenario": truth["scenario_id"],
                 "key": "/".join(key_of(rule["key"])),
                 "traps": rule["traps"],
+                "kind": rule["intent"]["kind"],
+                "kind_recognized": kind_recognized(rule["intent"]["kind"], finding),
                 "instance": (truth["scenario_id"], rule["created"]["event_id"]),
                 "formats": formats,
                 "live": rule["status"]["live"],
@@ -181,6 +203,10 @@ def headline(scores: dict[str, Score]) -> None:
         f"| overconfidence (above max_justified_confidence) | {pct(c['overconfident max'], n)} "
         f"({c['overconfident max']}) | n/a |"
     )
+    print(
+        f"| underconfidence (below best_achievable_confidence, else max_justified) | "
+        f"{pct(c['underconfident'], n)} ({c['underconfident']}) | n/a |"
+    )
     print(f"| intent application right (first named app) | {pct(c['intent ok'], n)} | n/a |")
     print(f"| owner named in `ask` | {pct(c['owner named'], n)} | n/a |")
     for label, key in (
@@ -225,6 +251,29 @@ def table(title: str, scores: dict[str, Score], prefix: str, instances: dict | N
             f" | {c['palimp dangerous']} ({c['palimp dangerous old']}) | {c['naive dangerous']}"
             f" | {pct(c['overconfident'], n)} ({pct(c['overconfident max'], n)})"
             f" | {per_instance} |"
+        )
+
+
+def kinds(scores: dict[str, Score]) -> None:
+    """Per ground truth intent kind; firewall team kinds first (decision 0045)."""
+    print("\nPer intent kind")
+    print(
+        "| kind | rules | palimp vs expected | palimp vs best | dangerous | intent app right "
+        "| kind recognized | overconfident | underconfident |"
+    )
+    print("|---|---|---|---|---|---|---|---|---|")
+    present = sorted(s.removeprefix("kind ") for s in scores if s.startswith("kind "))
+    order = [k for k in FIREWALL_KINDS if k in present] + [
+        k for k in present if k not in FIREWALL_KINDS
+    ]
+    for kind in order:
+        c = scores[f"kind {kind}"].c
+        n = c["rules"]
+        recognized = pct(c["kind recognized"], n) if kind in FIREWALL_KINDS else ""
+        print(
+            f"| {kind} | {n} | {pct(c['palimp ok expected'], n)} | {pct(c['palimp ok best'], n)}"
+            f" | {c['palimp dangerous']} | {pct(c['intent ok'], n)} | {recognized}"
+            f" | {pct(c['overconfident'], n)} | {pct(c['underconfident'], n)} |"
         )
 
 
@@ -298,6 +347,7 @@ def main() -> int:
     for row in rows:
         scopes = ["all", *(f"trap {t}" for t in row["traps"] or ["(none)"])]
         scopes += [f"format {f}" for f in row["formats"]]
+        scopes.append(f"kind {row['kind']}")
         for scope in scopes:
             scores[scope].add(row)
         for trap in row["traps"] or ["(none)"]:
@@ -311,6 +361,7 @@ def main() -> int:
     headline(scores)
     table("Per trap (verdict accuracy)", scores, "trap ", instances)
     table("Per format variant", scores, "format ", None)
+    kinds(scores)
     calibration(rows)
     if args.holdout:
         return 0
