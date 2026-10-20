@@ -147,8 +147,9 @@ $//'` before scripted edits (session 24).
   (the time zone abbreviation is replaced, harmless).
 - Anonymize limits (decision 0031): pseudonymization, not encryption;
   names palimp does not know stay in free text; non-ISO dates in free text
-  are not shifted; a kept signal word that starts a longer name loses the
-  shared prefix; people with a one-letter name word may get other initials.
+  are not shifted; a kept signal word that starts a longer known name now
+  keeps its place at the start of the replacement (session 31, decision
+  0046); people with a one-letter name word may get other initials.
 - LLM writer limits frozen for v1 (decisions 0027 to 0029).
 - The report prints the artifact path as given on the command line.
 - 3 MISLEADING-COMMENT rules on 20 to 99 show no conflict (not inspected).

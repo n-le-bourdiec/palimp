@@ -435,3 +435,102 @@ def test_terminal_capture_keeps_prompts_and_banners(name: str, tmp_path: Path) -
         p.name for p in anonymized.config.policies
     ]
     assert judgments(anonymized) == judgments(original)
+
+
+# Invented names in the styles real networks use (session 31): site codes, people's
+# workstations, ticket numbers in policy names, hostnames with a role and a site.
+REALISTIC_ADDRESSES = {
+    "web-par1-01": "10.10.1.10/32",
+    "PC-SLINDQVIST": "10.20.5.33/32",
+    "par1-sql-prd-01": "10.30.1.5/32",
+    "LAN-LYO2": "10.40.0.0/16",
+    "lyo2-web-02": "10.30.2.7/32",
+}
+# (from zone, to zone, name, source, destination, application, description)
+REALISTIC_POLICIES = [
+    (
+        "untrust",
+        "dmz",
+        "CHG0451277",
+        "any",
+        "web-par1-01",
+        "junos-https",
+        "Webshop frontend for Sophie Lindqvist (INC0098123)",
+    ),
+    (
+        "trust",
+        "dc",
+        "PC-SLINDQVIST-to-par1-sql-prd-01",
+        "PC-SLINDQVIST",
+        "par1-sql-prd-01",
+        "junos-ms-sql",
+        "",
+    ),
+    ("trust", "dc", "lyo2-web-02_access", "LAN-LYO2", "lyo2-web-02", "junos-http", "LYO2 req MF"),
+]
+
+
+def realistic_config() -> str:
+    lines = [
+        f"set security address-book global address {name} {value}"
+        for name, value in REALISTIC_ADDRESSES.items()
+    ]
+    for from_zone, to_zone, name, source, destination, application, note in REALISTIC_POLICIES:
+        head = f"set security policies from-zone {from_zone} to-zone {to_zone} policy {name}"
+        if note:
+            lines.append(f'{head} description "{note}"')
+        lines += [
+            f"{head} match source-address {source}",
+            f"{head} match destination-address {destination}",
+            f"{head} match application {application}",
+            f"{head} then permit",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+REALISTIC_COMMITS = """\
+0   2026-03-02 10:00:00 UTC by mferretti via cli
+    INC0098123 webshop frontend for Sophie
+1   2026-02-01 09:30:00 UTC by mferretti via cli
+    CHG0451277 SQL access for PC-SLINDQVIST
+"""
+REALISTIC_TICKETS = """\
+ticket_id,opened,closed,status,requester,assignee,summary,category,related_ci
+CHG0451277,2026-01-20,2026-02-01,closed,Sophie Lindqvist,mferretti,PAR1 go live,change,webshop
+INC0098123,2026-02-25,2026-03-02,closed,Sophie Lindqvist,Marco Ferretti,WEBSHOP,incident,webshop
+"""
+# Letter and digit runs that identify the company, its sites, people and tickets.
+REALISTIC_SECRETS = {
+    "par",
+    "lyo",
+    "sophie",
+    "lindqvist",
+    "slindqvist",
+    "mferretti",
+    "marco",
+    "ferretti",
+    "webshop",
+    "0451277",
+    "0098123",
+}
+
+
+def test_realistic_names_leave_nothing_and_keep_judgments(tmp_path: Path) -> None:
+    source = tmp_path / "realistic"
+    source.mkdir()
+    (source / "config.set").write_text(realistic_config(), encoding="utf-8")
+    (source / "commits.txt").write_text(REALISTIC_COMMITS, encoding="utf-8")
+    (source / "tickets.csv").write_text(REALISTIC_TICKETS, encoding="utf-8")
+    result = anonymize(source, KEY)
+    write(result, tmp_path / "copy", Options())
+    runs = {r.lower() for text in result.files.values() for r in RUN.findall(text)}
+    assert not REALISTIC_SECRETS & runs, sorted(REALISTIC_SECRETS & runs)
+    assert "MF" not in result.files["config.set"]
+    original, copy = ingest(source), ingest(tmp_path / "copy")
+    assert judgments(copy) == judgments(original)
+    # `web-par1-01` reads as webshop (`web` abbreviates the related CI); the copy keeps
+    # that reading under the replaced application name.
+    before = [f.assessment.intent_apps for f in collect_all(original) if f.assessment]
+    after = [f.assessment.intent_apps for f in collect_all(copy) if f.assessment]
+    assert ["webshop"] in before
+    assert after == [[result.mapper.name(a) for a in apps] for apps in before]

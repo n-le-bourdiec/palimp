@@ -118,7 +118,9 @@ If palimp misreads your artifacts, an anonymized copy is the best bug report.
    the mapping is needed to analyze the copy.
 
 This is keyed pseudonymization, not encryption: names keep their length and
-shared prefixes, so someone who knows your network well may still recognize
-parts of it.
+shared prefixes, and a name that starts with a word palimp keeps (`web`,
+`sql`, `backup`) keeps that start when the word is also a name of its own
+(`webshop` next to `web-01`), so someone who knows your network well may still
+recognize parts of it.
 
 Licensed under the Apache License 2.0.

@@ -1,6 +1,6 @@
 # 0031 palimp anonymize: keyed, consistent, structure-preserving replacements
 
-- Status: Accepted
+- Status: Accepted; the kept-word prefix limit is superseded by decision 0046
 - Date: 2026-10-06
 
 ## Context

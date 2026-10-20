@@ -222,6 +222,10 @@ class Mapper:
     ips: dict[str, str] = field(default_factory=dict)
     runs: dict[str, str] = field(default_factory=dict)  # lower-case letter runs replaced
     kept_words: set[str] = field(default_factory=set)  # lower-case words left in free text
+    # Kept signal words that start a longer run of a known name (`web`, `webshop`): the
+    # replacement of the longer run starts with the word too, so the abbreviation stays.
+    prefixes: set[str] = field(default_factory=set)
+    initials: set[str] = field(default_factory=set)  # replacement initials (`req GJ`)
     _perms: dict[tuple[str, str], dict[str, str]] = field(default_factory=dict)
     _flips: dict[tuple[int, int, int], int] = field(default_factory=dict)
 
@@ -247,7 +251,10 @@ class Mapper:
         lower = "".join(_fold(c) for c in text)
         if is_signal(lower):
             return text
-        out = "".join(self._perm("a", lower[:i])[c] for i, c in enumerate(lower))
+        kept = max((len(p) for p in self.prefixes if lower.startswith(p)), default=0)
+        out = lower[:kept] + "".join(
+            self._perm("a", lower[:i])[c] for i, c in enumerate(lower) if i >= kept
+        )
         self.runs[lower] = out
         return "".join(o.upper() if c.isupper() else o for o, c in zip(out, text, strict=True))
 
@@ -410,7 +417,9 @@ class Mapper:
                     return re.sub(r"[^\W_]+", lambda m: self._word(m.group(), mode), value)
                 head, letters = value[: -len(value.split()[-1])], value.split()[-1]
                 root = self._perm("a", "")
-                return head + "".join(root[c.lower()].upper() for c in letters)
+                mapped = "".join(root[c.lower()].upper() for c in letters)
+                self.initials.add(mapped)
+                return head + mapped
             if kind == "iface":
                 return value
             return self._word(value, mode)
@@ -426,6 +435,22 @@ def _letters(names: set[str]) -> set[str]:
             if not run.isdigit() and len(lower) >= 2 and not is_signal(lower):
                 found.add(lower)
     return found
+
+
+# Shortest kept word whose prefix role is kept (palimp.apps.MIN_ABBREVIATION).
+MIN_PREFIX = 3
+
+
+def _prefixes(names: set[str]) -> set[str]:
+    """Kept signal runs of NAMES that start a longer run of NAMES that is replaced.
+
+    palimp reads a name segment as an abbreviation of a longer name (`web` of
+    `webshop`, palimp.apps); a kept `web` next to a replaced `webshop` would lose that.
+    """
+    runs = {"".join(_fold(c) for c in r) for n in names for r in RUN.findall(n)}
+    runs = {r for r in runs if not r.isdigit()}
+    kept = {r for r in runs if len(r) >= MIN_PREFIX and is_signal(r)}
+    return {p for p in kept if any(r != p and r.startswith(p) and not is_signal(r) for r in runs)}
 
 
 # In a `then permit` option, the word after these keywords is a name.
@@ -826,12 +851,21 @@ def _shift(key: bytes) -> timedelta:
 
 
 def _violations(mapper: Mapper) -> list[str]:
-    """Replacement words that equal a kept signal word or a word kept in free text."""
-    return sorted(
+    """Replacement words that equal a kept signal word or a word kept in free text, and
+    replacement initials that equal an original name (`req GJ` written `req CI` while a
+    policy is named `CI`): a reader of the copy could take them for the original."""
+    found = [
         f"{original} -> {out}"
         for original, out in mapper.runs.items()
         if len(out) >= 2 and (is_signal(out) or out in mapper.kept_words) and out != original
-    )
+    ]
+    # Names can map onto other names (`web-2` -> `web-1`): both are replacements, so the
+    # copy is consistent. Initials are not names; one equal to an original name is not.
+    image = set(mapper.names.values())
+    found += [
+        f"initials -> {out}" for out in mapper.initials if out in mapper.known and out not in image
+    ]
+    return sorted(found)
 
 
 def anonymize(
@@ -842,6 +876,7 @@ def anonymize(
     directory = resolve_directory(directory)
     dataset = ingest(directory, log_year=log_year)
     known = known_names(directory, dataset)
+    prefixes = _prefixes(known)
     year = log_year
     if year is None and dataset.log_window.start is not None:
         year = dataset.log_window.start.year
@@ -856,7 +891,9 @@ def anonymize(
         else:
             skipped.append(relative)
     for salt in range(MAX_SALT):
-        mapper = Mapper(key=key, salt=salt, known=known, segments=_letters(known))
+        mapper = Mapper(
+            key=key, salt=salt, known=known, segments=_letters(known), prefixes=prefixes
+        )
         if options.shift_dates:
             mapper.shift = _shift(key)
         rewriter = _Rewriter(mapper, options, year)
