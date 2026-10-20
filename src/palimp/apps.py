@@ -219,9 +219,10 @@ class Vocabulary:
     short: set[str] = field(default_factory=set)
 
     def short_in(self, name: str) -> list[str]:
-        """Two-letter names of `short` in an object, policy or application name."""
+        """Two-letter names of `short` in an object, policy or application name. A name
+        the vocabulary already knows (a ticket names `hr`) is read by `in_object`."""
         tokens = [t.lower() for t in re.split(r"[-_.]", name)]
-        return list(dict.fromkeys(t for t in tokens if t in self.short))
+        return list(dict.fromkeys(t for t in tokens if t in self.short and t not in self.names))
 
     def lookup(self, token: str, name: bool = False) -> str | None:
         """The application TOKEN names. With NAME (an object, policy or application

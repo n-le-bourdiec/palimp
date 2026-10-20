@@ -360,3 +360,24 @@ def test_a_server_role_never_names_the_service_over_an_application() -> None:
     rules = policy("p1", "any", "zorvex-db-01", "junos-ms-sql")
     a = collect(dataset(rules), PolicyKey.parse("a/b/p1")).assessment
     assert a.intent_apps == ["zorvex"]
+
+
+def test_a_known_two_letter_name_is_not_read_twice() -> None:
+    # Session 28: zq is a related CI and zq-de an instance. zq-de-web-01 names zq-de
+    # only, so its address shared with host_zq-web-01 (zq) is still a shared address.
+    from palimp.evidence import shared_address_items
+
+    tickets = {
+        "CHG1": Ticket(ticket_id="CHG1", summary="x", related_ci="zq"),
+        "CHG2": Ticket(ticket_id="CHG2", summary="y", related_ci="zq-de"),
+    }
+    rules = (
+        "set security address-book global address zq-de-web-01 10.7.0.1/32\n"
+        "set security address-book global address host_zq-web-01 10.7.0.1/32\n"
+        + policy("p1", "any", "zq-de-web-01")
+    )
+    data = dataset(rules, tickets)
+    vocab = vocabulary(data)
+    assert vocab.short_in("zq-de-web-01") == []
+    (item,) = shared_address_items(data, data.config.policies[0], vocab)
+    assert item.kind == "shared_address" and item.apps == ["zq"]

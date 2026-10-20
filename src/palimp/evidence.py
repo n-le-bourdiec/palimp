@@ -274,12 +274,12 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
     for name, kind in sides:
         value = dataset.config.addresses[name].value or ""
         # Two-letter names count here (a conflict, never the intent, decision 0043).
-        mine = vocab.in_object(name) + vocab.short_in(name)[:1]
+        mine = vocab.in_object(name) or vocab.short_in(name)[:1]
         others = [
             (other, theirs)
             for other in by_value.get(value, [])
             if other != name
-            and (theirs := vocab.in_object(other) + vocab.short_in(other)[:1])
+            and (theirs := vocab.in_object(other) or vocab.short_in(other)[:1])
             and not set(theirs) & set(mine)
         ]
         if not others:
@@ -465,7 +465,9 @@ def collect(
                 roles=list(dict.fromkeys(r for n in names for r in roles(n))),
             )
         locator = "address objects " + shown(named)
-        short = list(dict.fromkeys(a for n in named for a in vocab.short_in(n)[:1]))
+        short = list(
+            dict.fromkeys(a for n in named if not vocab.in_object(n) for a in vocab.short_in(n)[:1])
+        )
         items.append(
             Item(
                 "T3",
@@ -608,7 +610,11 @@ def collect(
         # A custom application named after a known application names it too.
         custom = [n for n in policy.applications if n != "any" and not n.startswith("junos-")]
         apps = list(dict.fromkeys(a for n in custom for a in vocab.in_object(n)))
-        short = list(dict.fromkeys(a for n in custom for a in vocab.short_in(n)[:1]))
+        short = list(
+            dict.fromkeys(
+                a for n in custom if not vocab.in_object(n) for a in vocab.short_in(n)[:1]
+            )
+        )
         plain = [
             s for n in policy.applications for s in service_names(n, dataset.config.applications)
         ]
