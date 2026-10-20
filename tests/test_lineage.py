@@ -432,12 +432,12 @@ def test_a_deactivated_rule_keeps_its_own_question(tmp_path: Path) -> None:
 
 
 def test_a_shared_address_counts_when_the_own_object_names_nothing(tmp_path: Path) -> None:
-    # Session 28: qx-web-01 names nothing alone (two letters), but its address is also
+    # Session 28: web-77 names no application (a role), but its address is also
     # hrm-app-02: the rule may carry hrm traffic. Toward verify only.
     config = (
-        "set security address-book global address qx-web-01 10.20.77.7/32\n"
+        "set security address-book global address web-77 10.20.77.7/32\n"
         "set security address-book global address hrm-app-02 10.20.77.7/32\n"
-        + rule("late", "users-all", "qx-web-01")
+        + rule("late", "users-all", "web-77")
     )
     artifacts = write(tmp_path, [config], [""])
     finding = collect(ingest(artifacts), PolicyKey.parse("trust/dc/late"))

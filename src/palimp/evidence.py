@@ -273,11 +273,14 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
     sides += [(n, "shared_source") for n in _hosts(dataset, policy.sources)]
     for name, kind in sides:
         value = dataset.config.addresses[name].value or ""
-        mine = vocab.in_object(name)
+        # Two-letter names count here (a conflict, never the intent, decision 0043).
+        mine = vocab.in_object(name) + vocab.short_in(name)[:1]
         others = [
             (other, theirs)
             for other in by_value.get(value, [])
-            if other != name and (theirs := vocab.in_object(other)) and not set(theirs) & set(mine)
+            if other != name
+            and (theirs := vocab.in_object(other) + vocab.short_in(other)[:1])
+            and not set(theirs) & set(mine)
         ]
         if not others:
             continue
