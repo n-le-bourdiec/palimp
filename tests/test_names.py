@@ -445,3 +445,21 @@ def test_ad_is_a_directory_role_only_on_its_service_and_dc_is_no_role() -> None:
     assert a.intent_apps == ["ldap"] and a.confidence == "MEDIUM"
     a = collect(dataset(rules), PolicyKey.parse("a/b/p2")).assessment
     assert a.intent_apps == [] and "directory" not in (a.intent_flow or "")
+
+
+def test_several_conflicts_are_summarized_in_one_clause() -> None:
+    # Session 29: "Conflicts: 3 shared addresses, see E3 to E5." The detail stays in the
+    # evidence.
+    rules = "".join(
+        f"set security address-book global address qorv-{x} 10.20.0.{i}/32\n"
+        f"set security address-book global address plinth-{x} 10.20.0.{i}/32\n"
+        f"set security address-book global address-set qorv-farm address qorv-{x}\n"
+        for i, x in enumerate("abc", start=1)
+    ) + policy("p1", "any", "qorv-farm")
+    found = collect(dataset(rules), PolicyKey.parse("a/b/p1"))
+    shared = [e.id for e in found.evidence if e.kind == "shared_address"]
+    assert len(shared) == 3 and len(found.assessment.conflicts) == 3
+    text = intent(found).text
+    first, last = shared[0], shared[-1]
+    assert text.endswith(f" Conflicts: 3 shared addresses, see {first} to {last}.")
+    assert text.count("Conflict") == 1

@@ -244,9 +244,50 @@ def intent(finding: Finding) -> Cited:
         text = (
             f"Purpose unknown, {assessment.confidence} confidence: {assessment.confidence_reason}."
         )
-    for conflict in assessment.conflicts:
-        text += f" Conflict: {conflict.text}."
+    text += conflicts_clause(finding)
     return Cited(text=text, evidence=list(assessment.confidence_evidence))
+
+
+CONFLICT_LABELS = {
+    "shared_address": ("shared address", "shared addresses"),
+    "shared_source": ("shared source", "shared sources"),
+    "name_service_mismatch": ("name and service mismatch", "name and service mismatches"),
+}
+OTHER_CONFLICT = (
+    "direct evidence naming another application",
+    "direct evidence items naming another application",
+)
+
+
+def _id_span(ids: list[str]) -> str:
+    """`E4 to E7` for consecutive IDs, else `E4, E6 and E9`."""
+    numbers = sorted({int(i.removeprefix("E")) for i in ids})
+    if len(numbers) > 2 and numbers == list(range(numbers[0], numbers[-1] + 1)):
+        return f"E{numbers[0]} to E{numbers[-1]}"
+    found = [f"E{n}" for n in numbers]
+    return ", ".join(found[:-1]) + (" and " if len(found) > 1 else "") + found[-1]
+
+
+def conflicts_clause(finding: Finding) -> str:
+    """One conflict is stated in full; several are summarized in one clause (session
+    29): "Conflicts: 4 shared addresses, see E4 to E7." The detail stays in the evidence."""
+    assessment = finding.assessment
+    assert assessment is not None
+    conflicts = assessment.conflicts
+    if len(conflicts) == 1:
+        return f" Conflict: {conflicts[0].text}."
+    if not conflicts:
+        return ""
+    kinds = _by_id(finding)
+    counts: dict[tuple[str, str], int] = {}
+    ids = []
+    for conflict in conflicts:
+        item = kinds.get(conflict.evidence[0])
+        labels = CONFLICT_LABELS.get(item.kind if item else "", OTHER_CONFLICT)
+        counts[labels] = counts.get(labels, 0) + 1
+        ids.append(conflict.evidence[0])
+    parts = [f"{n} {one if n == 1 else many}" for (one, many), n in counts.items()]
+    return f" Conflicts: {', '.join(parts)}, see {_id_span(ids)}."
 
 
 def owner_group(finding: Finding) -> str:
