@@ -3,6 +3,8 @@
 Every output names the rule that produced it and cites evidence IDs.
 
 Verdict rules, first match wins:
+- V-CLEANUP-RULE (keep): an active catch-all deny (any source, any destination,
+  any application): the cleanup rule (decision 0044).
 - V-SHARED-ADDRESS (verify): a destination address is also an object named after
   another application, and traffic is seen or a not-live signal exists: the
   address may have been reused (or the application renamed). Never keep, never
@@ -10,6 +12,8 @@ Verdict rules, first match wins:
 - V-CONTRADICTION (verify): a positive not-live signal, but traffic is seen.
   When the only logged traffic is probe traffic (scanner or monitoring, see
   palimp.formats.rt_flow), hits on the counters do not count as traffic seen.
+- V-DENY-NOTLIVE (verify): the same on an active deny or reject rule: removing a
+  block opens traffic, so a deny is a removal candidate only when deactivated.
 - V-NOTLIVE (removal_candidate): a positive not-live signal, no traffic seen.
 - V-PROBE-ONLY (verify): the only logged traffic is probe traffic, no
   not-live signal: not in use as far as the artifacts show, not unused either.
@@ -28,12 +32,17 @@ Verdict rules, first match wins:
 - V-NAME-SERVICE (verify): traffic seen, but the policy name names a service
   the matched applications do not offer (`ALLOW-SNMP` on junos-https,
   decision 0043). Never keep; the question goes to the firewall team.
+- V-FACTORY-DEFAULT, V-BROAD-PERMIT (verify): a Junos factory default policy, or
+  any other permit of any source to any destination for any application
+  (palimp.semantics): at most verify, asked of the firewall team (decision 0044).
 - V-TRAFFIC (keep): traffic seen.
 - V-NO-TRAFFIC-SEEN (verify): artifacts could show traffic and show none.
   Absence is never evidence of absence: this never gives removal_candidate.
 - V-NO-VISIBILITY (verify): no artifact can show traffic for this policy.
 
 Confidence rules (about the intent), first match wins:
+- C-CLEANUP, C-FACTORY-DEFAULT (MEDIUM): a catch-all deny or a factory default
+  policy, from its match alone (decision 0044).
 - C-T1-T3-CONFLICT: a T1 item names applications that the address objects do
   not name. One level below what the agreeing evidence alone would give.
 - C-T1-T3-AGREE (HIGH): T1 names an application the address objects name,

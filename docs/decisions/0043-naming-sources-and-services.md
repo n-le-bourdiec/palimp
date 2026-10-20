@@ -1,6 +1,6 @@
 # 0043 Naming sources, products and services (second pass on intent quality)
 
-- Status: Accepted
+- Status: Accepted, partly superseded by decision 0044 (the policy name never confirms a two-letter name; `ad` is a conditional role; item 11 narrowed)
 - Date: 2026-10-20 (session 28, analyzer)
 - Supersedes: decision 0042 item 3, the part that counts the address objects
   of each side of a rule as two sources, and decision 0042 item 4, the part
