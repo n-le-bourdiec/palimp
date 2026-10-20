@@ -164,3 +164,5 @@ class TrapFacts:
     ip_reuse: dict[str, dict] = field(default_factory=dict)  # uid -> reuse facts
     scanner_targets: dict[str, str] = field(default_factory=dict)  # uid -> noise kind
     stale: dict[str, dict] = field(default_factory=dict)  # uid -> replacement facts
+    # Medium and Hard (decision 0047): rules placed after a catch-all deny.
+    shadowed: dict[str, str] = field(default_factory=dict)  # uid -> catch-all deny uid

@@ -55,7 +55,9 @@ SEEDS = [0, 2, 3, 4, 11]
 # `keep` on unobservable scanner rules; Easy and Medium bytes unchanged.
 # Session 30 (simulator 0.4.0, decision 0045): realistic names, the naming
 # source confidence model and new rule kinds.
-GOLDEN_HARD = {0: "48e984474e541d119ab962c8b9484a2557cf955c07797b4b751a3e1ead3ba2d5"}
+# Session 32 (simulator 0.5.0, decision 0047): rule kind and best achievable
+# intent, shadowed rules and `ANY` address sets.
+GOLDEN_HARD = {0: "02d2f9fea57563e77606a03ca5f0f08760a09be29112c4249f3473e81d7c5c19"}
 # Trap counts of Hard seeds 0 to 49 (session 25), so that the distribution
 # check needs no generation. The fixture seeds are regenerated against them in
 # every run, the other seeds one test each under "full" (spread by xdist).

@@ -24,6 +24,13 @@ All these rules belong to the firewall team (`FIREWALL`, owner
 `FIREWALL_OWNER`) and are protected from hit count cleanups (nobody removes
 a deny or an any/any permit on hit counts alone). Some specific deny rules
 are deactivated later.
+
+Shadowed rules (decision 0047): Junos appends a new policy at the end of its
+zone pair, so a rule added without `insert policy ... before` lands after
+the catch-all deny and never matches. A few access rules are added that way,
+from their own sub-generator (`shadowed`); their flows keep trying and hit
+the deny. They are protected from hit count cleanups so that they stay in the
+final configuration.
 """
 
 from palimp_sim import voice
@@ -108,6 +115,17 @@ BROAD_PAIRS = (
     ("dmz", "servers"),
     ("users", "management"),
 )
+# Shadowed rules per scenario: weights of 0, 1, 2 (simulator choices, decision
+# 0047). Only zone pairs with a catch-all deny, from these roles, can hold one.
+SHADOW_WEIGHTS = {"medium": (0.7, 0.25, 0.05), "hard": (0.5, 0.35, 0.15)}
+SHADOW_SOURCES = ("users", "internet")
+SHADOW_TARGETS = ("servers", "dmz", "management")
+SHADOW_SUMMARIES = {
+    "users": "A named person's workstation reaches a server; the rule was added after "
+    "the catch-all deny and never matched",
+    "internet": "An outside support company reaches these servers; the rule was added "
+    "after the catch-all deny and never matched",
+}
 CLEANUP_SERVICES = ("tcp-5900", "tcp-6667", "udp-1900", "tcp-8888")
 UNDOCUMENTED_SERVICES = ("junos-ssh", "tcp-8443", "udp-1194", "tcp-5000", "tcp-8081")
 CLEANUP_NAMES = ("deny-all", "cleanup", "DENY-ANY", "default-deny", "explicit-deny", "drop-all")
@@ -287,8 +305,28 @@ class RuleKindsMixin:
             day = self.workday(rng.randint(5, total - 150))
             plan.append((day, 2, "cleanup_rule", {"pair": pair, "name": same_name}))
 
+    def _plan_shadowed(self, plan: list) -> None:
+        """Access rules added after a catch-all deny (decision 0047)."""
+        rng = self.rng_shadow
+        count = rng.weighted(SHADOW_WEIGHTS[self.level.name])
+        cleanups = [
+            (day, spec["pair"])
+            for day, _, kind, spec in plan
+            if kind == "cleanup_rule"
+            and spec["pair"][0] in SHADOW_SOURCES
+            and spec["pair"][1] in SHADOW_TARGETS
+        ]
+        for _ in range(count):
+            if not cleanups:
+                return
+            day, pair = rng.choice(cleanups)
+            later = day + rng.randint(20, 400)
+            if later < self.total_days - 30:
+                plan.append((self.workday(later), 4, "shadowed", {"pair": pair}))
+
     def _kind_handlers(self) -> dict:
         return {
+            "shadowed": lambda day, spec: self._shadowed(day, spec),
             "deny": lambda day, spec: self._deny(day, spec),
             "deny_off": lambda day, spec: self._deny_off(day, spec),
             "broad": lambda day, spec: self._broad(day, spec),
@@ -458,3 +496,117 @@ class RuleKindsMixin:
         self._register(policy, "cleanup_deny", flow, event, admin)
         where = f"{self.zone(pair[0])}->{self.zone(pair[1])}"
         self._kind_commit(day, admin, event, "cleanup", [policy.uid], where=where)
+
+    def _shadowed(self, day: int, spec: dict) -> None:
+        """An access rule appended after the catch-all deny of its zone pair.
+
+        Drawn from its own generator (`rng_shadow`, with the namer's styles):
+        the other draws of the timeline do not move. The workstation or vendor
+        address is new, so no rule above the deny carries its flow.
+        """
+        rng = self.rng_shadow
+        src_role, dst_role = spec["pair"]
+        pair = (self.zone(src_role), self.zone(dst_role))
+        deny = next(
+            (
+                p
+                for p in self.config.policies
+                if (p.from_zone, p.to_zone) == pair
+                and self.policy_meta[p.uid].intent_kind == "cleanup_deny"
+            ),
+            None,
+        )
+        targets = [
+            (app, tier.name)
+            for app in self.apps.values()
+            if not app.shared
+            and app.go_live is not None
+            and app.go_live <= day
+            and app.retired is None
+            for tier in app.template.tiers
+            if self._tier_zone(app, tier) == dst_role and app.tiers.get(tier.name)
+        ]
+        everyday = ("meticulous_senior", "hurried_operator")
+        admins = [a for a in self.admins if a.active(day) and a.persona in everyday]
+        if deny is None or not targets or not admins:
+            return
+        app, tier = rng.choice(targets)
+        admin = rng.choice(admins)
+        number = len(self.traps.shadowed)
+        saved, self.namer.rng = self.namer.rng, rng  # the namer's styles, this generator
+        try:
+            if src_role == "users":
+                person = rng.choice(self.people)
+                name = self.namer.workstation(person.name)
+                ip = f"10.10.{rng.randint(1, self.level.user_sites)}.{241 + number % 9}"
+                token, kind = f"pc:{name}", "app_access"
+                opened = {s for f in app.template.flows if f.src == "users" for s in f.services}
+                services = [
+                    s
+                    for f in app.template.flows
+                    if f.dst == tier
+                    for s in f.services
+                    if s not in opened and s not in SERVICE_WORDS
+                ]
+                service = rng.choice(services + ["junos-ssh"])
+            else:
+                default = f"vendor-{voice.code(app.app_id).lower()}-{90 + number:02d}"
+                name = self.namer.vendor(app.app_id, 90 + number, default)
+                ip = f"203.0.113.{100 + number % 20}"  # away from the partners
+                token, kind = f"vendor:{name}", "partner_access"
+                service = rng.choice(("junos-ssh", "junos-https"))
+        finally:
+            self.namer.rng = saved
+        self._ensure_address(name, f"{ip}/32")
+        source = Endpoint(src_role, name, [f"{ip}/32"], name)
+        self._shadow_hosts[token] = source
+        summary = SHADOW_SUMMARIES[src_role]
+        template = FlowTemplate(
+            token, tier, (service,), "business", rng.randint(5, 40), kind, summary
+        )
+        target = self._tier_endpoint(app, tier)
+        flow = Flow(self.next_id("F"), app.app_id, template, source, target, day + 1)
+        flow.extra = True  # counted from the rule kinds' generator
+        self.flows[flow.flow_id] = flow
+        event = self._event("access_request", day, admin, app, note="rule after a catch-all deny")
+        owner = self._owner_name(app)
+        description = None
+        if rng.chance(self._rate(admin, self.level.description_rate)):
+            description = voice.description(admin.persona, flow, None, owner, rng)
+        if admin.persona == "hurried_operator":
+            own = voice.operator_name(app.app_id, self._rule_number + rng.randint(1, 3), rng)
+        else:
+            own = self._policy_name(flow)
+        saved, self.namer.rng = self.namer.rng, rng
+        try:
+            zones = (self.zone(src_role), self.zone(dst_role))
+            name = self.namer.policy_name(own, admin.persona, app.app_id, flow, None, zones)
+        finally:
+            self.namer.rng = saved
+        self._ensure_application(service)
+        policy = Policy(
+            uid=self.next_id("R"),
+            name=self._unique(name),
+            from_zone=pair[0],
+            to_zone=pair[1],
+            sources=[source.address],
+            destinations=[target.address],
+            applications=[service],
+            log_close=rng.chance(self._rate(admin, self.level.log_rate)),
+            description=description,
+            tail=True,  # appended: after the catch-all deny
+        )
+        self.config.policies.append(policy)
+        self.policy_meta[policy.uid] = PolicyMeta(
+            policy.uid, app.app_id, [flow.flow_id], event.event_id, -1, admin.admin_id, None
+        )
+        self._protected.add(policy.uid)
+        self.traps.shadowed[policy.uid] = deny.uid
+        comment = ""
+        if rng.chance(self._rate(admin, self.level.comment_rate)):
+            comment = voice.commit_comment(
+                admin.persona, "access", app.app_id, None, rng, requester=owner
+            )
+        second = rng.randint(9 * 3600, 18 * 3600)
+        commit = self._commit(day, admin, comment, event, created=[policy.uid], second=second)
+        self.policy_meta[policy.uid].commit_seq = commit.seq

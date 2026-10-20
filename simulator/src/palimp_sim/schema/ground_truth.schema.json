@@ -135,7 +135,7 @@
                "TRAP-IP-REUSE", "TRAP-SCANNER-HITS", "TRAP-EMERGENCY-LOADBEARING",
                "TRAP-SHADOWED-DUPLICATE", "TRAP-RENAME-CHAIN", "TRAP-DEACTIVATED",
                "TRAP-TICKET-REJECTED", "TRAP-HISTORY-HORIZON", "TRAP-SHARED-LOGIN",
-               "TRAP-CLEANUP-FLAP"]
+               "TRAP-CLEANUP-FLAP", "TRAP-SHADOWED-BY-DENY"]
     },
     "verdict": {"enum": ["keep", "verify", "removal_candidate"]},
     "rule": {
@@ -209,7 +209,10 @@
             "best_achievable_verdict": {"$ref": "#/$defs/verdict"},
             "max_justified_confidence": {"enum": ["LOW", "MEDIUM", "HIGH"]},
             "best_achievable_confidence": {"enum": ["LOW", "MEDIUM", "HIGH"]},
-            "owner_to_ask": {"type": "string"}
+            "owner_to_ask": {"type": "string"},
+            "rule_kind": {"enum": ["application", "block", "cleanup_deny", "broad_permit",
+                                   "factory_default"]},
+            "best_achievable_intent": {"type": ["string", "null"]}
           }
         },
         "evidence": {
