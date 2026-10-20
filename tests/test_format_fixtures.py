@@ -258,3 +258,34 @@ def test_g10_current_release_templates() -> None:
     )
     event = parse_event(deny)
     assert (event.kind, event.policy_name, event.to_zone) == ("deny", "deny-all", "servers")
+
+
+# VSRX-12: the predefined applications palimp names match the published junos-defaults.
+
+
+def test_vsrx12_predefined_applications_match_junos_defaults() -> None:
+    import re
+
+    from palimp.services import PREDEFINED
+
+    text = body("junos_defaults_applications_full_13.2.txt")
+    defined = 0
+    for name, block in re.findall(r"application (junos-[\w-]+) \{\n(.*?)\n\}", text, re.S):
+        protocol = re.search(r"^protocol (\w+);", block, re.M)
+        port = re.search(r"^destination-port ([\d-]+);", block, re.M)
+        if "application-protocol icmp;" in block:
+            expected = "icmp"
+        elif "application-protocol ip;" in block:
+            expected = "ip"
+        elif protocol and port:
+            expected = f"{protocol.group(1)}/{port.group(1)}"
+        else:
+            expected = f"{protocol.group(1)}/rpc"  # rpc-program-number or uuid
+        assert PREDEFINED[name][1] == expected, name
+        defined += 1
+    assert defined == 36
+    # Every name the page's application sets list is known too.
+    for name in re.findall(r"^application (junos-[\w-]+);", text, re.M):
+        assert name in PREDEFINED, name
+    table = body("predefined_applications_table.txt")
+    assert "SNMP | 161 |" in table and PREDEFINED["junos-snmp-get"][1] == "udp/161"

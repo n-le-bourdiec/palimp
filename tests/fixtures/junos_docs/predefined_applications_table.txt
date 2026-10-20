@@ -1,0 +1,145 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/policy-predefined-applications.html
+# Page title: Predefined Policy Applications | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-20
+# Assumptions: VSRX-12
+# Note: The table rows of the page, one row per line, cells joined with ' | ', HTML tags removed, white space collapsed.
+# Note: The dash the page prints in empty port cells is written '-'.
+# Note: The page gives service names and ports, not the junos- application names.
+# ---
+Application Name | Port(s) | Application Description
+AOL | 5190-5193 | America Online Internet service provider (ISP) provides Internet, chat, and instant messaging applications.
+DHCP relay | 67 (default) | Dynamic Host Configuration Protocol.
+DHCP | 68 client 67 server | Dynamic Host Configuration Protocol allocates network addresses and delivers configuration parameters from server to hosts.
+DNS | 53 | Domain Name System translates domain names into IP addresses.
+FTP | 20 data 21 control | File Transfer Protocol (FTP) allows the sending and receiving of files between machines. You can choose to deny or permit ANY or to selectively permit or deny. We recommend denying FTP applications from untrusted sources (Internet).
+Gopher | 70 | Gopher organizes and displays Internet servers' contents as a hierarchically structured list of files. We recommend denying Gopher access to avoid exposing your network structure.
+HTTP | 80 | HyperText Transfer Protocol is the underlying protocol used by the World Wide Web (WWW). Denying HTTP application disables your users from viewing the Internet. Permitting HTTP application allows your trusted hosts to view the Internet.
+HTTP-EXT | - | Hypertext Transfer Protocol with extended nonstandard ports
+HTTPS | 443 | Hypertext Transfer Protocol with Secure Sockets Layer (SSL) is a protocol for transmitting private documents through the Internet. Denying HTTPS disables your users from shopping on the Internet and from accessing certain online resources that require secure password exchange. Permitting HTTPS allows your trusted hosts to participate in password exchange, shop online, and visit various protected online resources that require user login.
+Internet Locator Service | - | Internet Locator Service includes LDAP, User Locator Service, and LDAP over TSL/SSL.
+IRC | 6665-6669 | Internet Relay Chat (IRC) allows people connected to the Internet to join live discussions.
+LDAP | 389 | Lightweight Directory Access Protocol is a set of protocols used to access information directories.
+PC-Anywhere | - | PC-Anywhere is a remote control and file transfer software.
+TFTP | 69 | Trivial File transfer Protocol (TFTP) is a protocol for simple file transfer.
+WAIS | - | Wide Area Information Server is a program that finds documents on the Internet.
+Application | Parameter/UUID | Description
+Junos MS-RPC-EPM | 135 e1af8308-5d1f-11c9-91a4-08002b14a0fa | Microsoft remote procedure call (RPC) Endpoint Mapper (EPM) Protocol.
+Junos MS-RPC | - | Any Microsoft remote procedure call (RPC) applications.
+Junos MS-RPC-MSEXCHANGE | 3 members | Microsoft Exchange application group includes: Junos-MS-RPC-MSEXCHANGE-DATABASE Junos-MS-RPC-MSEXCHANGE-DIRECTORY Junos-MS-RPC-MSEXCHANGE-INFO-STORE
+Junos-MS-RPC-MSEXCHANGE-DATABASE | 1a190310-bb9c-11cd-90f8-00aa00466520 | Microsoft Exchange Database application.
+Junos-MS-RPC-MSEXCHANGE-DIRECTORY | f5cc5a18-4264-101a-8c59-08002b2f8426 f5cc5a7c-4264-101a-8c59-08002b2f8426 f5cc59b4-4264-101a-8c59-08002b2f8426 | Microsoft Exchange Directory application.
+Junos-MS-RPC-MSEXCHANGE-INFO-STORE | 0e4a0156-dd5d-11d2-8c2f-00c04fb6bcde 1453c42c-0fa6-11d2-a910-00c04f990f3b 10f24e8e-0fa6-11d2-a910-00c04f990f3b 1544f5e0-613c-11d1-93df-00c04fd7bd09 | Microsoft Exchange Information Store application.
+Junos-MS-RPC-TCP | - | Microsoft Transmission Control Protocol (TCP) application.
+Junos-MS-RPC-UDP | - | Microsoft User Datagram Protocol (UDP) application.
+Junos-MS-SQL | - | Microsoft Structured Query Language (SQL).
+Junos-MSN | - | Microsoft Network Messenger application.
+Dynamic Routing Protocol | Port | Description
+RIP | 520 | RIP is a common distance-vector routing protocol.
+OSPF | 89 | OSPF is a common link-state routing protocol.
+BGP | 179 | BGP is an exterior/interdomain routing protocol.
+Application | Port | Description
+H.323 | TCP source 1-65535; TCP destination 1720, 1503, 389, 522, 1731 UDP source 1-65535; UDP source 1719 | H.323 is a standard approved by the International Telecommunication Union (ITU) that defines how audiovisual conference data is transmitted across networks.
+NetMeeting | TCP source 1-65535; TCP destination 1720, 1503, 389, 522 UDP source 1719 | Microsoft NetMeeting uses TCP to provide teleconferencing (video and audio) applications over the Internet.
+Real media | TCP source 1-65535; TCP destination 7070 | Real Media is streaming video and audio technology.
+RTSP | 554 | Real-Time Streaming Protocol (RTSP) is for streaming media applications
+SIP | 5056 | Session Initiation Protocol (SIP) is an Application-Layer control protocol for creating, modifying, and terminating sessions.
+VDO Live | TCP source 1-65535; TCP destination 7000-7010 | VDOLive is a scalable, video streaming technology.
+Application | Program Numbers | Full Name
+SUN-RPC-PORTMAPPER | 111100000 | Sun RPC Portmapper protocol
+SUN-RPC-ANY | ANY | Any Sun RPC applications
+SUN-RPC-PROGRAM-MOUNTD | 100005 | Sun RPC Mount Daemon
+SUN-RPC-PROGRAM-NFS | 100003 100227 | Sun RPC Network File System
+SUN-RPC-PROGRAM-NLOCKMGR | 100021 | Sun RPC Network Lock Manager
+SUN-RPC-PROGRAM-RQUOTAD | 100011 | Sun RPC Remote Quota Daemon
+SUN-RPC-PROGRAM-RSTATD | 100001 | Sun RPC Remote Status Daemon
+SUN-RPC-PROGRAM-RUSERD | 100002 | Sun RPC Remote User Daemon
+SUN-RPC-PROGRAM-SADMIND | 100232 | Sun RPC System Administration Daemon
+SUN-RPC-PROGRAM-SPRAYD | 100012 | Sun RPC Spray Daemon
+SUN-RPC-PROGRAM-STATUS | 100024 | Sun RPC Status
+SUN-RPC-PROGRAM-WALLD | 100008 | Sun RPC Wall Daemon
+SUN-RPC-PROGRAM-YPBIND | 100007 | SUN RPC Yellow Page Bind application
+Application | Port | Description
+IKE | UDP source 1-65535; UDP destination 500 | Internet Key Exchange is the protocol that sets up a security association in the IPsec protocol suite. Internet Key protocol (IKE) is a protocol to obtain authenticated keying material for use with ISAKMP.
+IKE-NAT | 4500 | IKE-Network Address Translation (NAT) performs Layer 3 NAT for S2C IKE traffic.
+L2TP | 1701 | L2TP combines PPTP with Layer 2 Forwarding (L2F) for remote access.
+PPTP | 1723 | Point-to-Point Tunneling Protocol allows corporations to extend their own private network through private tunnels over the public Internet.
+Application | Port | Description
+Any | - | Any application
+TCP-ANY | 0-65,535 | Any protocol using the TCP
+UDP-ANY | 0-65,535 | Any protocol using the UDP
+Application | Port | Description
+Gnutella | 6346 (default) | Gnutella is a public domain file sharing protocol that operates over a distributed network. You can assign any port, but the default is 6346.
+MSN | 1863 | Microsoft Network Messenger is a utility that allows you to send instant messages and talk online.
+NNTP | 119 | Network News Transport Protocol is a protocol used to post, distribute, and retrieve USENET messages.
+SMB | 445 | Server Message Block (SMB) over IP is a protocol that allows you to read and write files to a server on a network.
+YMSG | 5010 | Yahoo! Messenger is a utility that allows you to check when others are online, send instant messages, and talk online.
+Application | Port | Description
+NBNAME | 137 | NetBIOS Name application displays all NetBIOS name packets sent on UDP port 137.
+NDBDS | 138 | NetBIOS Datagram application, published by IBM, provides connectionless (datagram) applications to PCs connected with a broadcast medium to locate resources, initiate sessions, and terminate sessions. It is unreliable and the packets are not sequenced.
+NFS | - | Network File System uses UDP to allow network users to access shared files stored on computers of different types. SUN RPC is a building block of NFS.
+NS Global | - | NS-Global is the central management protocol for Juniper Networks Firewall/VPN devices.
+NS Global PRO | - | NS Global-PRO is the scalable monitoring system for the Juniper Networks Firewall/VPN device family.
+NSM | - | Network and Security Manager
+NTP | 123 | Network Time Protocol provides a way for computers to synchronize to a time reference.
+RLOGIN | 513 | RLOGIN starts a terminal session on a remote host.
+RSH | 514 | RSH executes a shell command on a remote host.
+SNMP | 161 | Simple Network Management Protocol is a set of protocols for managing complex networks.
+SQL*Net V1 | 66 | SQL*Net Version 1 is a database language that allows for the creation, access, modification, and protection of data.
+SQL*Net V2 | 66 | SQL*Net Version 2 is a database language that allows for the creation, access, modification, and protection of data.
+MSSQL | 1433 (default instance) | Microsoft SQL is a proprietary database server tool that allows for the creation, access, modification, and protection of data.
+SSH | 22 | SSH is a program to log in to another computer over a network through strong authentication and secure communications on an unsecure channel.
+SYSLOG | 514 | Syslog is a UNIX program that sends messages to the system logger.
+Talk | 517-518 | Talk is a visual communication program that copies lines from your terminal to that of another user.
+Telnet | 23 | Telnet is a UNIX program that provides a standard method of interfacing terminal devices and terminal-oriented processes to each other.
+WinFrame | - | WinFrame is a technology that allows users on non-Windows machines to run Windows applications.
+X-Windows | - | X-Windows is the windowing and graphics system that Motif and OpenLook are based on.
+Application | Port | Description
+IMAP | 143 | Internet Message Access Protocol is used for retrieving messages.
+Mail (SMTP) | 25 | Simple Mail Transfer Protocol is used to send messages between servers.
+POP3 | 110 | Post Office Protocol is used for retrieving e-mail.
+Application | Port | Description
+FINGER | 79 | Finger is a UNIX program that provides information about the users.
+UUCP | 117 | UNIX-to-UNIX Copy Protocol (UUCP) is a UNIX utility that enables file transfers between two computers over a direct serial or modem connection.
+Application | Port | Description
+CHARGEN | 19 | Character Generator Protocol is a UDP- or TCP-based debugging and measurement tool.
+DISCARD | 9 | Discard protocol is an Application Layer protocol that describes a process for discarding TCP or UDP data sent to port 9.
+IDENT | 113 | Identification protocol is a TCP/IP Application Layer protocol used for TCP client authentication.
+LPR | 515 listen; 721-731 source range (inclusive) | Line Printer Daemon protocol is a TCP-based protocol used for printing applications.
+RADIUS | 1812 | Remote Authentication Dial-In User Service application is a server program used for authentication and accounting purposes.
+RADIUS Accounting | 1813 | A RADIUS Accounting server receives statistical data about users logging in to or out of a LAN.
+SQLMON | 1434 (SQL Monitor Port) | SQL monitor (Microsoft)
+VNC | 5800 | Virtual Network Computing facilitates viewing and interacting with another computer or mobile Juniper Networks device connected to the Internet.
+WHOIS | 43 | Network Directory Application Protocol is a way to look up domain names.
+SCCP | 2000 | Cisco Station Call Control Protocol (SCCP) uses the signaling connection control port to provide high availability and flow control.
+ICMP Message Name | Type | Code | Description
+ICMP-ANY | all | all | ICMP-ANY affects any protocol using ICMP. Denying ICMP-ANY impairs any attempt to ping or monitor a network using ICMP. Permitting ICMP-ANY allows all ICMP messages.
+ICMP-ADDRESS-MASK Request Reply | 17 18 | 0 0 | ICMP address mask query is used for systems that need the local subnet mask from a bootstrap server. Denying ICMP address mask request messages can adversely affect diskless systems. Permitting ICMP address mask request messages might allow others to fingerprint the operating system of a host in your network.
+ICMP-DEST-UNREACH | 3 | 0 | ICMP destination unreachable error message indicates that the destination host is configured to reject the packets. Codes 0, 1, 4, or 5 can be from a gateway. Codes 2 or 3 can be from a host (RFC 792). Denying ICMP destination unreachable error messages can remove the assumption that a host is up and running behind an SRX Series Firewall. Permitting ICMP destination unreachable error messages can allow some assumptions, such as security filtering, to be made about the network.
+ICMP Fragment Needed | 3 | 4 | ICMP fragmentation error message indicates that fragmentation is needed but the don't fragment flag is set. We recommend denying these messages from the Internet to an internal network.
+ICMP FragmentReassembly | 11 | 1 | ICMP fragment reassembly time exceeded error indicates that a host reassembling a fragmented message ran out of time and dropped the packet. This message is sometimes sent. We recommend denying these messages from the Internet (external) to the trusted (internal) network.
+ICMP-HOST-UNREACH | 3 | 1 | ICMP host unreachable error messages indicate that routing table entries do not list or list as infinity a particular host. Sometimes this error is sent by gateways that cannot fragment when a packet requiring fragmentation is received. We recommend denying these messages from the Internet to a trusted network. Permitting these messages allows others to be able to determine your internal hosts IP addresses by a process of elimination or make assumptions about gateways and fragmentation.
+ICMP-INFO Request Reply | 15 16 | 0 0 | ICMP-INFO query messages allow diskless host systems to query the network and self-configure. Denying ICMP address mask request messages can adversely affect diskless systems. Permitting ICMP address mask request messages might allow others to broadcast information queries to a network segment to determine computer type.
+ICMP-PARAMETER-PROBLEM | 12 | 0 | ICMP parameter problem error messages notify you when incorrect header parameters are present and have caused a packet to be discarded We recommend denying these messages from the Internet to a trusted network. Permitting ICMP parameter problem error messages allows others to make assumptions about your network.
+ICMP-PORT-UNREACH | 3 | 3 | ICMP port unreachable error messages indicate that gateways processing datagrams requesting certain ports are unavailable or unsupported in the network. We recommend denying these messages from the Internet to a trusted network. Permitting ICMP port unreachable error messages can allow others to determine which ports you use for certain protocols.
+ICMP-PROTOCOL-UNREACH | 3 | 2 | ICMP protocol unreachable error messages indicate that gateways processing datagrams requesting certain protocols are unavailable or unsupported in the network. We recommend denying these messages from the Internet to a trusted network. Permitting ICMP protocol unreachable error messages can allow others to determine what protocols your network is running.
+ICMP-REDIRECT | 5 | 0 | ICMP redirect network error messages are sent by an SRX Series Firewall. We recommend denying these messages from the Internet to a trusted network.
+ICMP-REDIRECT-HOST | 5 | 1 | ICMP redirect messages indicate datagrams destined for the specified host to be sent along another path.
+ICMP-REDIRECT-TOS-HOST | 5 | 3 | ICMP redirect type of service (TOS) and host error is a type of message.
+ICMP-REDIRECT-TOS-NET | 5 | 2 | ICMP redirect TOS and network error is a type of message.
+ICMP-SOURCE-QUENCH | 4 | 0 | ICMP source quench error message indicates that a device does not have the buffer space available to accept, queue, and send the packets on to the next hop. Denying these messages will not help or impair internal network performance. Permitting these messages can allow others to know that a device is congested, making it a viable attack target.
+ICMP-SOURCE-ROUTE-FAIL | 3 | 5 | ICMP source route failed error message We recommend denying these messages from the Internet (external).
+ICMP-TIME-EXCEEDED | 11 | 0 | ICMP time-to-live (TTL) exceeded error message indicates that a packet's TTL setting reached zero before the packet reached its destination. This ensures that older packets are discarded before resent ones are processed. We recommend denying these messages from a trusted network out to the Internet.
+ICMP-TIMESTAMP Request Reply | 13 14 | 0 0 | ICMP-TIMESTAMP query messages provide the mechanism to synchronize time and coordinate time distribution in a large, diverse network.
+Ping (ICMP ECHO) | 8 | 0 | Ping is a utility to determine whether a specific host is accessible by its IP address. Denying ping functionality removes your ability to check to see if a host is active. Permitting ping can allow others to execute a denial-of-service (DoS) or Smurf attack.
+ICMP-ECHO-FRAGMENT-ASSEMBLY-EXPIRE | 11 | 1 | ICMP fragment echo reassembly time expired error message indicates that the reassembly time was exceeded. We recommend denying these messages.
+Traceroute Forward Discard | 30 30 | 0 1 | Traceroute is a utility to indicate the path to access a specific host. We recommend denying this utility from the Internet (external) to your trusted network (internal).
+Message Type | Message Code
+5 = Redirect | 0 = Redirect datagram for the network (or subnet)
+ | 1 = Redirect datagram for the host
+ | 2 = Redirect datagram for the type of application and network
+ | 3 = Redirect datagram for the type of application and host
+11 = Time Exceeded Codes | 0 = Time to live exceeded in transit
+ | 1 = Fragment reassembly time exceeded

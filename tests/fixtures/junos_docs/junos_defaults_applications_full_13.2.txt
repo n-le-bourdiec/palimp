@@ -1,0 +1,291 @@
+# Source: https://www.juniper.net/documentation/en_US/junos13.2/topics/concept/junos-groups-default.html
+# Page title: Junos Default Groups - Technical Documentation - Support - Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos 13.2
+# Junos release shown: Junos OS 13.2 documentation
+# Retrieved: 2026-10-20
+# Assumptions: VSRX-12
+# Note: The applications block of 'show groups junos-defaults' as the page publishes it, from 'applications {' to its closing braces.
+# Note: The page renders each line as a styled span; indentation is not reproduced, text is unchanged. Comments wrapped by the page stay wrapped.
+# Note: Four entries (H.323, two IIOP, RealPlayer) have no 'application' line in the page, as published.
+# Note: Curly quotes around set names are written as straight double quotes.
+# ---
+applications {
+# File Transfer Protocol
+application junos-ftp {
+application-protocol ftp;
+protocol tcp;
+destination-port 21;
+}
+# Trivial File Transfer Protocol
+application junos-tftp {
+application-protocol tftp;
+protocol udp;
+destination-port 69;
+}
+# RPC port mapper on TCP
+application junos-rpc-portmap-tcp {
+application-protocol rpc-portmap;
+protocol tcp;
+destination-port 111;
+}
+# RPC port mapper on UDP
+application junos-rpc-portmap-udp {
+application-protocol rpc-portmap;
+protocol udp;
+destination-port 111;
+}
+# IP Protocol
+application junos-ip {
+application-protocol ip;
+}
+# remote exec
+application junos-rexec {
+application-protocol exec;
+protocol tcp;
+destination-port 512;
+}
+# remote login
+application junos-rlogin {
+application-protocol login;
+protocol tcp;
+destination-port 513;
+}
+# remote shell
+application junos-rsh {
+application-protocol shell;
+protocol tcp;
+destination-port 514;
+}
+# Real-Time Streaming Protocol
+application junos-rtsp {
+application-protocol rtsp;
+protocol tcp;
+destination-port 554;
+}
+# Oracle SQL servers use this protocol to execute SQL commands
+# from clients, load balance, use application-specific
+servers, and so on.
+application junos-sqlnet {
+application-protocol sqlnet;
+protocol tcp;
+destination-port 1521;
+}
+# H.323 Protocol for audio/video conferencing
+protocol tcp;
+destination-port 1720;
+}
+# Internet Inter-ORB Protocol is used for CORBA applications.
+# The ORB protocol in Java virtual machine uses port 1975
+as a default.
+protocol tcp;
+destination-port 1975;
+}
+# Internet Inter-ORB Protocol is used for CORBA applications.
+# ORBIX is a CORBA framework from Iona Technologies that
+uses
+# port 3075 as a default.
+protocol tcp;
+destination-port 3075;
+}
+# This was the original RealPlayer protocol.
+# RTSP is more widely used by RealPlayer,
+protocol tcp;
+destination-port 7070;
+}
+# Traceroute application
+application junos-traceroute {
+application-protocol traceroute;
+protocol udp;
+destination-port 33435-33450;
+ttl-threshold 30;
+}
+# Traceroute application that stops at device supporting
+firewall
+# (packets with ttl > 1 will be discarded).
+application junos-traceroute-ttl-1 {
+application-protocol traceroute;
+protocol udp;
+destination-port 33435-33450;
+ttl-threshold 1;
+}
+# The full range of known RPC programs using UDP.
+# Specific program numbers are assigned to certain applications.
+application junos-rpc-services-udp {
+application-protocol rpc;
+protocol udp;
+rpc-program-number 100001-400000;
+}
+# The full range of known RPC programs using TCP.
+# Specific program numbers are assigned to certain applications.
+application junos-rpc-services-tcp {
+application-protocol rpc;
+protocol tcp;
+rpc-program-number 100001-400000;
+}
+# All ICMP traffic
+# This can be made more restrictive by specifying ICMP
+type and code.
+application junos-icmp-all {
+application-protocol icmp;
+}
+# ICMP ping; the echo reply is allowed upon return.
+application junos-icmp-ping {
+application-protocol icmp;
+icmp-type echo-request;
+}
+# Protocol used by Windows Media Server and Windows Media
+Player
+application junos-netshow {
+application-protocol netshow;
+protocol tcp;
+destination-port 1755;
+}
+# NetBIOS, the networking protocol used on Windows networks;
+# includes name service port, both UDP and TCP.
+application junos-netbios-name-udp {
+application-protocol netbios;
+protocol udp;
+destination-port 137;
+}
+application junos-netbios-name-tcp {
+protocol tcp;
+destination-port 137;
+}
+# NetBIOS, the networking protocol used on Windows networks;
+# includes datagram service port.
+application junos-netbios-datagram {
+application-protocol netbios;
+protocol udp;
+destination-port 138;
+}
+# NetBIOS, the networking protocol used on Windows networks;
+# includes session service port.
+application junos-netbios-session {
+protocol tcp;
+destination-port 139;
+}
+# DCE-RPC port mapper on TCP
+application junos-dce-rpc-portmap {
+application-protocol dce-rpc-portmap;
+protocol tcp;
+destination-port 135;
+}
+# MS Exchange requires these three UUID values.
+application junos-dcerpc-endpoint-mapper-service {
+application-protocol dce-rpc;
+protocol tcp;
+uuid e1af8308-5d1f-11c9-91a4-08002b14a0fa;
+}
+application junos-ssh {
+protocol tcp;
+destination-port 22;
+}
+application junos-telnet {
+protocol tcp;
+destination-port 23;
+}
+application junos-smtp {
+protocol tcp;
+destination-port 25;
+}
+application junos-dns-udp {
+protocol udp;
+destination-port 53;
+}
+application junos-dns-tcp {
+protocol tcp;
+destination-port 53;
+}
+application junos-tacacs {
+protocol tcp;
+destination-port 49;
+}
+# TACACS Database Service
+application junos-tacacs-ds {
+protocol tcp;
+destination-port 65;
+}
+application junos-dhcp-client {
+protocol udp;
+destination-port 68;
+}
+application junos-dhcp-server {
+protocol udp;
+destination-port 67;
+}
+application junos-bootpc {
+protocol udp;
+destination-port 68;
+}
+application junos-bootps {
+protocol udp;
+destination-port 67;
+}
+application junos-http {
+protocol tcp;
+destination-port 80;
+}
+application junos-https {
+protocol tcp;
+destination-port 443;
+}
+# "junos-algs-outbound" defines a set of all
+applications
+# requiring an ALG. Useful for defining a rule for an untrusted
+# network to allow trusted network users to use all the
+# Junos-supported ALGs initiated from the trusted network.
+application-set junos-algs-outbound {
+application junos-ftp;
+application junos-tftp;
+application junos-rpc-portmap-tcp;
+application junos-rpc-portmap-udp;
+application junos-snmp-get;
+application junos-snmp-get-next;
+application junos-snmp-response;
+application junos-snmp-trap;
+application junos-rexec;
+application junos-rlogin;
+application junos-rsh;
+application junos-rtsp;
+application junos-sqlnet;
+application junos-traceroute;
+application junos-rpc-services-udp;
+application junos-rpc-services-tcp;
+application junos-icmp-all;
+application junos-netshow;
+application junos-netbios-name-udp;
+application junos-netbios-datagram;
+application junos-dce-rpc-portmap;
+application junos-dcerpc-msexchange-directory-rfr;
+application junos-dcerpc-msexchange-information-store;
+application junos-dcerpc-msexchange-directory-nsp;
+}
+# "junos-management-inbound" represents the
+group of applications
+# that might need access to the trusted network from the
+untrusted
+# network for management purposes.
+# The set is intended for a UI to display management choices.
+# NOTE: It is not recommended that you use the entire set
+directly in
+# a firewall rule and open up firewall to all of these
+# applications. Also, you should always specify the source
+# and destination prefixes when using each application.
+application-set junos-management-inbound {
+application junos-snmp-get;
+application junos-snmp-get-next;
+application junos-snmp-response;
+application junos-snmp-trap;
+application junos-ssh;
+application junos-telnet;
+application junos-http;
+application junos-https;
+application junos-xnm-ssl;
+application junos-xnm-clear-text;
+application junos-icmp-ping;
+application junos-traceroute-ttl-1;
+}
+}
+}
+}

@@ -3,36 +3,77 @@
 T4 is contextual inference: a port says what a flow probably is, never why
 the rule exists. These tables only name the service.
 
-Predefined applications: the five in tests/fixtures/junos_docs/
-junos_defaults_applications_13.2.txt are documented (VSRX-12); the others are
-the usual junos-defaults definitions, to confirm on a real vSRX.
+Predefined applications (session 28, VSRX-12): the definitions of
+tests/fixtures/junos_docs/junos_defaults_applications_full_13.2.txt (the
+applications of `show groups junos-defaults`, Junos 13.2 documentation), the
+names its application sets list with ports from
+predefined_applications_table.txt (the predefined applications page), then a
+few usual junos-defaults names the documentation does not show, to confirm
+on a real vSRX.
 """
 
 from palimp.models import Application
 
 PREDEFINED: dict[str, tuple[str, str]] = {
-    "junos-ssh": ("SSH", "tcp/22"),
-    "junos-telnet": ("Telnet", "tcp/23"),
+    # Defined in junos_defaults_applications_full_13.2.txt.
     "junos-ftp": ("FTP", "tcp/21"),
     "junos-tftp": ("TFTP", "udp/69"),
+    "junos-rpc-portmap-tcp": ("RPC port mapper", "tcp/111"),
+    "junos-rpc-portmap-udp": ("RPC port mapper", "udp/111"),
+    "junos-ip": ("any IP protocol", "ip"),
+    "junos-rexec": ("remote exec", "tcp/512"),
+    "junos-rlogin": ("remote login", "tcp/513"),
+    "junos-rsh": ("remote shell", "tcp/514"),
+    "junos-rtsp": ("RTSP streaming", "tcp/554"),
+    "junos-sqlnet": ("Oracle database", "tcp/1521"),
+    "junos-traceroute": ("traceroute", "udp/33435-33450"),
+    "junos-traceroute-ttl-1": ("traceroute", "udp/33435-33450"),
+    "junos-rpc-services-udp": ("Sun RPC services", "udp/rpc"),
+    "junos-rpc-services-tcp": ("Sun RPC services", "tcp/rpc"),
+    "junos-icmp-all": ("ICMP", "icmp"),
+    "junos-icmp-ping": ("ICMP ping", "icmp"),
+    "junos-netshow": ("Windows Media (NetShow)", "tcp/1755"),
+    "junos-netbios-name-udp": ("NetBIOS name service", "udp/137"),
+    "junos-netbios-name-tcp": ("NetBIOS name service", "tcp/137"),
+    "junos-netbios-datagram": ("NetBIOS datagram", "udp/138"),
+    "junos-netbios-session": ("NetBIOS session", "tcp/139"),
+    "junos-dce-rpc-portmap": ("Microsoft RPC endpoint mapper", "tcp/135"),
+    "junos-dcerpc-endpoint-mapper-service": ("Microsoft RPC endpoint mapper", "tcp/rpc"),
+    "junos-ssh": ("SSH", "tcp/22"),
+    "junos-telnet": ("Telnet", "tcp/23"),
     "junos-smtp": ("SMTP mail", "tcp/25"),
+    "junos-dns-udp": ("DNS", "udp/53"),
+    "junos-dns-tcp": ("DNS", "tcp/53"),
+    "junos-tacacs": ("TACACS authentication", "tcp/49"),
+    "junos-tacacs-ds": ("TACACS database service", "tcp/65"),
+    "junos-dhcp-client": ("DHCP", "udp/68"),
+    "junos-dhcp-server": ("DHCP", "udp/67"),
+    "junos-bootpc": ("DHCP", "udp/68"),
+    "junos-bootps": ("DHCP", "udp/67"),
+    "junos-http": ("HTTP", "tcp/80"),
+    "junos-https": ("HTTPS", "tcp/443"),
+    # Listed in the application sets of that page; ports from the predefined
+    # applications page (SNMP 161), else general knowledge.
+    "junos-snmp-get": ("SNMP polling", "udp/161"),
+    "junos-snmp-get-next": ("SNMP polling", "udp/161"),
+    "junos-snmp-response": ("SNMP polling", "udp/161"),
+    "junos-snmp-trap": ("SNMP traps", "udp/162"),
+    "junos-xnm-ssl": ("Junos XML management over TLS", "tcp/3220"),
+    "junos-xnm-clear-text": ("Junos XML management", "tcp/3221"),
+    "junos-dcerpc-msexchange-directory-rfr": ("Microsoft Exchange", "tcp/rpc"),
+    "junos-dcerpc-msexchange-information-store": ("Microsoft Exchange", "tcp/rpc"),
+    "junos-dcerpc-msexchange-directory-nsp": ("Microsoft Exchange", "tcp/rpc"),
+    # Usual junos-defaults names, not in the documentation samples (unverified).
     "junos-pop3": ("POP3 mail", "tcp/110"),
     "junos-imap": ("IMAP mail", "tcp/143"),
     "junos-imaps": ("IMAP mail over TLS", "tcp/993"),
-    "junos-http": ("HTTP", "tcp/80"),
-    "junos-https": ("HTTPS", "tcp/443"),
-    "junos-dns-udp": ("DNS", "udp/53"),
-    "junos-dns-tcp": ("DNS", "tcp/53"),
     "junos-ntp": ("NTP time sync", "udp/123"),
-    "junos-snmp-get": ("SNMP polling", "udp/161"),
-    "junos-snmp-trap": ("SNMP traps", "udp/162"),
     "junos-syslog": ("syslog", "udp/514"),
     "junos-ldap": ("LDAP directory", "tcp/389"),
     "junos-radius": ("RADIUS authentication", "udp/1812"),
     "junos-bgp": ("BGP routing", "tcp/179"),
     "junos-ike": ("IPsec IKE", "udp/500"),
     "junos-ping": ("ICMP ping", "icmp"),
-    "junos-icmp-all": ("ICMP", "icmp"),
     "junos-ms-sql": ("Microsoft SQL Server", "tcp/1433"),
     "junos-sqlnet-v2": ("Oracle database", "tcp/1521"),
     "junos-sip": ("SIP voice signaling", "udp/5060"),
