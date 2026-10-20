@@ -66,6 +66,10 @@ realistic firewall history plus a ground-truth file (true intent of every rule).
 - Real Junos output formats come from samples copied from Juniper's official
   documentation, stored under `tests/fixtures/junos_docs/` (decision 0013).
   A vSRX lab stays a later upgrade.
+- main stays green. A simulator change that breaks analyzer tests goes on a
+  branch; the branch is merged into main only after the analyzer session
+  that follows has made it green. Simulator sessions check the full test
+  suite (not only simulator tests) before pushing to main.
 - Key metrics: intent accuracy, confidence calibration (HIGH must be right
   90%+ of the time), zero unsourced claims, and "removal candidate on a live
   or still needed rule" counted as the most severe error (decision 0038).
