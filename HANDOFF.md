@@ -1,85 +1,64 @@
 # Handoff
 
-## Last session: 30 (2026-10-20), simulator: realistic names, naming source confidence, firewall team rules (decision 0045)
-
-### Note to analyzer sessions (schema change, decisions 0017 and 0045)
-
-The ground truth JSON Schema changed (additive, `schema_version` stays 1):
-
-- intent kinds `block` (specific deny or reject), `cleanup_deny` (catch-all
-  deny), `broad_permit` (any/any/any permit), `factory_default`;
-- event kind `security_rule`; hits reason `blocked`;
-- these rules have `intent.app_id` `firewall` (a pseudo application listed
-  in `apps` when used) and `owner_to_ask` `firewall_team` (not a person id).
-
-Expected values of the new kinds: active deny and catch-all deny keep/keep
-MEDIUM; deactivated deny removal_candidate (both); broad permit best verify,
-LOW; factory default best verify, MEDIUM (spec 4.11). From simulator 0.4.0,
-Medium and Hard `max_justified_confidence` comes from naming sources (spec
-6.1), not tiers. Medium and Hard numbers before and after 0.4.0 are not
-comparable (`docs/evaluation-history.md`). Easy artifacts are unchanged.
+## Last session: 31 (2026-10-20), analyzer: CI green on simulator 0.4.0, review-4 fixes, shadowed rules (decision 0046)
 
 ### Done
 
-- Session 29 metrics finalized (154 calls, 10.97 USD).
-- Realistic names in Medium and Hard (spec 2.5, `naming.py`): site codes,
-  server roles, people's workstations, generic objects, application names
-  on 25% to 60% of the applications; policy names and descriptions in new
-  styles (tickets, zone-to-zone, object-based, free text).
-- Naming source confidence model (spec 6.1, `sources.py`).
-- Firewall team rules (spec 4.11, `rulekinds.py`): deny and reject (some
-  deactivated), catch-all deny, broad permit, factory default.
-- Simulator 0.4.0, goldens and stored Hard trap counts regenerated,
-  decision 0045, format assumptions DENY-1 and HITCOUNT-ACTION-1.
-- Distributions before and after (spec 7.6): application rules with no
-  naming source 7.7% to 33.4% (Medium), 4.6% to 36.9% (Hard);
-  `max_justified_confidence` LOW 0.8% to 68.7% (Medium), 1.7% to 75.9%
-  (Hard); 337 Medium and 279 Hard firewall team rules.
-
-### CI is red (analyzer tests on simulator 0.4.0)
-
-CI run 39432778559 (commit b0ae226): 9 analyzer tests fail on the new
-Medium and Hard scenarios, simulator tests all pass (580/580 locally):
-`tests/test_report.py::test_medium_report[1,2,4]` (rule id sets differ) and
-`tests/test_anonymize.py` medium and hierarchical seeds 2, 7, 8 ("original
-names left in the copy", judgments not identical after anonymize). This
-simulator session neither reads nor changes analyzer code or tests. The
-anonymize failures look like real findings with realistic names (names
-anonymize does not know, people's workstation names); the report failures
-may be expected-value tests tied to 0.3.0 output.
+- Session 30 metrics finalized (134 calls, 15.37 USD).
+- Process rule in `CLAUDE.md`: main stays green; a simulator change that
+  breaks analyzer tests goes on a branch, merged after the analyzer session
+  makes it green.
+- CI green again (run 39438709395 on `487de86`). The 6 anonymize failures
+  were privacy bugs, fixed in anonymize (tests not weakened): a kept word
+  that starts a longer known name (`web`, `webshop`) now stays at the start
+  of its replacement, so the copy keeps the abbreviation palimp reads;
+  replacement initials equal to an original name (`req GJ` to `req CI`)
+  redraw the mapping. New test with invented realistic names. The 3 report
+  failures were an outdated expectation (firewall team findings since
+  session 29, first generated in Medium by simulator 0.4.0).
+- Baseline on simulator 0.4.0 (`docs/evaluation-history.md`): 0 dangerous
+  errors; eval script now reports underconfidence and per intent kind.
+- Part B: commit comments and tickets confirm two-letter names; review-4
+  fixes (ticket-only descriptions, factory default sources, broad permits
+  say what they permit and inbound ones open the team list, hosting
+  platforms are locations, `MS-SQL-PORT-GROUP` names mssql, an object named
+  `ANY` read by contents, deny questions to the firewall team); shadowed
+  rules (`V-SHADOWED`, at most verify); deny tuning on seeds 0-19
+  (`V-DENY-QUIET` keep, `C-BLOCK` MEDIUM).
+- Medium 20-99 and Hard 20-49 after: block vs best 100% (was 80.9% and
+  64.4%), 0 dangerous, verdict moves only verify to keep on quiet denies (27
+  and 31). Real configs: 0 verdict moves rule by rule, 1 shadowed rule found
+  (`docs/real-configs-robustness.md`).
 
 ### Next
 
-- Analyzer session, first: make CI green on simulator 0.4.0 (the 9 tests
-  above). Then measure palimp on simulator 0.4.0 dev seeds (Medium
-  20-99, Hard 20-49), new enum values and `firewall_team` in the
-  evaluation.
-- Project lead review of `../palimp-realconfigs/review-4.md` (carried).
+- Project lead: review decision 0046 (in particular items 5 `ANY` and 7).
 - Held-out workflow: add the Hard table (decision 0036) before the second
-  held-out run; consider rotating the salt (spec 8.2, simulator version
-  changed difficulty).
+  held-out run; consider rotating the salt (simulator version changed).
 - Release preparation (decision 0032 item 5).
+- Simulator backlog: shadowed rules (a rule after a catch-all deny) are
+  never generated, so `V-SHADOWED` is tested only on unit fixtures and one
+  real configuration.
 
 ### Open questions
 
-- Firewall team rules are all owned by `firewall_team`, including denies
-  that name an application object (none generated yet): right owner?
-- Catch-all deny MEDIUM, broad permit LOW, factory default MEDIUM in the
-  ground truth: confirm the ceilings.
-- The confidence model counts a commit comment and a ticket as sources that
-  are not names (they can back a two-letter name); decision 0044 lists only
-  a port, an application name, a dynamic application or a description.
-- Deactivated deny: removal_candidate (usual deactivated rule) in the
-  ground truth; decision 0044 says a deactivated deny follows the usual
-  rules.
-- Carried over from session 29: deny rules routed to owners or the
-  firewall team; `ad` as a conditional role; `default-permit` with no
-  Juniper sample; an object literally named `ANY`.
-- Carried over: decision 0039 items 2 and 4; decision 0036 point 3;
-  anonymize prompt login and host; `--strip-text`; decision 0020 example;
-  90% vs best trade; HIGH with an open ticket; decision 0019 blind items;
-  on_call persona; decision 0015; `commit activate`; CONFIRMED-TEXT;
-  scenario names.
+- Shadowed rules: removal_candidate needs approval (not before release).
+  Today a shadowed keep becomes verify; a shadowed rule with hits stays
+  verify with the contradiction stated.
+- An object named `ANY` that is not 0.0.0.0/0 no longer makes a rule a
+  catch-all deny or broad permit: its verdict follows the usual rules,
+  removal_candidate included on a positive not-live signal (asked in the
+  session 31 prompt; no real configuration verdict moved).
+- `V-DENY-QUIET` keeps a deny with no traffic seen; a deny with no
+  visibility at all stays verify (firewall team). Should it be keep too?
+- Carried from session 30: owner of deny rules naming an application
+  object; ceilings of catch-all deny, broad permit and factory default;
+  deactivated deny as removal_candidate.
+- Carried over: `ad` as a conditional role; decision 0039 items 2 and 4;
+  decision 0036 point 3; anonymize prompt login and host; `--strip-text`;
+  decision 0020 example; 90% vs best trade; HIGH with an open ticket;
+  decision 0019 blind items; on_call persona; decision 0015; `commit
+  activate`; CONFIRMED-TEXT; scenario names.
 
 ### Known issues
 
@@ -189,6 +168,9 @@ simulator code.
 - Deny rules naming an application object, deny rules with logging
   (needs a `RT_FLOW_SESSION_DENY` sample), custom application names and
   dynamic applications as naming sources (decision 0045).
+- Shadowed rules: a rule placed after a catch-all deny of its zone pair
+  (decision 0046 item 6); address objects named like the `any` keyword
+  (`ANY`) with narrower contents (decision 0046 item 5).
 - Service desk tickets: a service desk files tickets on behalf of
   application owners (requester = service desk agent, owner named elsewhere
   or not at all), to test that palimp does not take the requester as the
@@ -244,9 +226,10 @@ has transcript `1fc8d6dd-973f-4e31-90a8-b193e45219b2` (finalized in session
 has transcript `7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e` (finalized in session
 29). Session 29 has transcript `2b84db4c-8e39-40ea-a296-b7749a1c6593`
 (finalized in session 30). Session 30 has transcript
-`5fd285ac-95ef-4a18-a704-c9c5c246fd1b`. Finalize it at the start of session
-31 with:
+`5fd285ac-95ef-4a18-a704-c9c5c246fd1b` (finalized in session 31). Session 31
+has transcript `82425030-2c0d-4a09-a086-7597631acbb2`. Finalize it at the
+start of session 32 with:
 
-    uv run python metrics/session_tokens.py 5fd285ac-95ef-4a18-a704-c9c5c246fd1b
+    uv run python metrics/session_tokens.py 82425030-2c0d-4a09-a086-7597631acbb2
 
 Cost is API-equivalent (decision 0006), not a billed amount.
