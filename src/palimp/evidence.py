@@ -259,6 +259,8 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
     may carry traffic it was not written for. Which side is current is not known.
     A source object with such an address gives a `shared_source` item: the name may be
     stale (the application renamed), which lowers confidence but not the verdict.
+    The policy's own object need not name an application (session 28): `host_bi-web-01`
+    names nothing once two-letter names are filtered, and still shares its address.
     A deactivated policy carries no traffic: no item."""
     if policy.deactivated:
         return []
@@ -275,16 +277,14 @@ def shared_address_items(dataset: Dataset, policy: Policy, vocab: Vocabulary) ->
         others = [
             (other, theirs)
             for other in by_value.get(value, [])
-            if other != name
-            and (theirs := vocab.in_object(other))
-            and mine
-            and not set(theirs) & set(mine)
+            if other != name and (theirs := vocab.in_object(other)) and not set(theirs) & set(mine)
         ]
         if not others:
             continue
         apps = list(dict.fromkeys(a for _, theirs in others for a in theirs))
         named = ", ".join(f"{o} ({', '.join(t)})" for o, t in others)
-        claim = f"address {value} of {name} ({', '.join(mine)}) is also the address of {named}: "
+        own = ", ".join(mine) or "names no application"
+        claim = f"address {value} of {name} ({own}) is also the address of {named}: "
         if kind == "shared_address":
             claim += (
                 "the address may have been reused by another application, or the application "

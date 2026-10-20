@@ -429,3 +429,19 @@ def test_a_deactivated_rule_keeps_its_own_question(tmp_path: Path) -> None:
     assert assessment.ask.startswith("firewall team")
     entry = build_report(dataset).rules[0]
     assert entry.question == CLEANUP_QUESTION
+
+
+def test_a_shared_address_counts_when_the_own_object_names_nothing(tmp_path: Path) -> None:
+    # Session 28: qx-web-01 names nothing alone (two letters), but its address is also
+    # hrm-app-02: the rule may carry hrm traffic. Toward verify only.
+    config = (
+        "set security address-book global address qx-web-01 10.20.77.7/32\n"
+        "set security address-book global address hrm-app-02 10.20.77.7/32\n"
+        + rule("late", "users-all", "qx-web-01")
+    )
+    artifacts = write(tmp_path, [config], [""])
+    finding = collect(ingest(artifacts), PolicyKey.parse("trust/dc/late"))
+    item = kinds(finding)["shared_address"]
+    assert item.apps == ["hrm"] and "(names no application)" in item.claim
+    assert finding.assessment.verdict_rule == "V-SHARED-ADDRESS"
+    assert "hrm" not in finding.assessment.intent_apps
