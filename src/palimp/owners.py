@@ -90,7 +90,30 @@ def _staff_note(finding: Finding, dataset: Dataset) -> str:
     )
 
 
-def find_owner(finding: Finding, dataset: Dataset, apps: list[str], conflict: bool) -> Owner:
+def _ask_team(finding: Finding) -> str:
+    """With no owner and no confirmed application (session 29): the team that runs the
+    destination objects, else the source objects, else the firewall team. Never "the
+    team that runs any"."""
+    policy = finding.policy
+    targets = [n for n in policy.destinations if n != "any"]
+    targets = targets or [n for n in policy.sources if n != "any"]
+    if not targets:
+        return (
+            "No owner in the artifacts and no named address on either side: ask the firewall team."
+        )
+    more = f" and {len(targets) - 3} more" if len(targets) > 3 else ""
+    return f"No owner in the artifacts: ask the team that runs {', '.join(targets[:3])}{more}."
+
+
+def find_owner(
+    finding: Finding,
+    dataset: Dataset,
+    apps: list[str],
+    conflict: bool,
+    confirmed: list[str] | None = None,
+) -> Owner:
+    """CONFIRMED: the applications at least two sources name (MEDIUM or HIGH intent),
+    the only ones named as "the owner of application ..." when no person is found."""
     evidence = finding.evidence
     staff = admins(dataset)
     # name -> reasons; sources: name -> set of source kinds that point to it.
@@ -154,9 +177,9 @@ def find_owner(finding: Finding, dataset: Dataset, apps: list[str], conflict: bo
         why = "; ".join(f"{n}: {', '.join(reasons[n])}" for n in ranked + unresolved)
         text = f"Not sure who owns it:{doubt} candidates are {why}."
         return Owner(candidates=ranked, text=text + staff_note)
-    if apps:
-        text = f"The owner of application {', '.join(apps)}: no name in the artifacts."
+    named = apps if confirmed is None else [a for a in apps if a in confirmed]
+    if named:
+        text = f"The owner of application {', '.join(named)}: no name in the artifacts."
     else:
-        targets = ", ".join(finding.policy.destinations) or "the destination"
-        text = f"No owner in the artifacts: ask the team that runs {targets}."
+        text = _ask_team(finding)
     return Owner(text=text + staff_note)

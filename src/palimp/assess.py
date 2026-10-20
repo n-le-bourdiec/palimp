@@ -513,7 +513,11 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
     # A flow between two applications may belong to either side: every application
     # the objects name is an owner candidate, not only the one the intent names.
     objects = [a for e in finding.evidence if e.kind == "address_objects" for a in e.apps]
-    owner = find_owner(finding, dataset, list(dict.fromkeys(apps + objects)), bool(conflicts))
+    # Only applications two sources confirm are named as owners (session 29).
+    confirmed = apps if level != "LOW" else []
+    owner = find_owner(
+        finding, dataset, list(dict.fromkeys(apps + objects)), bool(conflicts), confirmed
+    )
     ask = owner.text
     if finding.policy.deactivated and verdict != "keep":
         question, ask = CLEANUP_QUESTION, CLEANUP_ASK

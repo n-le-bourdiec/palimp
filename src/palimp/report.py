@@ -257,7 +257,8 @@ def owner_group(finding: Finding) -> str:
         return assessment.owner
     if assessment.owner_candidates:
         return "not sure: " + ", ".join(sorted(assessment.owner_candidates))
-    if assessment.intent_apps:
+    # An application a single source names is never listed as an owner (session 29).
+    if assessment.intent_apps and assessment.confidence != "LOW":
         return "no name found: owner of " + ", ".join(assessment.intent_apps)
     return "no name found"
 

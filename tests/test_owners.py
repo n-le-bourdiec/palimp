@@ -109,4 +109,20 @@ def test_unresolved_or_other_initials_keep_the_doubt() -> None:
 def test_no_ticket_no_name() -> None:
     result = owner_of(dataset({}), ["crm"])
     assert result.owner is None and result.owner_candidates == []
-    assert "no name in the artifacts" in result.ask
+    # Session 29: crm is named by the objects alone (LOW), never listed as an owner.
+    assert "crm" not in result.ask.split("runs")[0]
+    assert "ask the team that runs crm-db-01" in result.ask
+
+
+def test_no_name_never_asks_the_team_that_runs_any() -> None:
+    # Session 29: the other side of the rule, then the firewall team.
+    from palimp.owners import find_owner
+
+    for sources, destinations, expected in (
+        (["hr-pc-01"], ["any"], "ask the team that runs hr-pc-01."),
+        (["any"], ["any"], "ask the firewall team."),
+    ):
+        policy = POLICY.model_copy(update={"sources": sources, "destinations": destinations})
+        finding = Finding(key=policy.key, policy=policy, created_in_commit=None, evidence=[])
+        text = find_owner(finding, dataset({}), [], False, []).text
+        assert text.endswith(expected) and "runs any" not in text
