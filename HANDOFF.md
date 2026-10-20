@@ -1,68 +1,63 @@
 # Handoff
 
-## Last session: 28 (2026-10-20), analyzer: second pass on intent quality (decision 0043)
+## Last session: 29 (2026-10-20), analyzer: review-3 fixes and rule semantics (decision 0044)
 
 ### Done
 
-- Session 27 metrics finalized (174 calls, 10.86 USD).
-- Review-2 bugs: a shared address or shared source never adds an
-  application to the intent; deactivated rules get the cleanup question in
-  the assessment itself (the session 27 review script printed the
-  assessment question, which had never been the cleanup question: `explain`
-  showed the same gap); `redis` was lost to the zone word filter
-  (`REDIS-DMZ-PRIV`) and application-set names were not learned.
-- Decision 0043 (supersedes the "both sides count twice" and "dynamic
-  application alone LOW" parts of 0042): `PRODUCTS` name an application in
-  any name (never in free text, never a role; `mysql`, `mssql` leave
-  `SERVER_ROLES`, anonymize keeps products); custom application and
-  application-set names learned; address objects count once; dynamic
-  application alone MEDIUM (C-DYNAMIC-APP); `PREDEFINED` from the docs
-  (fixtures `junos_defaults_applications_full_13.2.txt`,
-  `predefined_applications_table.txt`, VSRX-12d); `PORT_NAMES` (port +
-  product name = two sources); `ROLE_SERVICES` (a `dns` object on udp/53
-  names dns, only when no name names an application); two-letter names
-  (`Vocabulary.short`, `ad` leaves the roles) only with two sources and only
-  as a fallback; flows described from services, roles, `PLACES` and zones;
-  `term` applications read (APP-TERM-1, two fixtures); name/service
-  contradiction (`name_service_mismatch`, V-NAME-SERVICE, C-NAME-SERVICE,
-  firewall team list section).
-- Safe initiative (item 6, flagged): shared addresses found when the own
-  object names nothing, two-letter names used for that check: the 5 Hard
-  rules of session 27 are back to verify.
-- Dev sets (`docs/evaluation-history.md`, session 28): 0 dangerous errors;
-  intent 93.9% -> 95.3% (Medium), 91.2% -> 92.1% (Hard); underconfidence
-  48.1% -> 56.9%, 57.1% -> 67.6%; overconfidence Hard 0.5% -> 0.4%;
-  verdict moves toward verify only (Medium 7, Hard 24).
-- Real configs (`docs/real-configs-robustness.md`): MEDIUM 17 -> 57,
-  "Purpose unknown" 182 -> 131, 7 `ALLOW-SNMP` rules flagged, verdicts
-  identical. New local review file `../palimp-realconfigs/review-3.md`.
+- Session 28 metrics finalized (201 calls, 13.89 USD).
+- Part A (review-3): confirmed names only in the intent once one name has
+  two sources; two-letter names confirmed only by a port, a dynamic
+  application, a custom application name or a description, never the policy
+  name; `dc` out of the roles, `ad` a conditional role read only on LDAP or
+  Kerberos (`CONDITIONAL_ROLES`, kept by anonymize); name/service flag only
+  when no object of the rule carries the service word; Ask line falls back
+  to the other side, then the firewall team, and never names an application
+  only one source names; several conflicts summarized in one clause.
+- Part B (`palimp.semantics`): deny and reject rules say what they block and
+  ask "Is this block still wanted?", never removal_candidate unless
+  deactivated (V-DENY-NOTLIVE); catch-all deny is a cleanup rule, keep
+  (V-CLEANUP-RULE, C-CLEANUP MEDIUM); Junos factory default policies
+  (V-FACTORY-DEFAULT, fixture `hier_factory_default_srx210.txt`,
+  FACTORY-1 to FACTORY-3) and broad permits (V-BROAD-PERMIT) at most verify,
+  in the firewall team list; descriptions and annotations quoted as a
+  stated purpose (claim, no confidence, neutralized, not in the LLM
+  fallback); ticket references not in tickets.csv cited in the question.
+- Decision 0044 (supersedes parts of 0043).
+- Dev sets (`docs/evaluation-history.md`, session 29): 0 dangerous errors
+  on Medium 20-99 and Hard 20-49; Medium 7 `bank-sftp` rules verify -> keep
+  (= best), Hard no verdict change; intent 95.3% -> 95.3% (Medium), 92.1% ->
+  92.0% (Hard: two-letter names no longer confirmed by the policy name). The
+  simulator has no deny, broad permit or factory default rule.
+- Real configs (`docs/real-configs-robustness.md`, session 29). Real configs: Ask "runs
+  any" 128 -> 0, Purpose unknown 131 -> 88, 33 factory defaults, 58 broad
+  permits, 9 cleanup rules verify -> keep, removal candidates unchanged.
+  New local review file `../palimp-realconfigs/review-4.md`.
 
 ### Next
 
-- Project lead review of `../palimp-realconfigs/review-3.md`.
-- Session 29 (simulator): realistic object names (site prefixes, people,
-  generic words, roles), so dev metrics see what real configs show.
+- Project lead review of `../palimp-realconfigs/review-4.md`.
+- Simulator session: realistic object names (site prefixes, people,
+  generic words, roles), deny rules, catch-all deny, broad permits and
+  factory defaults in scenarios, so dev metrics see what real configs show.
 - Held-out workflow: add the Hard table (decision 0036) before the second
   held-out run.
 - Release preparation (decision 0032 item 5).
 
 ### Open questions
 
-- Two-letter codes confirmed by a policy name and an object that start
-  with the same code (`LT-Gates-Paxton`, `FG-MB-AIRCON`): 8 real rules at
-  MEDIUM. Same naming convention as the both-sides case? If so, the policy
-  name should not confirm a prefix the objects share.
-- V-NAME-SERVICE "at most verify": implemented as keep -> verify only; a
-  removal candidate stays one (its not-live signal does not depend on the
-  name). Right reading?
-- `*-to-bank-sftp` on junos-https (7 Medium rules, simulator says keep):
-  `sftp` names the destination host there. Keep the flag?
-- `dc` is a server role (domain controller, session 27): `DC-TEAM` on the
-  real configs reads "domain controller servers" where DC means data
-  center. Drop `dc` from the roles?
-- 2 Medium V-CONTRADICTION rules at keep (`ci` decommission, two letters):
-  read a two-letter name in not-live signals when tickets or commit
-  comments name it? Moves rules toward removal, needs approval.
+- Deny rules keep the owner routing (an application owner or the team that
+  runs the objects): should "Is this block still wanted?" go to the
+  firewall team instead?
+- Catch-all deny at MEDIUM confidence (structure alone): HIGH justified?
+- `ad` as a conditional role names the service (`ldap`, `kerberos`), not
+  "Active Directory": right reading of "names the service only when the
+  service matches"?
+- `default-permit` as a factory default name has no Juniper documentation
+  sample (FACTORY-3, practitioner only); the official SRX210 sample names it
+  `trust-to-untrust`. Keep reading both?
+- An address object literally named `ANY` is read as `any` by the rule
+  semantics (c08): safe for broad permits (toward verify) and catch-all deny
+  (a deny opens nothing), but not checked against the object value.
 - Carried over from session 24 (analyzer): reused addresses trade
   (decision 0039 item 4), not-live signals with regional instances
   (decision 0039 item 2).
@@ -74,8 +69,13 @@
 
 ### Known issues
 
-- Underconfidence is high on dev sets (57%, 68%): simulated objects name
-  the application on both sides, now one source; session 29 changes names.
+- Underconfidence is high on dev sets (57%, 68% in session 28): simulated
+  objects name the application on both sides, now one source.
+- Known limit (decision 0044 item 6): a two-letter name is never read in
+  not-live signals, so 2 Medium V-CONTRADICTION rules whose decommission
+  names `ci` stay at keep (session 28).
+- Part B items 10, 12 and 13 landed in one commit (`da54749`): they share
+  `palimp.semantics` and the factory default is a broad permit.
 - Commit `74e382a` says it restores the 5 Hard rules; it restored 4, the
   fifth came with `d8ffe8d`.
 - Person names stay possible applications at LOW (no name list, decision
@@ -166,6 +166,12 @@ on held-out or on the real public configs.
 For simulator sessions. Analyzer sessions add items here, they never read
 simulator code.
 
+- Rule semantics (analyzer session 29, decision 0044): deny and reject
+  rules (some with a not-live signal), catch-all deny rules, broad permits
+  (any/any/any) and Junos factory default policies (`default-permit`,
+  `trust-to-untrust`) in scenarios, with their ground truth intent. Today no
+  dev rule exercises V-CLEANUP-RULE, V-DENY-NOTLIVE, V-FACTORY-DEFAULT or
+  V-BROAD-PERMIT.
 - Service desk tickets: a service desk files tickets on behalf of
   application owners (requester = service desk agent, owner named elsewhere
   or not at all), to test that palimp does not take the requester as the
@@ -218,9 +224,10 @@ has transcript `1fc8d6dd-973f-4e31-90a8-b193e45219b2` (finalized in session
 26). Session 26 has transcript `1c765544-e3ec-47e1-8473-5ee1cc86ff24`
 (finalized in session 27). Session 27 has transcript
 `4fa256b5-0487-44e9-a639-0af270d28f5c` (finalized in session 28). Session 28
-has transcript `7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e`. Finalize it at the
-start of session 29 with:
+has transcript `7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e` (finalized in session
+29). Session 29 has transcript `2b84db4c-8e39-40ea-a296-b7749a1c6593`.
+Finalize it at the start of session 30 with:
 
-    uv run python metrics/session_tokens.py 7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e
+    uv run python metrics/session_tokens.py 2b84db4c-8e39-40ea-a296-b7749a1c6593
 
 Cost is API-equivalent (decision 0006), not a billed amount.

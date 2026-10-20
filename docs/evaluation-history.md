@@ -261,3 +261,44 @@ Reading:
   a two-letter name filtered since decision 0042, so the decommission marker
   no longer reaches `ci-app-servers`. Not changed: reading a two-letter name
   in a not-live signal would move rules toward removal (needs approval).
+
+## Rule semantics and review-3 fixes, session 29 (2026-10-20, dev seeds, not a held-out run)
+
+Decision 0044: confirmed names only, two-letter names never confirmed by the
+policy name, `dc` out of the roles and `ad` conditional, name/service flag
+only when no object carries the service word, Ask line, conflicts in one
+clause; deny and reject rules, catch-all deny, factory defaults, broad
+permits, stated purpose, ticket look-up. Not tuned against the simulator:
+every rule comes from the project lead's review of real configurations.
+
+- palimp commit: `855c813` (session 29; the dev runs used `10c9bd4` plus the
+  deny wording change of `855c813`, which touches no verdict, confidence or
+  intent application), baseline `65acdfe` (session 28 code, `8bccb19`)
+- Command: `uv run python eval/verdicts.py --level medium --seeds 20-99` and
+  `--level hard --seeds 20-49`, with `--json` for the per-rule comparison
+
+| Metric | Medium 20-99 before | Medium 20-99 after | Hard 20-49 before | Hard 20-49 after |
+|---|---|---|---|---|
+| Rules | 12553 | 12553 | 12490 | 12490 |
+| Verdict vs best achievable | 92.0% (11544) | 92.0% (11551) | 97.7% (12199) | 97.7% (12199) |
+| Dangerous errors (decision 0038) | 0 | 0 | 0 | 0 |
+| Intent application right (first named) | 95.3% | 95.3% | 92.1% | 92.0% |
+| Overconfidence | 0.0% (0) | 0.0% (0) | 0.4% (47) | 0.4% (47) |
+| Underconfidence | 56.9% (7138) | 56.8% (7135) | 67.6% (8440) | 67.7% (8458) |
+| HIGH / MEDIUM / LOW | 3300 / 2718 / 6535 | 3307 / 2713 / 6533 | 1208 / 3593 / 7689 | 1208 / 3577 / 7705 |
+| HIGH: intent application right | 98.4% | 98.4% | 95.9% | 95.9% |
+
+Reading:
+
+- Verdicts: Medium 7 rules `*-to-bank-sftp` on junos-https go from verify
+  back to keep (= best): the object `bank-sftp` carries the service word, so
+  the name/service flag no longer fires (decision 0044 item 4, the project
+  lead's rule). Hard: no verdict change.
+- Intent: Medium 16 rules gain a right intent and 10 lose it, Hard 4 and 11:
+  the losses are two-letter names (`ci`, `bi`, `hr`) that only the policy name
+  confirmed (`allow-bi`, `hr-access`), now LOW without an application, as the
+  project lead decided.
+- The simulator generates no deny or reject rule, no catch-all deny, no broad
+  permit and no factory default policy: V-CLEANUP-RULE, V-DENY-NOTLIVE,
+  V-FACTORY-DEFAULT and V-BROAD-PERMIT never fire on the dev sets. Part B is
+  checked by unit tests and the real configurations only (simulator backlog).
