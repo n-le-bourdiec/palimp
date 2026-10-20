@@ -1,6 +1,7 @@
 """Same level and seed give byte-identical output, on any platform."""
 
 import hashlib
+import json
 
 import pytest
 
@@ -20,15 +21,23 @@ from palimp_sim.generate import generate
 # manifest.json and ground_truth.json (test_easy_changed_only_by_version below).
 # 0.4.0 (session 30): realistic names, the naming source confidence model and
 # new rule kinds in Medium and Hard (decision 0045). Easy output did not change.
+# 0.5.0 (session 32): `expected.rule_kind` and `expected.best_achievable_intent`
+# in every rule, shadowed rules and `ANY` address sets in Medium and Hard
+# (decision 0047). Easy artifacts did not change; its ground truth gains the
+# two fields (test_easy_changed_only_by_version below).
 GOLDEN = {
-    1: "3c8ee77e905fe22bf2e478a163ce58eedb53d2ef534bd0c89ff409e79bd26324",
-    7: "b616ad6db3bb8d63ec44e227f3c0888b2ae81c8d925f5c1e0034c91ca93cdf12",
+    1: "321be406b21aed1831d9b78d8608d0458cfb14f6aedbcb83462597d3a1c6ba11",
+    7: "ecafedb605325af3e23ca4cce0292f76d56ab3482a59fb4e7f3e43eaa89859b7",
 }
-# Easy hashes of 0.3.0: still produced when the version string is set back.
-GOLDEN_0_3_0 = {
-    1: "fd55025b30669a3c9b49afcc2847db03dc23cceb4142e5bee7d3d2ff64d3ea2a",
-    7: "c85ddc7f0b22dcf6d7188203ab3db48e23eb44b12062ae390dfeab1bf62df3d3",
+# Easy hashes of earlier versions: still produced when the version string is
+# set back and the fields added since are left out of the ground truth.
+GOLDEN_EARLIER = {
+    ("0.3.0", 1): "fd55025b30669a3c9b49afcc2847db03dc23cceb4142e5bee7d3d2ff64d3ea2a",
+    ("0.3.0", 7): "c85ddc7f0b22dcf6d7188203ab3db48e23eb44b12062ae390dfeab1bf62df3d3",
+    ("0.4.0", 1): "3c8ee77e905fe22bf2e478a163ce58eedb53d2ef534bd0c89ff409e79bd26324",
+    ("0.4.0", 7): "b616ad6db3bb8d63ec44e227f3c0888b2ae81c8d925f5c1e0034c91ca93cdf12",
 }
+FIELDS_SINCE_0_4_0 = ("rule_kind", "best_achievable_intent")
 
 
 def test_same_seed_same_bytes() -> None:
@@ -45,12 +54,22 @@ def test_golden_manifest(seed: int) -> None:
     assert hashlib.sha256(manifest).hexdigest() == GOLDEN[seed]
 
 
-@pytest.mark.parametrize("seed", sorted(GOLDEN_0_3_0))
-def test_easy_changed_only_by_version(seed: int, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(generate_module, "__version__", "0.3.0")
-    monkeypatch.setattr(truth, "__version__", "0.3.0")
-    manifest = generate("easy", seed)["manifest.json"]
-    assert hashlib.sha256(manifest).hexdigest() == GOLDEN_0_3_0[seed]
+@pytest.mark.parametrize(("version", "seed"), sorted(GOLDEN_EARLIER))
+def test_easy_changed_only_by_version(
+    version: str, seed: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(generate_module, "__version__", version)
+    monkeypatch.setattr(truth, "__version__", version)
+    files = generate("easy", seed)
+    document = json.loads(files["ground_truth.json"])
+    for rule in document["rules"]:
+        for name in FIELDS_SINCE_0_4_0:
+            del rule["expected"][name]
+    data = generate_module._json(document).encode("utf-8")
+    manifest = json.loads(files["manifest.json"])
+    manifest["files"]["ground_truth.json"] = hashlib.sha256(data).hexdigest()
+    rebuilt = generate_module._json(manifest).encode("utf-8")
+    assert hashlib.sha256(rebuilt).hexdigest() == GOLDEN_EARLIER[(version, seed)]
 
 
 def test_no_carriage_returns() -> None:
@@ -80,8 +99,9 @@ def test_unknown_level_is_rejected() -> None:
 # 0.2.0 (session 9): Medium added; Easy output unchanged.
 # 0.3.0 (session 10): trap counts drawn per scenario (decision 0018).
 # 0.4.0 (session 30): decision 0045.
+# 0.5.0 (session 32): decision 0047.
 GOLDEN_MEDIUM = {
-    0: "ab7873b05245e95c2a0ddc8f9f803cd77bedb470659ab31b7c30038bd5a48637",
+    0: "a2428c2403dde8b2cd2ce6d71ac7540162b8499f3fd6293d9d72b56a268278ba",
 }
 
 

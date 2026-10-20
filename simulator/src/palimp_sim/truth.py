@@ -13,6 +13,8 @@ from palimp_sim.junos import ANY
 from palimp_sim.rulekinds import FIREWALL, FIREWALL_APP, FIREWALL_OWNER, NEW_KINDS
 from palimp_sim.traffic import TrafficResult
 
+APPLICATION_RULE = "application"  # `expected.rule_kind` of a rule made for an application
+
 GENERIC_ADDRESSES = {ANY, "users-all", "servers-net"}
 LEVELS = ("LOW", "MEDIUM", "HIGH")
 MIN_WINDOW_FOR_REMOVAL = 90  # days of hit counts needed to call a zero-hit rule removable
@@ -168,6 +170,10 @@ def _rule(
     batch = commit.seq in facts.batch_commits and retained
     batch_named = facts.batch_commits.get(commit.seq)
     hidden_live = is_live and hits == 0 and lines == 0 and not policy.inactive
+    # A rule placed after the catch-all deny of its zone pair (rulekinds.py).
+    shadow_deny = facts.shadowed.get(policy.uid) if not policy.inactive else None
+    if shadow_deny and not _shadowed_by(sim, policy, shadow_deny):
+        shadow_deny = None
 
     # Hard traps (hard.py). Every value below is empty or False in Medium.
     hierarchical = sim.level.config_format == "hierarchical"
@@ -324,6 +330,10 @@ def _rule(
             if seq is not None and commit_index(sim, seq) < RETAINED:
                 where = f"rule {_name_of(sim, uid)} removed in commit {commit_index(sim, seq)}"
                 add("T3", "rollbacks", where, "live")
+    if shadow_deny:
+        # Nothing can reach a rule below an any/any/any deny of its zone pair.
+        deny = _name_of(sim, shadow_deny)
+        add("T3", "config.set", f"policy {policy.name} after catch-all deny {deny}", "not_live")
     add("T4", "config.set", "applications " + ", ".join(policy.applications), "intent")
 
     if sim.level.traps:
@@ -350,6 +360,8 @@ def _rule(
             traps.append("TRAP-SCANNER-HITS")
         if stale_named:
             traps.append("TRAP-STALE-NAME")
+        if shadow_deny:
+            traps.append("TRAP-SHADOWED-BY-DENY")
 
     pair_reset = sim.pair_resets.get((policy.from_zone, policy.to_zone), 0)
     window = sim.total_days - max(sim.hit_reset_day or 0, pair_reset)
@@ -372,13 +384,27 @@ def _rule(
             # Hit counts only, and nothing visible says the flows ended:
             # the probe hits read as business use (decision 0040).
             best = "keep"
+    blocked_need = False
+    if shadow_deny:
+        # The flows still try and hit the deny: the rule is wanted but never
+        # matches. Only the firewall team can move it (decision 0047).
+        blocked_need = _still_tried(sim, meta.flow_ids, live)
+        verdict = "verify" if blocked_need else "removal_candidate"
+        best = "verify"
+    found = _sources(sim, policy, meta.app_id, commit if retained else None)
     if sim.level.traps:
         # Naming sources (spec 6.1, decision 0045).
-        found = _sources(sim, policy, meta.app_id, commit if retained else None)
         traffic = any(_shows_traffic(e) and not e["misleading"] for e in evidence)
         justified = sources.confidence(found, traffic)
     else:
         justified = _confidence(evidence)
+    # The application a perfect analyzer can name from the artifacts
+    # (decision 0047): one counted naming source is enough. A hidden stale
+    # name makes the old application the apparent one (decision 0040).
+    best_intent = meta.app_id if sources.counted(found) else None
+    if best_intent is None and stale_hidden:
+        old_found = _sources(sim, policy, old_app, commit if retained else None)
+        best_intent = old_app if sources.counted(old_found) else None
     expected = {
         "verdict": verdict,
         "best_achievable_verdict": best,
@@ -395,6 +421,10 @@ def _rule(
         achievable = sources.confidence(found, seen)
         expected["best_achievable_confidence"] = max(achievable, justified, key=LEVELS.index)
     expected["owner_to_ask"] = sim.apps[reuse["app"]].owner_id if reused else app.owner_id
+    if shadow_deny:
+        expected["owner_to_ask"] = FIREWALL_OWNER
+    expected["rule_kind"] = APPLICATION_RULE
+    expected["best_achievable_intent"] = best_intent
     return {
         "rule_uid": policy.uid,
         "key": {"from_zone": policy.from_zone, "to_zone": policy.to_zone, "name": policy.name},
@@ -416,7 +446,7 @@ def _rule(
         },
         "status": {
             "live": is_live,
-            "still_needed": is_live or reused,
+            "still_needed": is_live or reused or blocked_need,
             "carried_flows": live.get(policy.uid, []),
             "last_real_use": _iso(sim, stats.last_hit if stats else None),
             "hits_in_window": hits,
@@ -496,6 +526,9 @@ def _kind_rule(sim, policy, meta, traffic: TrafficResult, live: dict, log_lines:
     if sim.level.name == "hard":
         expected["best_achievable_confidence"] = level
     expected["owner_to_ask"] = FIREWALL_OWNER
+    # Read from the rule's structure, not from an application (decision 0047).
+    expected["rule_kind"] = kind
+    expected["best_achievable_intent"] = None
     reason = "none" if not hits else "blocked" if blocks else "business"
     return {
         "rule_uid": policy.uid,
@@ -530,6 +563,25 @@ def _kind_rule(sim, policy, meta, traffic: TrafficResult, live: dict, log_lines:
         "evidence": evidence,
         "traps": traps,
     }
+
+
+def _shadowed_by(sim, policy, deny_uid: str) -> bool:
+    """Whether an active catch-all deny comes before `policy` in its zone pair."""
+    pair = (policy.from_zone, policy.to_zone)
+    for other in sim.config.ordered_policies():
+        if other.uid == policy.uid:
+            return False
+        if other.uid == deny_uid:
+            return not other.inactive and (other.from_zone, other.to_zone) == pair
+    return False
+
+
+def _still_tried(sim, flow_ids: list[str], live: dict) -> bool:
+    """Whether a flow of the rule still runs and no permit carries it."""
+    last_day = sim.total_days - 1
+    permits = {p.uid for p in sim.config.policies if p.action == "permit"}
+    carried = {f for uid, flows in live.items() if uid in permits for f in flows}
+    return any(sim.flows[f].active(last_day) and f not in carried for f in flow_ids)
 
 
 def _shows_traffic(item: dict) -> bool:

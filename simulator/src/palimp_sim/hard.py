@@ -544,6 +544,8 @@ class HardSimulation(MediumSimulation):
             ):
                 continue
             flow.end = day
+            if flow.extra:
+                continue  # the access of a shadowed rule is dropped (decision 0047)
             mine = flow.app_id == old.app_id
             moved = Flow(
                 self.next_id("F"),
@@ -589,6 +591,7 @@ class HardSimulation(MediumSimulation):
             and not p.is_global
             and p.uid not in involved
             and p.uid not in facts.renames
+            and p.uid not in facts.shadowed  # decision 0047: no draw moves
             and self.policy_meta[p.uid].app_id != FIREWALL
             and self.commits[self.policy_meta[p.uid].commit_seq].day <= day - 60
         ]

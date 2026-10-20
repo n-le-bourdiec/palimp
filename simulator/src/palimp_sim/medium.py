@@ -61,6 +61,12 @@ VENDOR_SHARE = 0.25
 # of them, drawn independently of every job (decision 0018).
 CLEAR_PAIRS = (("servers", "internet"), ("servers", "management"), ("management", "servers"))
 BACKUP = "app:shared-backup:bkp"
+# Decision 0047: share of scenarios with an address set named like `any`, and
+# chance for each eligible rule (users-wide source, senior or operator) to use
+# it until the scenario's 1 to 3 rules are drawn. Simulator choices.
+ANY_SCENARIO_RATE = {"medium": 0.2, "hard": 0.3}
+ANY_RULE_RATE = 0.1
+ANY_NAMES = ("ANY", "Any-Hosts")
 
 
 class MediumSimulation(RuleKindsMixin, Simulation):
@@ -72,6 +78,8 @@ class MediumSimulation(RuleKindsMixin, Simulation):
         self.rng_counts = root.derive("trap_counts")
         self.rng_clear = root.derive("hit_count_clear")
         self.rng_kinds = root.derive("rule-kinds")  # decision 0045, rulekinds.py
+        self.rng_shadow = root.derive("shadowed")  # decision 0047, rulekinds.py
+        self.rng_any = root.derive("any-object")  # decision 0047
         self._copied_count = 0
         self.zone_names = dict(self.zone_names)
         self.zone_names["management"] = self.rng_medium.choice(catalog.MANAGEMENT_NAMES)
@@ -86,10 +94,17 @@ class MediumSimulation(RuleKindsMixin, Simulation):
         self._jobs: dict[tuple[str, FlowTemplate], tuple[int, int, bool]] = {}
         self._protected: set[str] = set()  # job rules: their owners object to removal
         self._hosts: dict[str, Endpoint] = {}  # workstations and vendors of access requests
+        self._shadow_hosts: dict[str, Endpoint] = {}  # same, of the shadowed rules
         self._emergency_apps: set[str] = set()
         # Realistic names (spec 2.5), from their own sub-generator.
         self.namer = Namer(root.derive("naming"), level.user_sites)
         self._naming_ticket = None
+        # An address set named like the `any` keyword that holds the user
+        # sites only (decision 0047), on a few rules of some scenarios.
+        rate = ANY_SCENARIO_RATE[level.name]
+        self._any_left = self.rng_any.randint(1, 3) if self.rng_any.chance(rate) else 0
+        self._any_set: str | None = None
+        self.any_rules: list[str] = []
         # Overridden by the Hard level (hard.py); Medium keeps these values.
         self.count_weights = TRAP_COUNT_WEIGHTS
         self.access_per_year = ACCESS_PER_YEAR
@@ -134,13 +149,36 @@ class MediumSimulation(RuleKindsMixin, Simulation):
 
     def _add_policy(self, flow, app, event, ticket, suffix="", sources=None, nolog=False) -> str:
         self._naming_ticket = ticket
+        sources = sources or self._any_source(flow, event)
         uid = super()._add_policy(flow, app, event, ticket, suffix, sources, nolog)
+        if sources and sources[0] == self._any_set:
+            self.any_rules.append(uid)
         policy = self.config.policies[-1]
         if policy.description and self.admin(event.admin_id).persona in (SENIOR, OPERATOR):
             ticket_id = ticket.ticket_id if ticket else None
             owner = self._owner_name(app)
             policy.description = self.namer.description(policy.description, ticket_id, owner)
         return uid
+
+    def _any_source(self, flow: Flow, event: Event) -> list[str] | None:
+        """The `ANY` set in place of the set of every site (decision 0047), or None.
+
+        It holds the same site subnets, so the traffic does not change.
+        """
+        if not self._any_left or flow.src.address != self._users_set():
+            return None
+        if self.admin(event.admin_id).persona not in (SENIOR, OPERATOR):
+            return None
+        if not self.rng_any.chance(ANY_RULE_RATE):
+            return None
+        if self._any_set is None:
+            name = self.namer._unique(self.rng_any.choice(ANY_NAMES))
+            self._any_set = name
+            self.generic_names.add(name)
+        members = self.config.address_sets[self._users_set()]
+        self.config.address_sets[self._any_set] = list(members)
+        self._any_left -= 1
+        return [self._any_set]
 
     # Realistic object names (spec 2.5, naming.py).
 
@@ -300,14 +338,19 @@ class MediumSimulation(RuleKindsMixin, Simulation):
         if token.startswith("app:"):
             _, other, tier = token.split(":")
             return self._tier_endpoint(self.apps[other], tier)
-        if token in self._hosts:
-            endpoint = self._hosts[token]
+        if token in self._hosts or token in self._shadow_hosts:
+            endpoint = self._hosts.get(token) or self._shadow_hosts[token]
             self._ensure_address(endpoint.address, endpoint.prefixes[0])
             return endpoint
         return super()._endpoint(token, app)
 
     def _targets(self, flow: Flow, app_id: str) -> bool:
         return flow.template.dst.startswith(f"app:{app_id}:")
+
+    def _app_policies(self, app_id: str) -> list[str]:
+        # A shadowed rule belongs to the firewall team's backlog (decision
+        # 0047): application events leave it, and draw nothing for it.
+        return [uid for uid in super()._app_policies(app_id) if uid not in self.traps.shadowed]
 
     def _decommission(self, app: App, day: int) -> None:
         # Calls from other applications stop too; their rules stay behind.
@@ -331,6 +374,8 @@ class MediumSimulation(RuleKindsMixin, Simulation):
             moved = flow.app_id == app.app_id or self._targets(flow, app.app_id)
             if moved and flow.active(day):
                 flow.end = day
+                if flow.extra:
+                    continue  # the access of a shadowed rule is dropped (decision 0047)
                 owner = self.apps[flow.app_id]
                 new_flow = self._new_flow(owner, flow.template, day)
                 new_flow.period, new_flow.phase = flow.period, flow.phase
@@ -462,6 +507,7 @@ class MediumSimulation(RuleKindsMixin, Simulation):
             for f in self.flows.values()
             if f.app_id == app.app_id
             and f.active(day)
+            and not f.extra
             and f.src.zone_role == "users"
             and f.dst.zone_role == "servers"
         ]
@@ -777,6 +823,7 @@ class MediumSimulation(RuleKindsMixin, Simulation):
         # Firewall team rules (decision 0045), planned after the routine
         # commits so that their count and days do not move.
         self._plan_kinds(plan)
+        self._plan_shadowed(plan)
 
         handlers = (
             {
@@ -819,7 +866,14 @@ class MediumSimulation(RuleKindsMixin, Simulation):
             kinds = ("new_app", "migration", "access_request")
             return event.app_id if event.kind in kinds else None
 
-        creating = [c for c in self.commits if c.created and app_of(c)]
+        # The commits of shadowed rules (decision 0047) stay out, so that
+        # the draws below do not move.
+        shadowed = self.traps.shadowed
+        creating = [
+            c
+            for c in self.commits
+            if c.created and app_of(c) and not any(uid in shadowed for uid in c.created)
+        ]
         final = {p.uid for p in self.config.policies}
 
         def source_of(commit):

@@ -1,46 +1,78 @@
 # Handoff
 
-## Last session: 31 (2026-10-20), analyzer: CI green on simulator 0.4.0, review-4 fixes, shadowed rules (decision 0046)
+## Last session: 32 (2026-10-20), simulator: best achievable intent, shadowed rules, ANY sets, simulator 0.5.0 (decision 0047)
+
+Work is on branch `sim-0.5`, NOT merged. The next analyzer session merges
+it into main once CI is green on the branch (CLAUDE.md, main stays green).
+
+### Note to analyzer sessions (schema change, decision 0017)
+
+The ground truth JSON Schema changed (additive, `schema_version` stays 1):
+
+- `expected.rule_kind` in every rule: `application`, or the firewall team
+  kind (`block`, `cleanup_deny`, `broad_permit`, `factory_default`, equal
+  to `intent.kind`).
+- `expected.best_achievable_intent` in every rule: the application a
+  perfect analyzer can name from the artifacts, or null. Application
+  rules: `intent.app_id` when at least one counted naming source names it
+  (one source is enough), null when nothing in the artifacts names it
+  ("purpose unknown" is then the right answer). Hard: 85 rules with a
+  hidden stale name have the replaced application (decision 0040). Firewall
+  team rules: always null.
+- The pseudo application `firewall` stays only in `intent.app_id`,
+  `flows[].app_id` and `apps` (the schema needs a string there). Score
+  firewall team rules on `rule_kind`, application rules on
+  `best_achievable_intent`.
+- Both fields are optional in the schema, always written from 0.5.0.
+- New trap id `TRAP-SHADOWED-BY-DENY`: an access rule after the catch-all
+  deny of its zone pair; `best_achievable_verdict` verify, `verdict` verify
+  while `still_needed` (removal_candidate once its flow has ended), owner
+  `firewall_team`, evidence `policy X after catch-all deny Y`.
+- Address sets named `ANY` or `Any-Hosts` hold user site subnets (never
+  0.0.0.0/0) and are the source of a few application permits.
 
 ### Done
 
-- Session 30 metrics finalized (134 calls, 15.37 USD).
-- Process rule in `CLAUDE.md`: main stays green; a simulator change that
-  breaks analyzer tests goes on a branch, merged after the analyzer session
-  makes it green.
-- CI green again (run 39438709395 on `487de86`). The 6 anonymize failures
-  were privacy bugs, fixed in anonymize (tests not weakened): a kept word
-  that starts a longer known name (`web`, `webshop`) now stays at the start
-  of its replacement, so the copy keeps the abbreviation palimp reads;
-  replacement initials equal to an original name (`req GJ` to `req CI`)
-  redraw the mapping. New test with invented realistic names. The 3 report
-  failures were an outdated expectation (firewall team findings since
-  session 29, first generated in Medium by simulator 0.4.0).
-- Baseline on simulator 0.4.0 (`docs/evaluation-history.md`): 0 dangerous
-  errors; eval script now reports underconfidence and per intent kind.
-- Part B: commit comments and tickets confirm two-letter names; review-4
-  fixes (ticket-only descriptions, factory default sources, broad permits
-  say what they permit and inbound ones open the team list, hosting
-  platforms are locations, `MS-SQL-PORT-GROUP` names mssql, an object named
-  `ANY` read by contents, deny questions to the firewall team); shadowed
-  rules (`V-SHADOWED`, at most verify); deny tuning on seeds 0-19
-  (`V-DENY-QUIET` keep, `C-BLOCK` MEDIUM).
-- Medium 20-99 and Hard 20-49 after: block vs best 100% (was 80.9% and
-  64.4%), 0 dangerous, verdict moves only verify to keep on quiet denies (27
-  and 31). Real configs: 0 verdict moves rule by rule, 1 shadowed rule found
-  (`docs/real-configs-robustness.md`).
+- Session 31 metrics finalized (190 calls, 12.06 USD).
+- Ground truth: `expected.rule_kind` and `expected.best_achievable_intent`
+  for every rule, Easy included (spec 6, 6.1; schema descriptions).
+- Shadowed rules in Medium and Hard (own sub-generator, spec 4.11,
+  `TRAP-SHADOWED-BY-DENY`), isolated from every other draw.
+- `ANY` / `Any-Hosts` address sets in Medium and Hard (own sub-generator,
+  spec 2.5).
+- Simulator 0.5.0: Easy artifacts byte-identical, Easy ground truth
+  changes only by version and the two fields
+  (`test_easy_changed_only_by_version`, against 0.3.0 and 0.4.0); goldens
+  and stored Hard trap counts regenerated; every 0.4.0 rule of Medium 0-99
+  and Hard 0-49 keeps its expected values (only uniqueness suffixes of a
+  few names move, 6 scenarios).
+- Measured (spec 7.7): application rules with `best_achievable_intent` null
+  33.4% Medium (5228 / 15662), 36.5% Hard (7590 / 20771); shadowed rules
+  10 Medium (8 scenarios), 21 Hard (14 scenarios); `ANY` rules 19 Medium
+  (12 scenarios), 31 Hard (19 scenarios).
+- Evaluation history: 0.4.0 numbers never published, 0.5.0 is the release
+  basis. Simulator tests 595/595 with `--runslow`; analyzer not run.
 
 ### Next
 
-- Project lead: review decision 0046 (in particular items 5 `ANY` and 7).
+- Analyzer session: make CI green on `sim-0.5`, merge it into main; score
+  intent against `best_achievable_intent` and `rule_kind` in the eval
+  script; measure `V-SHADOWED` on the simulated shadowed rules and the
+  `ANY` reading (decision 0046 item 5).
+- Project lead: review decision 0047 (hidden stale names give the replaced
+  application, not null) and decision 0046 (items 5 and 7).
 - Held-out workflow: add the Hard table (decision 0036) before the second
   held-out run; consider rotating the salt (simulator version changed).
 - Release preparation (decision 0032 item 5).
-- Simulator backlog: shadowed rules (a rule after a catch-all deny) are
-  never generated, so `V-SHADOWED` is tested only on unit fixtures and one
-  real configuration.
 
 ### Open questions
+
+- Decision 0047: a Hard rule whose only naming is a stale name no artifact
+  reveals has the replaced application as best achievable intent, for
+  consistency with decision 0040. The prompt's wording ("null when no source
+  names it") read strictly would give null. Which one?
+- Shadowed rule whose flow has ended: `verdict` removal_candidate (full
+  knowledge), best verify. Fine?
 
 - Shadowed rules: removal_candidate needs approval (not before release).
   Today a shadowed keep becomes verify; a shadowed rule with hits stays
@@ -64,7 +96,10 @@
 
 - Underconfidence measured before simulator 0.4.0 (57%, 68% in session 28)
   came from tier-based ceilings; 0.4.0 replaces them (decision 0045).
-- Simulator 0.4.0: deny rules never log (no `RT_FLOW_SESSION_DENY` sample);
+- Simulator 0.5.0: shadowed rules only come after a catch-all deny of a
+  zone pair (never a global one), only from users or the internet; `ANY`
+  sets only replace the set of every site as a source, never on a deny.
+- Simulator 0.4.0 (still true in 0.5.0): deny rules never log (no `RT_FLOW_SESSION_DENY` sample);
   no custom application or dynamic application names are generated; the
   extra commits of the firewall team rules shift the retained window, so
   TRAP-MISLEADING-COMMENT lands on other rules than in 0.3.0 (mechanics
@@ -168,9 +203,9 @@ simulator code.
 - Deny rules naming an application object, deny rules with logging
   (needs a `RT_FLOW_SESSION_DENY` sample), custom application names and
   dynamic applications as naming sources (decision 0045).
-- Shadowed rules: a rule placed after a catch-all deny of its zone pair
-  (decision 0046 item 6); address objects named like the `any` keyword
-  (`ANY`) with narrower contents (decision 0046 item 5).
+- Shadowed duplicates (`TRAP-SHADOWED-DUPLICATE`): a rule covered by a
+  permit above it. Rules after a global catch-all deny. `ANY` look-alike
+  objects on deny rules or as destination (decision 0047 alternatives).
 - Service desk tickets: a service desk files tickets on behalf of
   application owners (requester = service desk agent, owner named elsewhere
   or not at all), to test that palimp does not take the requester as the
@@ -227,9 +262,10 @@ has transcript `7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e` (finalized in session
 29). Session 29 has transcript `2b84db4c-8e39-40ea-a296-b7749a1c6593`
 (finalized in session 30). Session 30 has transcript
 `5fd285ac-95ef-4a18-a704-c9c5c246fd1b` (finalized in session 31). Session 31
-has transcript `82425030-2c0d-4a09-a086-7597631acbb2`. Finalize it at the
-start of session 32 with:
+has transcript `82425030-2c0d-4a09-a086-7597631acbb2` (finalized in session
+32). Session 32 has transcript `dd4d1074-e17b-4649-9616-1ff42f7d9709`.
+Finalize it at the start of session 33 with:
 
-    uv run python metrics/session_tokens.py 82425030-2c0d-4a09-a086-7597631acbb2
+    uv run python metrics/session_tokens.py dd4d1074-e17b-4649-9616-1ff42f7d9709
 
 Cost is API-equivalent (decision 0006), not a billed amount.

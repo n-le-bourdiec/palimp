@@ -87,6 +87,8 @@ def test_verdicts_follow_live_status(scenario) -> None:
         expected = rule["expected"]
         if rule["intent"]["app_id"] == "firewall":
             continue  # test_firewall_team_rules
+        if "TRAP-SHADOWED-BY-DENY" in rule["traps"]:
+            continue  # test_intent_and_shadowing
         if rule["status"]["live"]:
             # A load-bearing emergency rule is needed but must be replaced.
             emergency = "TRAP-EMERGENCY-LOADBEARING" in rule["traps"]
