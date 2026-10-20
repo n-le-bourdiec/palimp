@@ -311,7 +311,15 @@ def name_service_items(dataset: Dataset, policy: Policy) -> list[Item]:
     matched applications offers (`junos-https`), decision 0043. Nothing when an
     application cannot be compared (`any`, an unknown port)."""
     words = re.split(r"[^a-z0-9]+", policy.name.lower())
-    named = list(dict.fromkeys(NAME_FAMILIES[w] for w in words if w in NAME_FAMILIES))
+    # A service word an address object of the rule carries names a host, not the
+    # service (`to-bank-sftp` with object `bank-sftp`, session 29).
+    objects = [n for n in policy.sources + policy.destinations if n != "any"]
+    objects += _hosts(dataset, objects)
+    hosts = {w for n in objects for w in re.findall(r"[a-z0-9]+", n.lower())}
+    hosts |= {re.sub(r"\d+$", "", w) for w in hosts}
+    named = list(
+        dict.fromkeys(NAME_FAMILIES[w] for w in words if w in NAME_FAMILIES and w not in hosts)
+    )
     if not named or not policy.applications:
         return []
     matched = [families(n, dataset.config.applications) for n in policy.applications]

@@ -411,3 +411,20 @@ def test_single_source_names_leave_the_intent_once_one_name_is_confirmed() -> No
     # name of the source object, a single source, is not an intent application.
     rules = policy("p1", "dan-pc-07", "kelvo-01", "kelvo-tcp")
     assert confidence(rules, "p1")[:3] == ("MEDIUM", "C-T3", ["kelvo"])
+
+
+def test_a_service_word_an_object_carries_names_a_host() -> None:
+    # Session 29: `to-kelvo-sftp` reaches the object kelvo-sftp on HTTPS; the word names
+    # the host, not the service. `allow-ssh-qorv` still contradicts its match.
+    from palimp.evidence import name_service_items
+
+    rules = (
+        "set security address-book global address kelvo-sftp 10.8.0.1/32\n"
+        + policy("to-kelvo-sftp", "any", "kelvo-sftp", "junos-https")
+        + policy("allow-ssh-qorv", "any", "kelvo-sftp", "junos-https")
+    )
+    data = dataset(rules)
+    first, second = data.config.policies
+    assert name_service_items(data, first) == []
+    (item,) = name_service_items(data, second)
+    assert item.kind == "name_service_mismatch"
