@@ -454,8 +454,18 @@ def collect(
         when = f"{commit.timestamp:%Y-%m-%d %H:%M:%S} {commit.time_zone} by {commit.user}"
         locator = f"commit {commit.index} ({when})"
         apps = vocab.in_text(commit.comment)
+        short = vocab.short_in_text(commit.comment)
         items.append(
-            Item("T1", "commits.txt", locator, commit.comment, None, "commit_comment", apps)
+            Item(
+                "T1",
+                "commits.txt",
+                locator,
+                commit.comment,
+                None,
+                "commit_comment",
+                apps,
+                short_apps=short,
+            )
         )
 
     places = [("name", policy.name), ("description", policy.description or "")]
@@ -488,7 +498,12 @@ def collect(
                 ):
                     apps = [ci] + [a for a in apps if a != ci]
                 locator = f"ticket {ref} (referenced in {place})"
-                items.append(Item("T1", "tickets.csv", locator, claim, None, "ticket", apps))
+                short = vocab.short_in_text(f"{ticket.summary or ''} {ticket.related_ci or ''}")
+                items.append(
+                    Item(
+                        "T1", "tickets.csv", locator, claim, None, "ticket", apps, short_apps=short
+                    )
+                )
             else:
                 artifact = "commits.txt" if place.startswith("commit") else "config.set"
                 locator = f"ticket reference {ref} in {place}"

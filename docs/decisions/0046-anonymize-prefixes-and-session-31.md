@@ -60,3 +60,11 @@ anonymize tests failed on it, in two ways:
   next to `webshop`). README says so.
 - Medium dev seeds 0 to 9, set and hierarchical: judgments identical, no
   original name left.
+
+## Part B (session 31)
+
+4. Two-letter names (extends decision 0044, project lead decision in the
+   session 31 prompt): a commit comment and a ticket (summary or related CI)
+   are sources that are not names, like a description: either one confirms
+   a two-letter name an object or application name gives. The policy name
+   still never does. Confidence only (LOW to MEDIUM), no verdict moves.

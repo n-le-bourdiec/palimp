@@ -1,5 +1,6 @@
 """Name filters, server roles and the corroboration rule (decision 0042). Invented names."""
 
+from datetime import datetime
 from pathlib import Path
 
 from palimp.apps import (
@@ -13,7 +14,7 @@ from palimp.apps import (
 )
 from palimp.evidence import collect
 from palimp.formats.junos_set import parse_set
-from palimp.models import Dataset, PolicyKey, Ticket
+from palimp.models import Commit, Dataset, PolicyHistory, PolicyKey, Ticket
 from palimp.report import intent
 
 ADDRESSES = """\
@@ -318,6 +319,33 @@ def test_a_two_letter_name_is_confirmed_by_a_source_that_is_not_a_name() -> None
         a = collect(dataset(rules), PolicyKey.parse(f"a/b/{name}")).assessment
         assert a.intent_apps == ["qx"], name
         assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3"), name
+
+
+def test_a_commit_comment_or_a_ticket_confirms_a_two_letter_name() -> None:
+    # Session 31 (decision 0046): a commit comment and a ticket are sources that are not
+    # names, like a description; the policy name still is not one.
+    rules = (
+        "set security address-book global address qx-web-01 10.5.0.1/32\n"
+        + policy("p1", "any", "qx-web-01", "junos-https")
+        + policy("CHG0007001", "any", "qx-web-01", "junos-https")
+    )
+    commit = Commit(
+        index=0,
+        timestamp=datetime(2026, 3, 2, 10, 0),
+        time_zone="UTC",
+        user="admin",
+        client="cli",
+        comment="QX reports go live",
+    )
+    data = dataset(rules, {"CHG0007001": Ticket(ticket_id="CHG0007001", summary="Open QX web")})
+    data.commits = [commit]
+    data.history = {"a/b/p1": PolicyHistory(created_in_commit=0, oldest_retained_index=0)}
+    for name, kind in (("p1", "commit_comment"), ("CHG0007001", "ticket")):
+        found = collect(data, PolicyKey.parse(f"a/b/{name}"))
+        a = found.assessment
+        assert a.intent_apps == ["qx"], name
+        assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3"), name
+        assert any(e.kind == kind and e.id in a.confidence_evidence for e in found.evidence)
 
 
 def test_a_flow_is_described_when_nothing_names_an_application() -> None:

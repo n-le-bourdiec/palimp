@@ -97,12 +97,15 @@ NAMING = {
     "dynamic_application": "a dynamic application",
 }
 # Sources that may confirm a two-letter name, with a port and a dynamic application
-# (decision 0044): never the policy name.
+# (decision 0044): never the policy name. A commit comment and a ticket are sources
+# that are not names (session 31, decision 0046).
 SHORT_SOURCES = {
     "address_objects": "the address objects",
     "services": NAMING["services"],
     "description": "the description",
     "annotation": "an annotation",
+    "commit_comment": "the commit comment",
+    "ticket": "a ticket",
 }
 
 
