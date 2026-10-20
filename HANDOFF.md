@@ -1,45 +1,45 @@
 # Handoff
 
-## Last session: 27 (2026-10-13), analyzer: intent quality on real configs (decision 0042)
+## Last session: 28 (2026-10-20), analyzer: second pass on intent quality (decision 0043)
 
 ### Done
 
-- Session 26 metrics finalized (131 calls, 7.39 USD).
-- Decision 0042 (approved by the project lead in the session prompt):
-  - Name filters in `palimp.apps`: a name learned from object names alone is
-    never shorter than 3 letters, never in `GENERIC_WORDS` (one documented
-    list, tested in `tests/test_names.py`), never a server role
-    (`SERVER_ROLES`) and never a word of a zone name of the configuration.
-    Names tickets.csv backs are kept. Anonymize keeps these words.
-  - Server roles: with no application named, the intent describes the flow
-    ("SMB file sharing between SQL servers", `Assessment.intent_flow`).
-  - Corroboration rule: an application named by one name source only is LOW
-    (C-T3-SINGLE); C-T3 (MEDIUM) needs two: both sides of the rule, the
-    policy name, a custom application name, a dynamic application. A policy
-    name that repeats an object name of the rule does not count. Confidence
-    only, never a verdict.
-  - Policy name as T3 evidence (`policy_name`), same filters.
-  - `match dynamic-application` read (set and hierarchical, bracketed lists
-    with commas), T3 `dynamic_application` evidence naming the application
-    (`junos:SLACK` names `slack`); `then reject profile X` is a reject.
-    Docs fixtures `display_set_dynamic_application.txt`,
-    `hier_dynamic_application.txt`, format assumption DYNAPP-1.
-  - Evidence lists capped at 5 entries plus "and N more".
-  - Shared address items carry `address` and `objects` fields; the report
-    no longer parses the claim.
-- Dev sets (`docs/evaluation-history.md`, session 27): 0 dangerous errors on
-  Medium 20-99 and Hard 20-49. Intent right 97.4% -> 93.9% (Medium), 94.7%
-  -> 91.2% (Hard), from the filters on simulated 2-letter and role names;
-  underconfidence 15% -> 48% and 12.5% -> 57%; overconfidence Hard 0.9% ->
-  0.5%. Verdict moves only toward keep or verify.
-- Real configs (`docs/real-configs-robustness.md`, aggregates only): MEDIUM
-  157 -> 17, MEDIUM naming a generic or person-like word 102 -> 0, named
-  intents 157 -> 91, verdicts identical. New local review file
-  `../palimp-realconfigs/review-2.md` (30 rules, stratified).
+- Session 27 metrics finalized (174 calls, 10.86 USD).
+- Review-2 bugs: a shared address or shared source never adds an
+  application to the intent; deactivated rules get the cleanup question in
+  the assessment itself (the session 27 review script printed the
+  assessment question, which had never been the cleanup question: `explain`
+  showed the same gap); `redis` was lost to the zone word filter
+  (`REDIS-DMZ-PRIV`) and application-set names were not learned.
+- Decision 0043 (supersedes the "both sides count twice" and "dynamic
+  application alone LOW" parts of 0042): `PRODUCTS` name an application in
+  any name (never in free text, never a role; `mysql`, `mssql` leave
+  `SERVER_ROLES`, anonymize keeps products); custom application and
+  application-set names learned; address objects count once; dynamic
+  application alone MEDIUM (C-DYNAMIC-APP); `PREDEFINED` from the docs
+  (fixtures `junos_defaults_applications_full_13.2.txt`,
+  `predefined_applications_table.txt`, VSRX-12d); `PORT_NAMES` (port +
+  product name = two sources); `ROLE_SERVICES` (a `dns` object on udp/53
+  names dns, only when no name names an application); two-letter names
+  (`Vocabulary.short`, `ad` leaves the roles) only with two sources and only
+  as a fallback; flows described from services, roles, `PLACES` and zones;
+  `term` applications read (APP-TERM-1, two fixtures); name/service
+  contradiction (`name_service_mismatch`, V-NAME-SERVICE, C-NAME-SERVICE,
+  firewall team list section).
+- Safe initiative (item 6, flagged): shared addresses found when the own
+  object names nothing, two-letter names used for that check: the 5 Hard
+  rules of session 27 are back to verify.
+- Dev sets (`docs/evaluation-history.md`, session 28): 0 dangerous errors;
+  intent 93.9% -> 95.3% (Medium), 91.2% -> 92.1% (Hard); underconfidence
+  48.1% -> 56.9%, 57.1% -> 67.6%; overconfidence Hard 0.5% -> 0.4%;
+  verdict moves toward verify only (Medium 7, Hard 24).
+- Real configs (`docs/real-configs-robustness.md`): MEDIUM 17 -> 57,
+  "Purpose unknown" 182 -> 131, 7 `ALLOW-SNMP` rules flagged, verdicts
+  identical. New local review file `../palimp-realconfigs/review-3.md`.
 
 ### Next
 
-- Project lead review of `../palimp-realconfigs/review-2.md`.
+- Project lead review of `../palimp-realconfigs/review-3.md`.
 - Session 29 (simulator): realistic object names (site prefixes, people,
   generic words, roles), so dev metrics see what real configs show.
 - Held-out workflow: add the Hard table (decision 0036) before the second
@@ -48,11 +48,21 @@
 
 ### Open questions
 
-- Dynamic application alone gives LOW (one source, like any name). Should a
-  dynamic application, which states what the rule matches, give MEDIUM on
-  its own?
-- A site prefix on both sides of a rule counts as two sources (MEDIUM); seen
-  once in the real sample. Accept, or require two different kinds of source?
+- Two-letter codes confirmed by a policy name and an object that start
+  with the same code (`LT-Gates-Paxton`, `FG-MB-AIRCON`): 8 real rules at
+  MEDIUM. Same naming convention as the both-sides case? If so, the policy
+  name should not confirm a prefix the objects share.
+- V-NAME-SERVICE "at most verify": implemented as keep -> verify only; a
+  removal candidate stays one (its not-live signal does not depend on the
+  name). Right reading?
+- `*-to-bank-sftp` on junos-https (7 Medium rules, simulator says keep):
+  `sftp` names the destination host there. Keep the flag?
+- `dc` is a server role (domain controller, session 27): `DC-TEAM` on the
+  real configs reads "domain controller servers" where DC means data
+  center. Drop `dc` from the roles?
+- 2 Medium V-CONTRADICTION rules at keep (`ci` decommission, two letters):
+  read a two-letter name in not-live signals when tickets or commit
+  comments name it? Moves rules toward removal, needs approval.
 - Carried over from session 24 (analyzer): reused addresses trade
   (decision 0039 item 4), not-live signals with regional instances
   (decision 0039 item 2).
@@ -64,15 +74,14 @@
 
 ### Known issues
 
-- Name filters drop simulated applications with 2-letter names or role
-  names when no ticket backs them (`bi`, `ci`, `dns`, `ntp`, `bkp`): intent
-  accuracy -3.5 points on dev sets until session 29.
-- 2 Medium V-CONTRADICTION rules became keep: their not-live marker named an
-  application the filters now drop (toward keep, flagged).
+- Underconfidence is high on dev sets (57%, 68%): simulated objects name
+  the application on both sides, now one source; session 29 changes names.
+- Commit `74e382a` says it restores the 5 Hard rules; it restored 4, the
+  fifth came with `d8ffe8d`.
 - Person names stay possible applications at LOW (no name list, decision
-  0042); a person name on both sides of a rule would reach MEDIUM.
-- Custom applications defined with `term` statements are not read (show as
-  "protocol unknown"), seen on the real configs.
+  0042).
+- `junos-ntp`, `junos-ldap`, `junos-ms-sql`, `junos-smb` and a few other
+  predefined names still have no published definition (VSRX-12d).
 - Real configs, still unsupported: tenant and logical system policies
   (stated, not read); `delete:` load tags; `//` comments; operational
   command output inside a capture; a command echoed without a prompt; a set
@@ -208,9 +217,10 @@ session 24). Session 24 has transcript
 has transcript `1fc8d6dd-973f-4e31-90a8-b193e45219b2` (finalized in session
 26). Session 26 has transcript `1c765544-e3ec-47e1-8473-5ee1cc86ff24`
 (finalized in session 27). Session 27 has transcript
-`4fa256b5-0487-44e9-a639-0af270d28f5c`. Finalize it at the start of session
-28 with:
+`4fa256b5-0487-44e9-a639-0af270d28f5c` (finalized in session 28). Session 28
+has transcript `7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e`. Finalize it at the
+start of session 29 with:
 
-    uv run python metrics/session_tokens.py 4fa256b5-0487-44e9-a639-0af270d28f5c
+    uv run python metrics/session_tokens.py 7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e
 
 Cost is API-equivalent (decision 0006), not a billed amount.
