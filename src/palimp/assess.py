@@ -86,6 +86,14 @@ NAMING = {
     "services": "a custom application name",
     "dynamic_application": "a dynamic application",
 }
+# Sources that may confirm a two-letter name, with a port and a dynamic application
+# (decision 0044): never the policy name.
+SHORT_SOURCES = {
+    "address_objects": "the address objects",
+    "services": NAMING["services"],
+    "description": "the description",
+    "annotation": "an annotation",
+}
 
 
 def _ids(items: list[Evidence]) -> list[str]:
@@ -307,15 +315,25 @@ def _named(evidence: list[Evidence]) -> dict[str, set[tuple[str, str]]]:
         elif item.kind in NAMING:
             for app in item.apps:
                 found.setdefault(app, set()).add((NAMING[item.kind], item.id))
-    # Two-letter names (`bi`): only with two sources, never alone (decision 0043).
-    short: dict[str, set[tuple[str, str]]] = {}
-    for item in evidence:
-        what = "the address objects" if item.kind == "address_objects" else NAMING.get(item.kind)
-        for app in item.short_apps if what else []:
-            short.setdefault(app, set()).add((what, item.id))
-    found.update({a: s for a, s in short.items() if len(s) >= 2 and a not in found})
     services = next((e for e in evidence if e.kind == "services"), None)
     ports = services.port_apps if services else []
+    # Two-letter names (`bi`): only with two sources, never alone (decision 0043), and
+    # never confirmed by the policy name, which follows the naming convention of the
+    # objects (decision 0044): a port, a dynamic application, a custom application
+    # name or a description confirms them.
+    short: dict[str, set[tuple[str, str]]] = {}
+    for item in evidence:
+        what = SHORT_SOURCES.get(item.kind)
+        for app in item.short_apps if what else []:
+            short.setdefault(app, set()).add((what, item.id))
+    for app, sources in short.items():
+        if services and set(ports) & aliases(app):
+            sources.add(("a well-known port", services.id))
+        for item in evidence:
+            if item.kind == "dynamic_application" and app in item.apps:
+                sources.add((NAMING["dynamic_application"], item.id))
+        if len(sources) >= 2:
+            found.setdefault(app, set()).update(sources)
     if not services or not ports:
         return found
     port = ("a well-known port", services.id)

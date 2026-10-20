@@ -292,9 +292,32 @@ def test_a_two_letter_name_needs_a_second_source() -> None:
     for name in ("p1", "p2"):
         a = collect(dataset(rules), PolicyKey.parse(f"a/b/{name}")).assessment
         assert "qx" not in a.intent_apps and a.confidence == "LOW"
+    # Session 29: the policy name follows the naming convention of the objects, it
+    # never confirms a two-letter name.
     a = collect(dataset(rules), PolicyKey.parse("a/b/allow-qx-reports")).assessment
-    assert a.intent_apps == ["qx"]
-    assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3")
+    assert "qx" not in a.intent_apps and a.confidence == "LOW"
+    found = collect(dataset(rules), PolicyKey.parse("a/b/allow-qx-reports"))
+    assert not [e for e in found.evidence if e.kind == "policy_name"]
+
+
+def test_a_two_letter_name_is_confirmed_by_a_source_that_is_not_a_name() -> None:
+    # Session 29: a custom application name, a description or a dynamic application
+    # confirms qx; a port that stands for it would too.
+    head = "set security policies from-zone a to-zone b policy"
+    rules = (
+        "set security address-book global address qx-web-01 10.5.0.1/32\n"
+        "set applications application qx-tcp protocol tcp\n"
+        "set applications application qx-tcp destination-port 7700\n"
+        + policy("p1", "any", "qx-web-01", "qx-tcp")
+        + policy("p2", "any", "qx-web-01", "junos-https")
+        + f'{head} p2 description "Reports for the QX team"\n'
+        + policy("p3", "any", "qx-web-01", "junos-defaults")
+        + f"{head} p3 match dynamic-application junos:QX\n"
+    )
+    for name in ("p1", "p2", "p3"):
+        a = collect(dataset(rules), PolicyKey.parse(f"a/b/{name}")).assessment
+        assert a.intent_apps == ["qx"], name
+        assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3"), name
 
 
 def test_a_flow_is_described_when_nothing_names_an_application() -> None:

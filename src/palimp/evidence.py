@@ -390,15 +390,28 @@ def collect(
     if policy.description:
         locator = f"policy {policy.name} description"
         apps = vocab.in_text(policy.description)
+        short = vocab.short_in_text(policy.description)
         items.append(
-            Item("T1", "config.set", locator, policy.description, None, "description", apps)
+            Item(
+                "T1",
+                "config.set",
+                locator,
+                policy.description,
+                None,
+                "description",
+                apps,
+                short_apps=short,
+            )
         )
     for number, note in enumerate(policy.annotations, start=1):
         locator = f"policy {policy.name} annotation" + (
             f" {number}" if len(policy.annotations) > 1 else ""
         )
         apps = vocab.in_text(note)
-        items.append(Item("T1", "config.set", locator, note, None, "annotation", apps))
+        short = vocab.short_in_text(note)
+        items.append(
+            Item("T1", "config.set", locator, note, None, "annotation", apps, short_apps=short)
+        )
     if commit and commit.comment:
         when = f"{commit.timestamp:%Y-%m-%d %H:%M:%S} {commit.time_zone} by {commit.user}"
         locator = f"commit {commit.index} ({when})"
@@ -486,27 +499,16 @@ def collect(
     echoed = {
         a for n in named if _echoes(policy.name, n) for a in vocab.in_object(n) + vocab.short_in(n)
     }
+    # A two-letter name in the policy name is never read (session 29): the policy name
+    # follows the same naming convention as the objects (`FG-MB-AIRCON`, `MB-Air-Con`).
     name_apps = [a for a in vocab.in_object(policy.name) if a not in echoed]
-    name_short = [a for a in vocab.short_in(policy.name) if a not in echoed]
-    if name_apps or name_short:
-        said = name_apps + [f"{a} (a two-letter name, read only if confirmed)" for a in name_short]
+    if name_apps:
         claim = (
-            f"the policy name names {', '.join(said)}: a name chosen for the rule, "
+            f"the policy name names {', '.join(name_apps)}: a name chosen for the rule, "
             "not a statement of why it exists"
         )
         locator = f"policy {policy.name} name"
-        items.append(
-            Item(
-                "T3",
-                "config.set",
-                locator,
-                claim,
-                None,
-                "policy_name",
-                name_apps,
-                short_apps=name_short,
-            )
-        )
+        items.append(Item("T3", "config.set", locator, claim, None, "policy_name", name_apps))
     items += name_service_items(dataset, policy)
     items += shared_address_items(dataset, policy, vocab)
     if policy.dynamic_applications:

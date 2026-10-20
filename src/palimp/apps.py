@@ -224,6 +224,11 @@ class Vocabulary:
         tokens = [t.lower() for t in re.split(r"[-_.]", name)]
         return list(dict.fromkeys(t for t in tokens if t in self.short and t not in self.names))
 
+    def short_in_text(self, text: str) -> list[str]:
+        """Two-letter names of `short` in free text (a description, an annotation)."""
+        tokens = re.findall(r"[a-z0-9]+", (text or "").lower())
+        return list(dict.fromkeys(t for t in tokens if t in self.short and t not in self.names))
+
     def lookup(self, token: str, name: bool = False) -> str | None:
         """The application TOKEN names. With NAME (an object, policy or application
         name, not free text), a product name always names itself."""
