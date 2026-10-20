@@ -76,6 +76,10 @@ class Flow:
     # or a monitoring probe left pointing at a retired server. It makes hits,
     # never makes a rule live (truth.py, traffic.live_policies).
     noise: str | None = None  # "scanner" or "monitoring"
+    # Traffic of the rule kinds of decision 0045 (blocked attempts, traffic
+    # only a broad permit lets through): drawn from its own generator, so the
+    # other flows keep their session counts.
+    extra: bool = False
 
     def active(self, day: int) -> bool:
         return self.start <= day and (self.end is None or day < self.end)

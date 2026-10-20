@@ -35,6 +35,11 @@ class Policy:
     annotation: str | None = None
     from_zones: list[str] = field(default_factory=list)
     to_zones: list[str] = field(default_factory=list)
+    # Medium and Hard (decision 0045): `deny` or `reject` rules, and rules
+    # kept last in their zone pair (catch-all deny, broad permit, factory
+    # default): later rules are inserted before them.
+    action: str = "permit"
+    tail: bool = False
 
     @property
     def is_global(self) -> bool:
@@ -110,8 +115,9 @@ class Config:
         return [
             policy
             for pair in pairs
+            for tail in (False, True)
             for policy in self.policies
-            if (policy.from_zone, policy.to_zone) == pair
+            if (policy.from_zone, policy.to_zone) == pair and policy.tail == tail
         ]
 
     def remove_unused_objects(self) -> None:
@@ -189,7 +195,7 @@ def render_set(config: Config) -> str:
             lines.append(f"{prefix} match from-zone {zone}")
         for zone in policy.to_zones:
             lines.append(f"{prefix} match to-zone {zone}")
-        lines.append(f"{prefix} then permit")
+        lines.append(f"{prefix} then {policy.action}")
         if policy.log_init:
             lines.append(f"{prefix} then log session-init")
         if policy.log_close:
@@ -275,7 +281,7 @@ def _policy_block(tree: _Tree, policy: Policy) -> None:
         tree.leaf(f"to-zone {_values(policy.to_zones)}")
     tree.close()
     tree.open("then")
-    tree.leaf("permit")
+    tree.leaf(policy.action)
     if policy.log_init or policy.log_close:
         tree.open("log")
         if policy.log_init:

@@ -53,7 +53,9 @@ SEEDS = [0, 2, 3, 4, 11]
 # 22. Easy and Medium hashes did not change when Hard was added (decision 0035).
 # Session 25 (decision 0040): best_achievable_confidence added, and best
 # `keep` on unobservable scanner rules; Easy and Medium bytes unchanged.
-GOLDEN_HARD = {0: "dfa5eeddc5353ffbb88a004bb3642375c61ad2ebe1dd4303da5f1d9e02d4622f"}
+# Session 30 (simulator 0.4.0, decision 0045): realistic names, the naming
+# source confidence model and new rule kinds.
+GOLDEN_HARD = {0: "fcbf73512ff1ad0a79c59f0245547264d19b6d764b99d404269b8bc4073bb32b"}
 # Trap counts of Hard seeds 0 to 49 (session 25), so that the distribution
 # check needs no generation. The fixture seeds are regenerated against them in
 # every run, the other seeds one test each under "full" (spread by xdist).

@@ -56,15 +56,21 @@ def _names(text: str | None, app_id: str) -> bool:
     return re.search(rf"(?<![a-z0-9])({words})(?![a-z0-9])", text, re.I) is not None
 
 
+def _named(sim, policy) -> list[str]:
+    """Address objects of a policy that may name an application.
+
+    Easy leaves out `any` and the two generic objects; Medium and Hard leave
+    out every object that names no application (user sites, the server
+    range, `sim.generic_names`).
+    """
+    generic = sim.generic_names if sim.level.traps else GENERIC_ADDRESSES
+    return [n for n in policy.sources + policy.destinations if n not in generic]
+
+
 def _own_addresses(sim, policy) -> set[str]:
     """Named address objects of a policy, address sets expanded (generic ones left out)."""
     config = sim.config
-    names = [
-        n
-        for n in policy.sources + policy.destinations
-        if n not in GENERIC_ADDRESSES and not (sim.level.traps and n.startswith("users-"))
-    ]
-    return {m for n in names for m in config.address_sets.get(n, [n])}
+    return {m for n in _named(sim, policy) for m in config.address_sets.get(n, [n])}
 
 
 def _stale_traced(sim, policy, stale: dict, last_index: int, sessions: list) -> bool:
@@ -261,11 +267,7 @@ def _rule(
         if logged:
             support = "live" if lines else "not_live"
             add("T2", "logs/rt_flow.log", f'policy-name="{policy.name}"', support, wrong)
-    named = [
-        n
-        for n in policy.sources + policy.destinations
-        if n not in GENERIC_ADDRESSES and not (sim.level.traps and n.startswith("users-"))
-    ]
+    named = _named(sim, policy)
     if named:
         wrong = stale_named and any(_mentions(n, old_app) for n in named)
         locator = "address objects " + ", ".join(named)

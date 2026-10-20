@@ -18,14 +18,16 @@ from palimp_sim.generate import generate
 # clear placed independently of the jobs (decision 0018). Easy output did not
 # change; its hashes change only because the version string is written in
 # manifest.json and ground_truth.json (test_easy_changed_only_by_version below).
+# 0.4.0 (session 30): realistic names, the naming source confidence model and
+# new rule kinds in Medium and Hard (decision 0045). Easy output did not change.
 GOLDEN = {
+    1: "3c8ee77e905fe22bf2e478a163ce58eedb53d2ef534bd0c89ff409e79bd26324",
+    7: "b616ad6db3bb8d63ec44e227f3c0888b2ae81c8d925f5c1e0034c91ca93cdf12",
+}
+# Easy hashes of 0.3.0: still produced when the version string is set back.
+GOLDEN_0_3_0 = {
     1: "fd55025b30669a3c9b49afcc2847db03dc23cceb4142e5bee7d3d2ff64d3ea2a",
     7: "c85ddc7f0b22dcf6d7188203ab3db48e23eb44b12062ae390dfeab1bf62df3d3",
-}
-# Easy hashes of 0.2.0: still produced when the version string is set back.
-GOLDEN_0_2_0 = {
-    1: "7b1b31876f097896ea3a7cd5f332d3a2d469cfb2a84b94a003e9da99152d5c9a",
-    7: "e4e8c9fb36c9560fc3a153a460b760a7fb919230e35942e8e54c14f40a736872",
 }
 
 
@@ -43,12 +45,12 @@ def test_golden_manifest(seed: int) -> None:
     assert hashlib.sha256(manifest).hexdigest() == GOLDEN[seed]
 
 
-@pytest.mark.parametrize("seed", sorted(GOLDEN_0_2_0))
+@pytest.mark.parametrize("seed", sorted(GOLDEN_0_3_0))
 def test_easy_changed_only_by_version(seed: int, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(generate_module, "__version__", "0.2.0")
-    monkeypatch.setattr(truth, "__version__", "0.2.0")
+    monkeypatch.setattr(generate_module, "__version__", "0.3.0")
+    monkeypatch.setattr(truth, "__version__", "0.3.0")
     manifest = generate("easy", seed)["manifest.json"]
-    assert hashlib.sha256(manifest).hexdigest() == GOLDEN_0_2_0[seed]
+    assert hashlib.sha256(manifest).hexdigest() == GOLDEN_0_3_0[seed]
 
 
 def test_no_carriage_returns() -> None:
@@ -78,7 +80,7 @@ def test_unknown_level_is_rejected() -> None:
 # 0.2.0 (session 9): Medium added; Easy output unchanged.
 # 0.3.0 (session 10): trap counts drawn per scenario (decision 0018).
 GOLDEN_MEDIUM = {
-    0: "8a34091e66a51d3ae42aca08b44359054dade79ea4a6e06d1133db3bb24df48e",
+    0: "d92530379acd59ee8e1439ce0791afd84224059e4f349f0c6cc9ae6c6805c5cd",
 }
 
 

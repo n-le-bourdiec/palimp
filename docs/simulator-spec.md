@@ -108,6 +108,52 @@ config itself. When an owner leaves, their applications are reassigned or
 become orphaned (knob `orphan_rate`). palimp's "question to ask the rule owner"
 is scored against the current owner, or against "orphaned" when there is none.
 
+### 2.5 Names (Medium and Hard, decision 0045)
+
+Easy keeps the application convention of session 3: every object starts with
+the application name (`crm-web-01`, `crm-web-servers`, `users-hq`) and
+senior policy names join the endpoint labels (`users-to-crm-web`). Tests on
+32 real public SRX configurations (`docs/real-configs-robustness.md`) showed
+that real names are messier, so Medium and Hard (simulator 0.4.0) draw names
+per scenario from their own sub-generator (`naming`, `naming.py`), which moves
+no other draw of the timeline:
+
+- Site codes: one invented code of 2 or 3 letters for the data center and one
+  per user site (`EG`, `ASC`, `TSR`), none equal to an application code.
+- Server objects: each application is drawn once as named after itself or
+  not, with a share `app_share` drawn per scenario between 0.25 and 0.6. Named
+  applications keep `crm-web-01` or take a site prefix (`EG-CRM-SQL01`). The
+  others get a server role, from two styles drawn per scenario among
+  `EG-SQL01`, `SQL01` and `srv-sql-01` (roles `WEB`, `APP`, `SQL`, `DB`, `FS`,
+  `SMTP`, `MBX`, `DNS`, `BKP`, `MON`, `JMP`, `GW` and a few variants).
+- Address sets of a tier: the Easy name for named applications, otherwise
+  one style per scenario (`EG-WEB-Farm`, `WEB-Servers-3`, `EG_WEB_GRP`).
+- Generic objects: the user site subnets (`EG-LAN`, `LAN-ASC`,
+  `tsr_clients`, sometimes `main` or `local` for the first site), the set of
+  every site (`All-Users`, `internal`, `Corp-LAN`, `LAN-ALL`, `local-nets`)
+  and the server range (`Hosted-Networks`, `DC-Range`, `srv-nets`, `local`,
+  `main`). They name no application (`generic_names`).
+- Workstations of access requests are named after a person of the company,
+  in two styles drawn per scenario (`LT-Alma-Brandt`, `PC-ABrandt`,
+  `WS-BRANDT-A`, `alma-brandt-pc`). Vendors keep `vendor-crm-01` for named
+  applications and get an invented company name otherwise
+  (`Norland-IT-VPN`). The subnet an emergency rule opens is `crm-net` or
+  `EG-VLAN115`.
+- Policy names of the senior admins: their own descriptive name (0.25), an
+  application name (`CRM`, `CRM-HTTPS`, `crm_access`, `Allow-CRM`, 0.2), a
+  zone-to-zone name (`trust-to-servers`, `TRUST_TO_SERVERS`, 0.2), a ticket
+  number (the rule's `CHG` ticket, or a `RITM` request number that no export
+  holds, 0.15), or a name built from an object name (`Allow-EG-SQL01`,
+  `LAN-ALL_to_srv-web-03`, 0.2). The hurried operator keeps `rule-47` style
+  names (0.6) and uses ticket numbers (0.2) or object names (0.2). The
+  automation account, contractors, the on-call responder, the cleaner and
+  global policies keep their templates (section 3), so the trap mechanics
+  do not change. A name already taken gets `-2`, `-3`.
+- Descriptions of the senior admins and the operator: as written (0.55), the
+  ticket number alone (0.25, a `RITM` number when the rule has no ticket),
+  or free text that names no application (0.2: `requested by <owner>`,
+  `per change board`, `project Atlas`).
+
 ## 3. Admin personas
 
 Every config change is made by an admin. Admins are instances of personas. A

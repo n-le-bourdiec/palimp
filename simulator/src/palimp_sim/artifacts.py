@@ -113,7 +113,7 @@ def hitcount_txt(sim, traffic: TrafficResult, rng: Rng) -> str:
     for index, (policy, count) in enumerate(zip(policies, counts, strict=True), start=1):
         lines.append(
             f"{index:<7}{policy.from_zone:<{zone_width}}{policy.to_zone:<{zone_width}}"
-            f"{policy.name:<{name_width}}{count:<14}Permit"
+            f"{policy.name:<{name_width}}{count:<14}{policy.action.capitalize()}"
         )
     return "\n".join(lines) + "\n"
 

@@ -188,6 +188,7 @@ def simulate(sim, rng: Rng) -> TrafficResult:
     pointer = -1
     matcher = None
     rng_count = rng.derive("counts")
+    rng_extra = rng.derive("extra-counts")
     rng_log = rng.derive("logs")
 
     for day in range(total):
@@ -208,7 +209,7 @@ def simulate(sim, rng: Rng) -> TrafficResult:
         for flow in sim.flows.values():
             if not flow.active(day):
                 continue
-            count = sessions_for_day(flow, day, weekday, rng_count)
+            count = sessions_for_day(flow, day, weekday, rng_extra if flow.extra else rng_count)
             parts = [
                 (src, dst, service)
                 for src in flow.src.prefixes

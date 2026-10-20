@@ -36,6 +36,7 @@ from palimp_sim.catalog import FlowTemplate, service_port
 from palimp_sim.junos import ANY, Policy, Zone
 from palimp_sim.levels import TRAP_COUNT_WEIGHTS
 from palimp_sim.model import Admin, App, Endpoint, Event, Flow, Person, PolicyMeta
+from palimp_sim.naming import Namer
 from palimp_sim.rng import Rng
 from palimp_sim.traffic import Matcher
 from palimp_sim.world import SENIOR, Simulation
@@ -84,6 +85,9 @@ class MediumSimulation(Simulation):
         self._protected: set[str] = set()  # job rules: their owners object to removal
         self._hosts: dict[str, Endpoint] = {}  # workstations and vendors of access requests
         self._emergency_apps: set[str] = set()
+        # Realistic names (spec 2.5), from their own sub-generator.
+        self.namer = Namer(root.derive("naming"), level.user_sites)
+        self._naming_ticket = None
         # Overridden by the Hard level (hard.py); Medium keeps these values.
         self.count_weights = TRAP_COUNT_WEIGHTS
         self.access_per_year = ACCESS_PER_YEAR
@@ -109,15 +113,49 @@ class MediumSimulation(Simulation):
         if admin.persona == OPERATOR:
             self._rule_number += self.rng_medium.randint(1, 3)
             name = voice.operator_name(flow.app_id, self._rule_number, self.rng_medium)
-            return self._unique(name)
-        if admin.persona == AUTOMATION:
+            own = self._unique(name)
+        elif admin.persona == AUTOMATION:
             target = flow.template.dst.split(":")[-1]
             names = {p.name for p in self.config.policies}
             n = 1
             while f"app-{flow.app_id}-{target}-{n:02d}" in names:
                 n += 1
             return f"app-{flow.app_id}-{target}-{n:02d}"
-        return self._policy_name(flow, suffix)
+        else:
+            own = self._policy_name(flow, suffix)
+        if admin.persona not in (SENIOR, OPERATOR):
+            return own
+        ticket = self._naming_ticket.ticket_id if self._naming_ticket else None
+        zones = (self.zone(flow.src.zone_role), self.zone(flow.dst.zone_role))
+        name = self.namer.policy_name(own, admin.persona, flow.app_id, flow, ticket, zones)
+        return own if name == own else self._unique(name)
+
+    def _add_policy(self, flow, app, event, ticket, suffix="", sources=None, nolog=False) -> str:
+        self._naming_ticket = ticket
+        uid = super()._add_policy(flow, app, event, ticket, suffix, sources, nolog)
+        policy = self.config.policies[-1]
+        if policy.description and self.admin(event.admin_id).persona in (SENIOR, OPERATOR):
+            ticket_id = ticket.ticket_id if ticket else None
+            owner = self._owner_name(app)
+            policy.description = self.namer.description(policy.description, ticket_id, owner)
+        return uid
+
+    # Realistic object names (spec 2.5, naming.py).
+
+    def _site_name(self, index: int, site: str) -> str:
+        return self.namer.site(index)
+
+    def _users_set(self) -> str:
+        return self.namer.users_all
+
+    def _servers_net(self) -> str:
+        return self.namer.servers_net
+
+    def _hostname(self, app: App, tier: str, default: str) -> str:
+        return self.namer.hostname(app.app_id, app.shared, tier, default)
+
+    def _tier_set(self, app: App, tier: str, default: str) -> str:
+        return self.namer.tier_set(app.app_id, tier, app.generation, default)
 
     def _commit_second(self, day: int, admin: Admin) -> int:
         if admin.persona == AUTOMATION:
@@ -155,7 +193,7 @@ class MediumSimulation(Simulation):
             and flow.template.src == "users"
             and self.rng_medium.chance(OPERATOR_SPLIT_RATE)
         ):
-            sites = self.config.address_sets["users-all"]
+            sites = self.config.address_sets[self._users_set()]
             return [self._add_policy(flow, app, event, ticket, sources=[site]) for site in sites]
         return [self._add_policy(flow, app, event, ticket)]
 
@@ -319,9 +357,11 @@ class MediumSimulation(Simulation):
             tier, service = tier, "junos-ssh"
         shadowed = (tier, service) in open_to_users or app.app_id in self._emergency_apps
         if rng.chance(VENDOR_SHARE) or shadowed:
-            token = f"vendor:vendor-{voice.code(app.app_id).lower()}-{number:02d}"
+            name = f"vendor-{voice.code(app.app_id).lower()}-{number:02d}"
+            name = self.namer.vendor(app.app_id, number, name)
+            token = f"vendor:{name}"
             vendors = sum(1 for t in self._hosts if t.startswith("vendor:"))
-            name, ip = token.split(":")[1], f"203.0.113.{150 + vendors}"  # .150 to .254
+            ip = f"203.0.113.{150 + vendors}"  # .150 to .254
             endpoint = Endpoint("internet", name, [f"{ip}/32"], name)
             kind = "partner_access"
             summary = "An outside support company maintains these servers remotely"
@@ -329,7 +369,7 @@ class MediumSimulation(Simulation):
         else:
             person = rng.choice(self.people)
             site = rng.randint(1, self.level.user_sites)
-            name = f"pc-{voice.initials(person.name).lower()}-{number:02d}"
+            name = self.namer.workstation(person.name)
             token = f"pc:{name}"
             pcs = sum(1 for t in self._hosts if t.startswith("pc:"))
             ip = self._pc_address(site, pcs)
@@ -423,7 +463,8 @@ class MediumSimulation(Simulation):
                 uid = matcher.match(flow, src, dst, service_port(service))
                 if uid and uid not in shadowed:
                     shadowed.append(uid)
-        net = self._ensure_address(f"{app.app_id}-net", f"10.20.{10 + app.index}.0/24")
+        net = self.namer.app_net(app.app_id, app.index, f"{app.app_id}-net")
+        net = self._ensure_address(net, f"10.20.{10 + app.index}.0/24")
         description = None
         if rng.chance(EMERGENCY_DESCRIPTION_RATE):
             description = voice.description("on_call", intended[0], None, "", rng)
@@ -432,7 +473,7 @@ class MediumSimulation(Simulation):
             name=self._unique(voice.on_call_name(rng)),
             from_zone=users,
             to_zone=servers,
-            sources=["users-all"],
+            sources=[self._users_set()],
             destinations=[net],
             applications=[ANY],
             log_close=rng.chance(EMERGENCY_LOG_RATE),

@@ -61,6 +61,9 @@ class Simulation:
         self.hit_reset_day: int | None = None
         self.pair_resets: dict[tuple[str, str], int] = {}
         self.traps = TrapFacts()
+        # Address objects that name no application (user sites, the server
+        # range): left out of the naming evidence (truth.py, sources.py).
+        self.generic_names: set[str] = {ANY}
 
         self._next_ticket = self.rng_tickets.randint(10000, 60000)
         self._counters: dict[str, int] = {}
@@ -124,6 +127,23 @@ class Simulation:
     def _commit_second(self, day: int, admin: Admin) -> int:
         return self.rng_times.randint(9 * 3600, 18 * 3600)
 
+    # Object names (Medium and Hard draw realistic ones, naming.py).
+
+    def _site_name(self, index: int, site: str) -> str:
+        return f"users-{site}"
+
+    def _users_set(self) -> str:
+        return "users-all"
+
+    def _servers_net(self) -> str:
+        return "servers-net"
+
+    def _hostname(self, app: App, tier: str, default: str) -> str:
+        return default
+
+    def _tier_set(self, app: App, tier: str, default: str) -> str:
+        return default
+
     # ------------------------------------------------------------------ setup
 
     def _make_people(self) -> None:
@@ -162,10 +182,12 @@ class Simulation:
         prefixes = []
         for index, site in enumerate(sites, start=1):
             prefix = f"10.10.{index}.0/24"
-            members.append(self._ensure_address(f"users-{site}", prefix))
+            members.append(self._ensure_address(self._site_name(index, site), prefix))
             prefixes.append(prefix)
-        self.config.address_sets.setdefault("users-all", members)
-        return Endpoint("users", "users-all", prefixes, "users")
+        users = self._users_set()
+        self.config.address_sets.setdefault(users, members)
+        self.generic_names |= {users, *members}
+        return Endpoint("users", users, prefixes, "users")
 
     def _tier_endpoint(self, app: App, tier: str) -> Endpoint:
         servers = [self.servers[s] for s in app.tiers[tier]]
@@ -179,6 +201,7 @@ class Simulation:
             address = f"{tier}-servers" if base == tier else f"{base}-{tier}-servers"
             if app.generation:
                 address += "-new"
+            address = self._tier_set(app, tier, address)
             self.config.address_sets[address] = [s.hostname for s in servers]
         return Endpoint(servers[0].zone_role, address, [f"{s.ip}/32" for s in servers], label)
 
@@ -188,8 +211,9 @@ class Simulation:
         if token == "internet":
             return Endpoint("internet", ANY, ["0.0.0.0/0"], "internet")
         if token == "servers-net":
-            self._ensure_address("servers-net", "10.20.0.0/15")
-            return Endpoint("servers", "servers-net", ["10.20.0.0/15"], "servers")
+            name = self._ensure_address(self._servers_net(), "10.20.0.0/15")
+            self.generic_names.add(name)
+            return Endpoint("servers", name, ["10.20.0.0/15"], "servers")
         if token.startswith("partner:"):
             name = token.split(":", 1)[1]
             prefix = f"{catalog.PARTNERS[name]}/32"
@@ -223,6 +247,7 @@ class Simulation:
                     if not app.shared
                     else (f"{tier.name}-{number:02d}")
                 )
+                hostname = self._hostname(app, tier.name, hostname)
                 server = Server(
                     self.next_id("S", 3), hostname, ip, zone_role, app.app_id, tier.name, day
                 )
