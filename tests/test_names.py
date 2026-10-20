@@ -428,3 +428,20 @@ def test_a_service_word_an_object_carries_names_a_host() -> None:
     assert name_service_items(data, first) == []
     (item,) = name_service_items(data, second)
     assert item.kind == "name_service_mismatch"
+
+
+def test_ad_is_a_directory_role_only_on_its_service_and_dc_is_no_role() -> None:
+    # Session 29: `ad` names the directory service only when the rule matches LDAP or
+    # Kerberos, like a `dns` object on udp/53. `dc` may be a data center: no role.
+    assert "dc" not in SERVER_ROLES and roles("dc-team-01") == []
+    assert roles("ad-01") == [] and roles("ad-01", frozenset({"ldap"})) == ["directory"]
+    rules = (
+        "set security address-book global address ad-01 10.9.0.1/32\n"
+        + policy("p1", "any", "ad-01", "junos-ldap")
+        + policy("p2", "any", "ad-01", "junos-https")
+    )
+    assert "ad" not in vocabulary(dataset(rules)).short
+    a = collect(dataset(rules), PolicyKey.parse("a/b/p1")).assessment
+    assert a.intent_apps == ["ldap"] and a.confidence == "MEDIUM"
+    a = collect(dataset(rules), PolicyKey.parse("a/b/p2")).assessment
+    assert a.intent_apps == [] and "directory" not in (a.intent_flow or "")

@@ -478,12 +478,16 @@ def collect(
         claim = shown([_resolve(dataset, n) for n in named], "; ")
         apps = [a for n in named for a in vocab.in_object(n)]
         apps = list(dict.fromkeys(apps))
+        # A conditional role (`ad`) is read only when the rule matches its service.
+        ports = frozenset(
+            p for n in policy.applications for p in port_names(n, dataset.config.applications)
+        )
         sides = {}
         for side, names in (("source", policy.sources), ("destination", policy.destinations)):
             names = [n for n in names if n != "any"]
             sides[side] = Side(
                 apps=list(dict.fromkeys(a for n in names for a in vocab.in_object(n))),
-                roles=list(dict.fromkeys(r for n in names for r in roles(n))),
+                roles=list(dict.fromkeys(r for n in names for r in roles(n, ports))),
             )
         locator = "address objects " + shown(named)
         short = list(

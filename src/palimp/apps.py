@@ -152,7 +152,6 @@ SERVER_ROLES: dict[str, str] = {
     "print": "print",
     "printer": "print",
     "ldap": "directory",
-    "dc": "domain controller",
     "radius": "RADIUS",
     "syslog": "log",
     "log": "log",
@@ -164,6 +163,12 @@ SERVER_ROLES: dict[str, str] = {
     "router": "router",
     "fw": "firewall",
     "firewall": "firewall",
+}
+# Roles read only when the rule matches the service they offer (session 29): `ad`
+# is Active Directory on LDAP or Kerberos, and may be anything else otherwise (a site,
+# a team). Word -> (label, port names of the service).
+CONDITIONAL_ROLES: dict[str, tuple[str, frozenset[str]]] = {
+    "ad": ("directory", frozenset({"ldap", "kerberos"})),
 }
 # Shortest name read as an application when no ticket backs it.
 MIN_NAME = 3
@@ -182,15 +187,18 @@ def not_an_application(token: str) -> bool:
     )
 
 
-def roles(name: str) -> list[str]:
+def roles(name: str, ports: frozenset[str] = frozenset()) -> list[str]:
     """Server roles a name states, as labels (`sql01-a` gives `SQL`). A plural or a
-    trailing number is read as the word (`printers`, `web2`)."""
+    trailing number is read as the word (`printers`, `web2`). A conditional role
+    (`ad`) is read only when PORTS, the port names of the rule, hold its service."""
     found = []
     for token in re.split(r"[-_.]", name.lower()):
         word = re.sub(r"\d+$", "", token)
         label = SERVER_ROLES.get(word) or (
             SERVER_ROLES.get(word[:-1]) if word.endswith("s") else None
         )
+        if word in CONDITIONAL_ROLES and CONDITIONAL_ROLES[word][1] & ports:
+            label = CONDITIONAL_ROLES[word][0]
         if label and label not in found:
             found.append(label)
     return found
@@ -348,6 +356,7 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
             len(first) == 2
             and first not in GENERIC_WORDS
             and first not in SERVER_ROLES
+            and first not in CONDITIONAL_ROLES
             and first not in vocab.zone_words
             and first not in vocab.backed
         ):
