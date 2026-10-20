@@ -302,3 +302,20 @@ Reading:
   permit and no factory default policy: V-CLEANUP-RULE, V-DENY-NOTLIVE,
   V-FACTORY-DEFAULT and V-BROAD-PERMIT never fire on the dev sets. Part B is
   checked by unit tests and the real configurations only (simulator backlog).
+
+## Simulator 0.4.0, session 30 (2026-10-20, no evaluation run)
+
+Simulator 0.4.0 (decision 0045) changes Medium and Hard scenarios:
+realistic object, policy and description names (spec 2.5),
+`max_justified_confidence` computed from naming sources (spec 6.1), and
+firewall team rules: deny, catch-all deny, broad permit and factory default
+(spec 4.11), with new intent kinds in the ground truth. Easy artifacts are
+byte-identical.
+
+Medium and Hard numbers measured with simulator 0.3.0 (every run and dev
+seed table above, including held-out run 1) are not comparable with numbers
+measured with 0.4.0 or later: the scenarios, their rule counts, the expected
+verdicts of the new rules and the confidence ceilings all changed. Compare
+analyzer versions only on the same simulator version. The next analyzer
+session measures palimp on 0.4.0 dev seeds; the second held-out run uses
+0.4.0.

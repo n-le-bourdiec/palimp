@@ -928,6 +928,36 @@ address can tag several rules. Tests: `simulator/tests/test_hard.py`
 (naive reading against the ground truth for each new trap, seeds 0, 2, 3, 4
 and 11 in CI; distribution over seeds 0 to 49 with `--runslow`).
 
+### 7.6 Names, naming sources and rule kinds, measured (0.4.0)
+
+Session 30, Medium seeds 0 to 99 and Hard seeds 0 to 49, before (simulator
+0.3.0) and after (0.4.0). Naming sources are counted with the rules of
+section 6.1 (`sources.py`) on both versions, over application rules only
+(the firewall team rules of section 4.11 are left out); "before" confidence
+is the 0.3.0 tier rule. Shares are of all rules unless stated.
+
+| Measure | Medium before | Medium after | Hard before | Hard after |
+|---|---|---|---|---|
+| rules (per scenario) | 15652 (156.5) | 15989 (159.9) | 20750 (415.0) | 21029 (420.6) |
+| application rules with 0 naming sources | 7.7% | 33.4% | 4.6% | 36.9% |
+| ... 1 source | 43.8% | 36.4% | 54.8% | 39.7% |
+| ... 2 sources | 34.9% | 22.0% | 33.7% | 18.5% |
+| ... 3 or more | 13.6% | 8.2% | 6.9% | 4.9% |
+| `block` (specific deny or reject) | 0 | 166 (1.0%), 28 deactivated | 0 | 145 (0.7%), 23 deactivated |
+| `cleanup_deny` | 0 | 85 (0.5%) | 0 | 71 (0.3%) |
+| `broad_permit` | 0 | 60 (0.4%) | 0 | 46 (0.2%) |
+| `factory_default` | 0 | 26 (0.2%), 19 scenarios | 0 | 17 (0.1%), 9 scenarios |
+| `max_justified_confidence` LOW | 0.8% | 68.7% | 1.7% | 75.9% |
+| ... MEDIUM | 58.6% | 11.8% | 76.2% | 14.7% |
+| ... HIGH | 40.6% | 19.5% | 22.1% | 9.4% |
+| `best_achievable_confidence` LOW / MEDIUM / HIGH | n/a | n/a | 1.2% / 76.5% / 22.2% | 75.7% / 14.7% / 9.6% |
+
+Before 0.4.0, 92% (Medium) and 95% (Hard) of the application rules had a
+naming source, and the tier rule gave MEDIUM or HIGH to 99%. After, a third
+of the application rules have no source and most rules are LOW, as the
+project lead's model says for names seen once. Spec 7.5 numbers (415
+policies) are 0.3.0 measurements.
+
 ## 8. Determinism and the dev / held-out split
 
 ### 8.1 Seeded generation
