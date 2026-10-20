@@ -1,76 +1,82 @@
 # Handoff
 
-## Last session: 29 (2026-10-20), analyzer: review-3 fixes and rule semantics (decision 0044)
+## Last session: 30 (2026-10-20), simulator: realistic names, naming source confidence, firewall team rules (decision 0045)
+
+### Note to analyzer sessions (schema change, decisions 0017 and 0045)
+
+The ground truth JSON Schema changed (additive, `schema_version` stays 1):
+
+- intent kinds `block` (specific deny or reject), `cleanup_deny` (catch-all
+  deny), `broad_permit` (any/any/any permit), `factory_default`;
+- event kind `security_rule`; hits reason `blocked`;
+- these rules have `intent.app_id` `firewall` (a pseudo application listed
+  in `apps` when used) and `owner_to_ask` `firewall_team` (not a person id).
+
+Expected values of the new kinds: active deny and catch-all deny keep/keep
+MEDIUM; deactivated deny removal_candidate (both); broad permit best verify,
+LOW; factory default best verify, MEDIUM (spec 4.11). From simulator 0.4.0,
+Medium and Hard `max_justified_confidence` comes from naming sources (spec
+6.1), not tiers. Medium and Hard numbers before and after 0.4.0 are not
+comparable (`docs/evaluation-history.md`). Easy artifacts are unchanged.
 
 ### Done
 
-- Session 28 metrics finalized (201 calls, 13.89 USD).
-- Part A (review-3): confirmed names only in the intent once one name has
-  two sources; two-letter names confirmed only by a port, a dynamic
-  application, a custom application name or a description, never the policy
-  name; `dc` out of the roles, `ad` a conditional role read only on LDAP or
-  Kerberos (`CONDITIONAL_ROLES`, kept by anonymize); name/service flag only
-  when no object of the rule carries the service word; Ask line falls back
-  to the other side, then the firewall team, and never names an application
-  only one source names; several conflicts summarized in one clause.
-- Part B (`palimp.semantics`): deny and reject rules say what they block and
-  ask "Is this block still wanted?", never removal_candidate unless
-  deactivated (V-DENY-NOTLIVE); catch-all deny is a cleanup rule, keep
-  (V-CLEANUP-RULE, C-CLEANUP MEDIUM); Junos factory default policies
-  (V-FACTORY-DEFAULT, fixture `hier_factory_default_srx210.txt`,
-  FACTORY-1 to FACTORY-3) and broad permits (V-BROAD-PERMIT) at most verify,
-  in the firewall team list; descriptions and annotations quoted as a
-  stated purpose (claim, no confidence, neutralized, not in the LLM
-  fallback); ticket references not in tickets.csv cited in the question.
-- Decision 0044 (supersedes parts of 0043).
-- Dev sets (`docs/evaluation-history.md`, session 29): 0 dangerous errors
-  on Medium 20-99 and Hard 20-49; Medium 7 `bank-sftp` rules verify -> keep
-  (= best), Hard no verdict change; intent 95.3% -> 95.3% (Medium), 92.1% ->
-  92.0% (Hard: two-letter names no longer confirmed by the policy name). The
-  simulator has no deny, broad permit or factory default rule.
-- Real configs (`docs/real-configs-robustness.md`, session 29). Real configs: Ask "runs
-  any" 128 -> 0, Purpose unknown 131 -> 88, 33 factory defaults, 58 broad
-  permits, 9 cleanup rules verify -> keep, removal candidates unchanged.
-  New local review file `../palimp-realconfigs/review-4.md`.
+- Session 29 metrics finalized (154 calls, 10.97 USD).
+- Realistic names in Medium and Hard (spec 2.5, `naming.py`): site codes,
+  server roles, people's workstations, generic objects, application names
+  on 25% to 60% of the applications; policy names and descriptions in new
+  styles (tickets, zone-to-zone, object-based, free text).
+- Naming source confidence model (spec 6.1, `sources.py`).
+- Firewall team rules (spec 4.11, `rulekinds.py`): deny and reject (some
+  deactivated), catch-all deny, broad permit, factory default.
+- Simulator 0.4.0, goldens and stored Hard trap counts regenerated,
+  decision 0045, format assumptions DENY-1 and HITCOUNT-ACTION-1.
+- Distributions before and after (spec 7.6): application rules with no
+  naming source 7.7% to 33.4% (Medium), 4.6% to 36.9% (Hard);
+  `max_justified_confidence` LOW 0.8% to 68.7% (Medium), 1.7% to 75.9%
+  (Hard); 337 Medium and 279 Hard firewall team rules.
 
 ### Next
 
-- Project lead review of `../palimp-realconfigs/review-4.md`.
-- Simulator session: realistic object names (site prefixes, people,
-  generic words, roles), deny rules, catch-all deny, broad permits and
-  factory defaults in scenarios, so dev metrics see what real configs show.
+- Analyzer session: measure palimp on simulator 0.4.0 dev seeds (Medium
+  20-99, Hard 20-49), new enum values and `firewall_team` in the
+  evaluation.
+- Project lead review of `../palimp-realconfigs/review-4.md` (carried).
 - Held-out workflow: add the Hard table (decision 0036) before the second
-  held-out run.
+  held-out run; consider rotating the salt (spec 8.2, simulator version
+  changed difficulty).
 - Release preparation (decision 0032 item 5).
 
 ### Open questions
 
-- Deny rules keep the owner routing (an application owner or the team that
-  runs the objects): should "Is this block still wanted?" go to the
-  firewall team instead?
-- Catch-all deny at MEDIUM confidence (structure alone): HIGH justified?
-- `ad` as a conditional role names the service (`ldap`, `kerberos`), not
-  "Active Directory": right reading of "names the service only when the
-  service matches"?
-- `default-permit` as a factory default name has no Juniper documentation
-  sample (FACTORY-3, practitioner only); the official SRX210 sample names it
-  `trust-to-untrust`. Keep reading both?
-- An address object literally named `ANY` is read as `any` by the rule
-  semantics (c08): safe for broad permits (toward verify) and catch-all deny
-  (a deny opens nothing), but not checked against the object value.
-- Carried over from session 24 (analyzer): reused addresses trade
-  (decision 0039 item 4), not-live signals with regional instances
-  (decision 0039 item 2).
-- Carried over: decision 0036 point 3 (drawn instances); anonymize prompt
-  login and host; `--strip-text` in the issue template; decision 0020
-  example without a migration (needs approval); 90% vs best trade; HIGH
-  with an open ticket; decision 0019 blind items; on_call persona; decision
-  0015; `commit activate`; CONFIRMED-TEXT; scenario names.
+- Firewall team rules are all owned by `firewall_team`, including denies
+  that name an application object (none generated yet): right owner?
+- Catch-all deny MEDIUM, broad permit LOW, factory default MEDIUM in the
+  ground truth: confirm the ceilings.
+- The confidence model counts a commit comment and a ticket as sources that
+  are not names (they can back a two-letter name); decision 0044 lists only
+  a port, an application name, a dynamic application or a description.
+- Deactivated deny: removal_candidate (usual deactivated rule) in the
+  ground truth; decision 0044 says a deactivated deny follows the usual
+  rules.
+- Carried over from session 29: deny rules routed to owners or the
+  firewall team; `ad` as a conditional role; `default-permit` with no
+  Juniper sample; an object literally named `ANY`.
+- Carried over: decision 0039 items 2 and 4; decision 0036 point 3;
+  anonymize prompt login and host; `--strip-text`; decision 0020 example;
+  90% vs best trade; HIGH with an open ticket; decision 0019 blind items;
+  on_call persona; decision 0015; `commit activate`; CONFIRMED-TEXT;
+  scenario names.
 
 ### Known issues
 
-- Underconfidence is high on dev sets (57%, 68% in session 28): simulated
-  objects name the application on both sides, now one source.
+- Underconfidence measured before simulator 0.4.0 (57%, 68% in session 28)
+  came from tier-based ceilings; 0.4.0 replaces them (decision 0045).
+- Simulator 0.4.0: deny rules never log (no `RT_FLOW_SESSION_DENY` sample);
+  no custom application or dynamic application names are generated; the
+  extra commits of the firewall team rules shift the retained window, so
+  TRAP-MISLEADING-COMMENT lands on other rules than in 0.3.0 (mechanics
+  unchanged).
 - Known limit (decision 0044 item 6): a two-letter name is never read in
   not-live signals, so 2 Medium V-CONTRADICTION rules whose decommission
   names `ci` stay at keep (session 28).
@@ -166,12 +172,9 @@ on held-out or on the real public configs.
 For simulator sessions. Analyzer sessions add items here, they never read
 simulator code.
 
-- Rule semantics (analyzer session 29, decision 0044): deny and reject
-  rules (some with a not-live signal), catch-all deny rules, broad permits
-  (any/any/any) and Junos factory default policies (`default-permit`,
-  `trust-to-untrust`) in scenarios, with their ground truth intent. Today no
-  dev rule exercises V-CLEANUP-RULE, V-DENY-NOTLIVE, V-FACTORY-DEFAULT or
-  V-BROAD-PERMIT.
+- Deny rules naming an application object, deny rules with logging
+  (needs a `RT_FLOW_SESSION_DENY` sample), custom application names and
+  dynamic applications as naming sources (decision 0045).
 - Service desk tickets: a service desk files tickets on behalf of
   application owners (requester = service desk agent, owner named elsewhere
   or not at all), to test that palimp does not take the requester as the
@@ -225,9 +228,11 @@ has transcript `1fc8d6dd-973f-4e31-90a8-b193e45219b2` (finalized in session
 (finalized in session 27). Session 27 has transcript
 `4fa256b5-0487-44e9-a639-0af270d28f5c` (finalized in session 28). Session 28
 has transcript `7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e` (finalized in session
-29). Session 29 has transcript `2b84db4c-8e39-40ea-a296-b7749a1c6593`.
-Finalize it at the start of session 30 with:
+29). Session 29 has transcript `2b84db4c-8e39-40ea-a296-b7749a1c6593`
+(finalized in session 30). Session 30 has transcript
+`5fd285ac-95ef-4a18-a704-c9c5c246fd1b`. Finalize it at the start of session
+31 with:
 
-    uv run python metrics/session_tokens.py 2b84db4c-8e39-40ea-a296-b7749a1c6593
+    uv run python metrics/session_tokens.py 5fd285ac-95ef-4a18-a704-c9c5c246fd1b
 
 Cost is API-equivalent (decision 0006), not a billed amount.
