@@ -57,6 +57,17 @@ bugs and answered two questions:
    without traffic: it is the rule's own match criterion, not a name chosen
    by a person.
 
+7. **Predefined applications and product ports.** `palimp.services.PREDEFINED`
+   holds the Junos predefined applications of the documentation (VSRX-12d).
+   `PORT_NAMES` maps a well-known port to the product or service it stands
+   for (`tcp/8834` nessus, `tcp/3128` proxy, `udp/53` dns). A port alone never
+   names the application of a rule (T4). A port known for a product, plus a
+   name naming that product, counts as two sources.
+8. **A server role that matches the service** (`ROLE_SERVICES`: a `dns`
+   object on udp/53, an `ntp` object on udp/123, a database object on
+   tcp/1521) counts as two sources and names that service (or product) as
+   the application.
+
 All of these change confidence or the intent text, never a verdict.
 
 ## Alternatives considered

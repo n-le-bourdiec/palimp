@@ -235,3 +235,42 @@ def test_a_product_in_free_text_is_read_as_before() -> None:
     vocab = vocabulary(dataset(""))
     assert vocab.in_text("pushed by ansible") == []
     assert vocab.in_object("ansible-ctl-01") == ["ansible"]
+
+
+def test_a_product_port_and_a_product_name_are_two_sources() -> None:
+    # Decision 0043: tcp/8834 is known for nessus; an object naming nessus is a second
+    # source. The port alone names nothing.
+    rules = (
+        "set security address-book global address scan-nessus-01 10.4.0.1/32\n"
+        "set applications application quill-8834 protocol tcp\n"
+        "set applications application quill-8834 destination-port 8834\n"
+        + policy("p1", "any", "scan-nessus-01", "quill-8834")
+        + policy("p2", "any", "any", "quill-8834")
+    )
+    found = collect(dataset(rules), PolicyKey.parse("a/b/p1"))
+    services = next(e for e in found.evidence if e.kind == "services")
+    assert services.port_apps == ["nessus"]
+    a = found.assessment
+    assert a.intent_apps[0] == "nessus"
+    assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3")
+    assert "a well-known port" in a.confidence_reason
+    alone = collect(dataset(rules), PolicyKey.parse("a/b/p2")).assessment
+    assert "nessus" not in alone.intent_apps
+
+
+def test_a_server_role_matching_the_service_names_it() -> None:
+    # A dns object on udp/53 and an ntp object on udp/123: two sources each.
+    rules = (
+        "set security address-book global address dns-01 10.4.0.2/32\n"
+        "set security address-book global address ntp-02 10.4.0.3/32\n"
+        + policy("p1", "any", "dns-01", "junos-dns-udp")
+        + policy("p2", "any", "ntp-02", "junos-ntp")
+        + policy("p3", "any", "ntp-02", "junos-dns-udp")
+    )
+    for name, app in (("p1", "dns"), ("p2", "ntp")):
+        a = collect(dataset(rules), PolicyKey.parse(f"a/b/{name}")).assessment
+        assert a.intent_apps == [app]
+        assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3")
+    # A role that does not offer the service names nothing.
+    a = collect(dataset(rules), PolicyKey.parse("a/b/p3")).assessment
+    assert a.intent_apps == [] and a.confidence == "LOW"

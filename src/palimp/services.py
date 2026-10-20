@@ -138,6 +138,90 @@ WELL_KNOWN: dict[str, str] = {
     "tcp/10000": "NDMP backup",
     "tcp/10050": "Zabbix agent",
     "tcp/27017": "MongoDB",
+    # Well-known product ports (session 28).
+    "tcp/902": "VMware ESXi management",
+    "tcp/1080": "SOCKS proxy",
+    "tcp/3128": "HTTP proxy",
+    "tcp/3200": "SAP dispatcher",
+    "tcp/3300": "SAP gateway",
+    "tcp/5601": "Kibana",
+    "tcp/5666": "Nagios NRPE agent",
+    "tcp/8089": "Splunk management",
+    "tcp/8140": "Puppet server",
+    "tcp/8834": "Nessus scanner",
+    "tcp/9997": "Splunk forwarder",
+    "tcp/10051": "Zabbix server",
+    "tcp/15672": "RabbitMQ management",
+    "tcp/26379": "Redis Sentinel",
+}
+
+# Names a well-known port stands for (session 28, decision 0043): a product
+# (`tcp/8834` is nessus) or a service a server role offers (`udp/53` is dns). A
+# port alone never names the application of a rule (T4); with an object naming
+# the same product, or a server role offering the same service, it is a second
+# source. The first name is the one the intent uses.
+PORT_NAMES: dict[str, tuple[str, ...]] = {
+    "tcp/8834": ("nessus", "tenable"),
+    "tcp/6379": ("redis",),
+    "tcp/26379": ("redis",),
+    "tcp/1521": ("oracle",),
+    "tcp/3200": ("sap",),
+    "tcp/3300": ("sap",),
+    "tcp/9200": ("elasticsearch", "elastic"),
+    "tcp/5601": ("kibana",),
+    "tcp/27017": ("mongodb", "mongo"),
+    "tcp/5432": ("postgresql", "postgres"),
+    "tcp/3306": ("mysql", "mariadb"),
+    "tcp/1433": ("mssql",),
+    "tcp/9092": ("kafka",),
+    "tcp/10050": ("zabbix",),
+    "tcp/10051": ("zabbix",),
+    "tcp/8200": ("vault",),
+    "tcp/8089": ("splunk",),
+    "tcp/9997": ("splunk",),
+    "tcp/5666": ("nagios",),
+    "tcp/902": ("vmware", "esxi"),
+    "tcp/8140": ("puppet",),
+    "tcp/5672": ("rabbitmq",),
+    "tcp/15672": ("rabbitmq",),
+    "udp/53": ("dns",),
+    "tcp/53": ("dns",),
+    "udp/123": ("ntp",),
+    "tcp/3128": ("proxy",),
+    "tcp/1080": ("proxy",),
+    "tcp/25": ("smtp",),
+    "tcp/465": ("smtp",),
+    "tcp/587": ("smtp",),
+    "tcp/389": ("ldap",),
+    "tcp/636": ("ldap",),
+    "tcp/3268": ("ldap",),
+    "udp/1812": ("radius",),
+    "udp/514": ("syslog",),
+    "tcp/514": ("syslog",),
+    "udp/161": ("snmp",),
+    "udp/162": ("snmp",),
+    "tcp/21": ("ftp",),
+    "tcp/990": ("ftp",),
+    "tcp/445": ("smb",),
+    "tcp/2049": ("nfs",),
+    "tcp/10000": ("ndmp",),
+}
+# Server roles (palimp.apps labels) and the services they offer: a role that
+# matches the port names that service as the application (`dns-01` on udp/53).
+ROLE_SERVICES: dict[str, frozenset[str]] = {
+    "DNS": frozenset({"dns"}),
+    "NTP": frozenset({"ntp"}),
+    "proxy": frozenset({"proxy"}),
+    "mail": frozenset({"smtp"}),
+    "directory": frozenset({"ldap"}),
+    "RADIUS": frozenset({"radius"}),
+    "log": frozenset({"syslog", "splunk"}),
+    "monitoring": frozenset({"snmp", "zabbix", "nagios"}),
+    "FTP": frozenset({"ftp"}),
+    "file": frozenset({"smb", "nfs"}),
+    "backup": frozenset({"ndmp"}),
+    "SQL": frozenset({"mssql"}),
+    "database": frozenset({"oracle", "mssql", "mysql", "postgresql", "mongodb", "redis"}),
 }
 
 
@@ -189,3 +273,29 @@ def service_names(name: str, applications: dict[str, Application], depth: int = 
         return list(dict.fromkeys(found))
     found = [WELL_KNOWN.get(f"{p or '?'}/{d}") for p, d in app.ports() if d]
     return list(dict.fromkeys(s for s in found if s))
+
+
+def port_names(name: str, applications: dict[str, Application], depth: int = 0) -> list[str]:
+    """PORT_NAMES of the ports behind one application (or set): `nessus` for a custom
+    application on tcp/8834. Each entry is the first name of its port."""
+    if name in PREDEFINED:
+        names = PORT_NAMES.get(PREDEFINED[name][1])
+        return [names[0]] if names else []
+    app = applications.get(name)
+    if app is None:
+        return []
+    if app.kind == "application_set":
+        if depth > 3:
+            return []
+        found = [n for m in app.members for n in port_names(m, applications, depth + 1)]
+        return list(dict.fromkeys(found))
+    found = [PORT_NAMES.get(f"{p or '?'}/{d}") for p, d in app.ports() if d]
+    return list(dict.fromkeys(n[0] for n in found if n))
+
+
+def aliases(name: str) -> frozenset[str]:
+    """Every name a port name goes by (`postgresql` and `postgres`)."""
+    for names in PORT_NAMES.values():
+        if name in names:
+            return frozenset(names)
+    return frozenset({name})

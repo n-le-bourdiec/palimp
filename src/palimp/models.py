@@ -288,8 +288,10 @@ class Evidence(BaseModel):
     apps: list[str] = []
     # address_objects only: what each side ("source", "destination") names.
     sides: dict[str, Side] = {}
-    # services only: plain names of the well-known services matched ("SMB file sharing").
+    # services only: plain names of the well-known services matched ("SMB file sharing"),
+    # and the products or services their ports stand for (palimp.services.PORT_NAMES).
     services: list[str] = []
+    port_apps: list[str] = []
     # shared_address and shared_source only: the address, and the objects sharing it
     # (the policy's own object first).
     address: str = ""

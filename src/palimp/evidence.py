@@ -46,7 +46,7 @@ from palimp.models import (
 )
 from palimp.notlive import Marker, decommission_items, markers
 from palimp.owners import requester_items
-from palimp.services import describe, service_names
+from palimp.services import describe, port_names, service_names
 
 TICKET_REF = re.compile(r"\b(?:CHG|INC|RITM|REQ|CR|SR|TASK)[-_]?\d{4,}\b", re.IGNORECASE)
 
@@ -78,6 +78,7 @@ class Item(NamedTuple):
     services: list[str] = []
     address: str = ""
     objects: list[str] = []
+    port_apps: list[str] = []
 
 
 LIST_SHOWN = 5
@@ -553,6 +554,7 @@ def collect(
         plain = [
             s for n in policy.applications for s in service_names(n, dataset.config.applications)
         ]
+        ports = [p for n in policy.applications for p in port_names(n, dataset.config.applications)]
         items.append(
             Item(
                 "T4",
@@ -563,6 +565,7 @@ def collect(
                 "services",
                 apps,
                 services=list(dict.fromkeys(plain)),
+                port_apps=list(dict.fromkeys(ports)),
             )
         )
 
@@ -580,6 +583,7 @@ def collect(
             services=item.services,
             address=item.address,
             objects=item.objects,
+            port_apps=item.port_apps,
         )
         for i, item in enumerate(items, start=1)
     ]

@@ -42,6 +42,10 @@ Confidence rules (about the intent), first match wins:
   (decisions 0042 and 0043): the address objects (both sides together count
   once: one naming convention), the policy name, a custom application or
   application-set name.
+  A well-known port counts as a source for the product it stands for
+  (`tcp/8834` and an object naming nessus), and a server role that offers the
+  service of the port names that service with two sources (a `dns` object on
+  udp/53 names dns), decision 0043.
 - C-DYNAMIC-APP (MEDIUM): a dynamic application names the application: the
   rule's own match criterion, not a name chosen by a person (decision 0043).
   Never HIGH without traffic.
@@ -62,6 +66,7 @@ and one of its instances are compatible: neither agreement nor conflict.
 
 from palimp.models import Assessment, Conflict, Dataset, Evidence, Finding
 from palimp.owners import find_owner
+from palimp.services import ROLE_SERVICES, aliases
 
 # Evidence kinds that say a policy is unused (decision 0020), not that nothing is known.
 NOT_LIVE_KINDS = frozenset({"deactivated", "decommission", "migration_leftover"})
@@ -285,6 +290,22 @@ def _named(evidence: list[Evidence]) -> dict[str, set[tuple[str, str]]]:
         elif item.kind in NAMING:
             for app in item.apps:
                 found.setdefault(app, set()).add((NAMING[item.kind], item.id))
+    services = next((e for e in evidence if e.kind == "services"), None)
+    ports = services.port_apps if services else []
+    if not services or not ports:
+        return found
+    port = ("a well-known port", services.id)
+    # A port known for a product, with a name naming that product (decision 0043).
+    for app in found:
+        if set(ports) & aliases(app):
+            found[app].add(port)
+    # A server role offering the service of the port names that service.
+    objects = next((e for e in evidence if e.kind == "address_objects"), None)
+    labels = {r for side in objects.sides.values() for r in side.roles} if objects else set()
+    for app in ports:
+        if any(app in ROLE_SERVICES.get(label, ()) for label in labels):
+            assert objects is not None
+            found.setdefault(app, set()).update({("the address objects", objects.id), port})
     return found
 
 

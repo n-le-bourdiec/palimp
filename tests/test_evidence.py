@@ -91,6 +91,7 @@ def test_explain_cli_json(artifacts: Path) -> None:
         "apps": ["crm"],
         "sides": {},
         "services": [],
+        "port_apps": [],
         "address": "",
         "objects": [],
     }
