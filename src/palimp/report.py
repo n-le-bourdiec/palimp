@@ -235,7 +235,7 @@ def intent(finding: Finding) -> Cited:
         )
     elif assessment.intent_flow:
         text = (
-            f"Probably {assessment.intent_flow} (server roles from the object names, no "
+            f"Probably {assessment.intent_flow} (from the services and object names, no "
             f"application named), {assessment.confidence} confidence: "
             f"{assessment.confidence_reason}."
         )

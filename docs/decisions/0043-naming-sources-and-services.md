@@ -73,6 +73,12 @@ bugs and answered two questions:
    policy name), never alone. `ad` leaves `SERVER_ROLES` for this. The
    not-live readers (decommissions, migration leftovers) do not use these
    names: a two-letter name never moves a rule toward removal.
+10. **A flow described without an application.** When nothing names an
+    application, the intent describes the flow from the services matched,
+    the server roles, where the hosts sit (`PLACES`: management, user, DMZ,
+    guest, VPN, partner, vendor) or the zones ("SNMP traps from the
+    management range to anywhere in zone b"). Confidence stays LOW (C-WEAK).
+    "Purpose unknown" remains only when neither a service nor a role is known.
 
 All of these change confidence or the intent text, never a verdict.
 

@@ -293,3 +293,20 @@ def test_a_two_letter_name_needs_a_second_source() -> None:
     a = collect(dataset(rules), PolicyKey.parse("a/b/allow-qx-reports")).assessment
     assert a.intent_apps == ["qx"]
     assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3")
+
+
+def test_a_flow_is_described_when_nothing_names_an_application() -> None:
+    # Decision 0043: "SNMP traps from the management range" rather than "Purpose
+    # unknown", still LOW.
+    rules = (
+        "set security address-book global address mgmt-range-7 10.6.0.0/24\n"
+        + policy("p1", "mgmt-range-7", "any", "junos-snmp-trap")
+        + policy("p2", "any", "any", "any")
+    )
+    found = collect(dataset(rules), PolicyKey.parse("a/b/p1"))
+    a = found.assessment
+    assert a.intent_apps == [] and a.confidence == "LOW"
+    assert a.intent_flow == "SNMP traps from the management range to anywhere in zone b"
+    assert intent(found).text.startswith("Probably SNMP traps from the management range")
+    # Nothing to describe: no service, no role.
+    assert collect(dataset(rules), PolicyKey.parse("a/b/p2")).assessment.intent_flow is None

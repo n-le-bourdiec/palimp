@@ -64,6 +64,8 @@ first is the bare name of regional instances (`payroll` with `payroll-uk` and
 and one of its instances are compatible: neither agreement nor conflict.
 """
 
+import re
+
 from palimp.models import Assessment, Conflict, Dataset, Evidence, Finding
 from palimp.owners import find_owner
 from palimp.services import ROLE_SERVICES, aliases
@@ -321,27 +323,73 @@ def _sources(apps: list[str], named: dict[str, set[tuple[str, str]]]) -> str:
     return "; ".join(f"{a}: {' and '.join(sorted({w for w, _ in named[a]}))}" for a in apps)
 
 
+# Words of object names that say where a host sits (decision 0043), for a flow
+# described without an application: "SNMP traps from the management range".
+PLACES = {
+    "mgmt": "management",
+    "management": "management",
+    "oob": "management",
+    "dmz": "DMZ",
+    "user": "user",
+    "users": "user",
+    "pc": "user",
+    "client": "user",
+    "clients": "user",
+    "workstation": "user",
+    "workstations": "user",
+    "desktop": "user",
+    "desktops": "user",
+    "laptop": "user",
+    "laptops": "user",
+    "staff": "user",
+    "guest": "guest",
+    "guests": "guest",
+    "wifi": "guest",
+    "vpn": "VPN",
+    "partner": "partner",
+    "partners": "partner",
+    "vendor": "vendor",
+    "vendors": "vendor",
+}
+
+
+def _side(names: list[str], roles: list[str], zone: str) -> str:
+    """One side of a flow in words: its server roles, else where its hosts sit, else
+    its zone."""
+    if roles:
+        return f"{' and '.join(roles)} servers"
+    if names and all(n == "any" for n in names):
+        return f"anywhere in zone {zone}"
+    places = list(
+        dict.fromkeys(
+            PLACES[w] for n in names for w in re.split(r"[-_.]", n.lower()) if w in PLACES
+        )
+    )
+    if places:
+        return f"the {' and '.join(places[:2])} range"
+    return f"zone {zone}"
+
+
 def flow(finding: Finding) -> str | None:
-    """The flow in words from server roles and services, when the object names state
-    roles (decision 0042): "SMB file sharing between SQL servers"."""
+    """The flow in words when nothing names an application (decisions 0042 and 0043):
+    the services matched, the server roles, where the hosts sit or the zones.
+    "SMB file sharing between SQL servers", "SNMP traps from the management range to
+    zone dc". None when neither a service nor a role is known."""
     objects = next((e for e in finding.evidence if e.kind == "address_objects"), None)
-    if objects is None:
-        return None
-    source = objects.sides.get("source")
-    target = objects.sides.get("destination")
+    source = objects.sides.get("source") if objects else None
+    target = objects.sides.get("destination") if objects else None
     src = source.roles if source else []
     dst = target.roles if target else []
-    if not src and not dst:
-        return None
     services = [s for e in finding.evidence if e.kind == "services" for s in e.services]
+    if not src and not dst and not services:
+        return None
     what = " and ".join(services[:2]) if services else "traffic"
     if src and src == dst:
         return f"{what} between {' and '.join(src)} servers"
-    if src and dst:
-        return f"{what} from {' and '.join(src)} servers to {' and '.join(dst)} servers"
-    if dst:
-        return f"{what} to {' and '.join(dst)} servers"
-    return f"{what} from {' and '.join(src)} servers"
+    policy = finding.policy
+    origin = _side(policy.sources, src, policy.from_zone)
+    goal = _side(policy.destinations, dst, policy.to_zone)
+    return f"{what} from {origin} to {goal}"
 
 
 def _capped(
