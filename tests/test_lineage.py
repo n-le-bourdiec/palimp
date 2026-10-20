@@ -285,7 +285,8 @@ def test_reused_address_gives_verify_and_a_conflict(tmp_path: Path) -> None:
     assert assessment.verdict_rule == "V-SHARED-ADDRESS"
     assert item.id in assessment.verdict_evidence
     assert assessment.confidence != "HIGH"
-    assert assessment.intent_apps[:2] == ["crm", "hrm"]
+    # A conflict never defines the application (session 28).
+    assert assessment.intent_apps == ["crm"]
     assert any(item.id in c.evidence for c in assessment.conflicts)
 
 
@@ -388,4 +389,23 @@ def test_shared_source_address_lowers_confidence_not_the_verdict(tmp_path: Path)
     assessment = finding.assessment
     assert assessment.verdict == "keep"
     assert assessment.confidence != "HIGH"
+    assert any(item.id in c.evidence for c in assessment.conflicts)
+
+
+def test_a_shared_source_never_names_the_intent(tmp_path: Path) -> None:
+    # Session 28: a member of the source set shares its address with an
+    # object named after another word. The conflict is cited, never the intent.
+    config = (
+        "set security address-book global address quill-pc 10.10.7.7/32\n"
+        "set security address-book global address brindle-pc 10.10.7.7/32\n"
+        "set security address-book global address-set hosted-nets address quill-pc\n"
+        + rule("late", "hosted-nets", "any", app="any")
+    )
+    artifacts = write(tmp_path, [config], [""])
+    finding = collect(ingest(artifacts), PolicyKey.parse("trust/dc/late"))
+    item = kinds(finding)["shared_source"]
+    assert item.apps == ["brindle"]
+    assessment = finding.assessment
+    assert assessment.intent_apps == ["hosted"]
+    assert "brindle" not in assessment.intent_apps
     assert any(item.id in c.evidence for c in assessment.conflicts)

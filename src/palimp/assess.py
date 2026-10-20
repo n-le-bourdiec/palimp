@@ -308,14 +308,17 @@ def flow(finding: Finding) -> str | None:
 def _capped(
     finding: Finding, found: tuple[str, str, str, list[str], list[str], list[Conflict]]
 ) -> tuple[str, str, str, list[str], list[str], list[Conflict]]:
-    """C-AMBIGUOUS-INSTANCE: the application named first is the bare name of regional
+    """Shared addresses: a conflict, and HIGH becomes MEDIUM (C-SHARED-ADDRESS); the
+    applications of the other objects are never added to the intent.
+    C-AMBIGUOUS-INSTANCE: the application named first is the bare name of regional
     instances (palimp.apps). Its candidates follow it, and confidence is at most MEDIUM."""
     level, rule, reason, cited, apps, conflicts = found
     objects = next((e for e in finding.evidence if e.kind == "address_objects"), None)
     for shared in [e for e in finding.evidence if e.kind in ("shared_address", "shared_source")]:
         ids = [shared.id] + ([objects.id] if objects else [])
+        # A conflict never defines the application (session 28): the other objects
+        # sharing the address are cited, not added to the intent.
         conflicts = [*conflicts, Conflict(evidence=ids, text=f"{shared.id}: {shared.claim}")]
-        apps = list(dict.fromkeys(apps + shared.apps))
         cited = sorted(set(cited) | set(ids), key=_order)
         if level == "HIGH":
             level, rule = "MEDIUM", "C-SHARED-ADDRESS"
