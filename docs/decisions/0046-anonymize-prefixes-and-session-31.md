@@ -104,3 +104,15 @@ anonymize tests failed on it, in two ways:
    section. Other verdicts are unchanged, and the finding never gives
    removal_candidate: that would need the project lead's approval, not
    before release. Deactivated rules are neither shadowed nor shadowing.
+7. Tuning on dev seeds Medium 0-19 and Hard 0-19 only (item 9 of the
+   prompt). Active deny and reject rules:
+   - no traffic seen (counters or logs present, nothing on the rule): keep
+     (`V-DENY-QUIET`) instead of verify: nobody tries the blocked flow and
+     keeping a block opens nothing. Toward keep, the safe direction. Rules
+     with no visibility at all stay verify ("Is this block still wanted?",
+     firewall team);
+   - confidence MEDIUM (`C-BLOCK`) when the names alone would give LOW: the
+     intent is the block the action and match state; single-source
+     application names stay out of the intent.
+   Tuning seeds, block rules vs best achievable: Medium 72.0% to 100%, Hard
+   70.7% to 100%; 0 dangerous errors before and after.

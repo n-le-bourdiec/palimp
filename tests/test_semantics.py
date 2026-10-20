@@ -308,3 +308,17 @@ def test_a_rule_after_a_catch_all_deny_is_shadowed_at_most_verify(tmp_path: Path
     assert all(r.section != "removal_candidate" or r.key == "a/b/old-late" for r in report.rules)
     (team,) = [q for q in build_questions(report) if q.name == CLEANUP_NAME]
     assert "Rules placed after a catch-all deny (1)" in team.text
+
+
+def test_a_quiet_deny_is_kept_and_states_its_block(tmp_path: Path) -> None:
+    # Session 31 (tuned on dev seeds 0-19): a deny that sees no traffic is kept, a block
+    # opens nothing; its intent is the block, MEDIUM.
+    config = policy("no-ftp", "any", "qorv-lan", "junos-ftp", "deny")
+    config += policy("to-web", "any", "qorv-web-01", "junos-https", "permit")
+    hits = "1   a   b   no-ftp   0   Deny\n2   a   b   to-web   0   Permit\n"
+    data = run(tmp_path, config, hits)
+    a = collect(data, PolicyKey.parse("a/b/no-ftp")).assessment
+    assert (a.verdict, a.verdict_rule) == ("keep", "V-DENY-QUIET")
+    assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-BLOCK")
+    other = collect(data, PolicyKey.parse("a/b/to-web")).assessment
+    assert other.verdict == "verify" and other.confidence == "LOW"
