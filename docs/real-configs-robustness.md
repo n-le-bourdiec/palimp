@@ -196,3 +196,26 @@ person names of its sources. A new local review file
 `../palimp-realconfigs/review-4.md` holds 30 rules: the seven rules the
 session 29 prompt names, then the same strata plus 6 deny or reject rules,
 3 factory defaults and 2 broad permits.
+
+## Session 31: review-4 fixes, shadowed rules, deny tuning (decision 0046)
+
+Same 32 configurations, configuration alone, before (`a15ad34`, session 30
+analyzer plus the anonymize fix) and after (`2b31281`), compared rule by rule
+by one local script on both:
+
+| measure | before | after |
+|---|---|---|
+| verdicts | 281 verify, 9 keep, 2 removal candidates | identical, rule by rule (0 moves) |
+| MEDIUM / LOW rules | 92 / 200 | 94 / 198 |
+| rules with "Purpose unknown" | 88 | 30 (58 broad permits now say what they permit) |
+| intents quoting a stated purpose | 15 | 5 (10 descriptions were a ticket reference alone, `CR576958`, `CHG0114306`) |
+| hosting platform as the intent application (`azure`) | 12 | 0 |
+| deny or reject rules asked of the firewall team | 0 | 7 |
+| deny rules MEDIUM by their block (C-BLOCK) | 0 | 6 |
+| shadowed rules | not read | 1 (`c24 global-snmp-45`, after `global-default-deny-50`; verdict unchanged, verify) |
+| Ask lines to the firewall team | 93 | 100 |
+
+Confidence moves: 6 LOW to MEDIUM (deny rules, C-BLOCK), 4 MEDIUM to LOW
+(c29 `ON-PREM-to-AZURE-*` rules: `azure` no longer counts, the remaining
+`git` name has one source). `ON-PREM-to-AZURE-MS-SQL-CHG0092653` now names
+mssql from its application group `MS-SQL-PORT-GROUP`.
