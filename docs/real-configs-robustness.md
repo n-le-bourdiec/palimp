@@ -156,3 +156,43 @@ no longer adds the other object's name to the intent. A new local review
 file `../palimp-realconfigs/review-3.md` holds 30 rules: the six rules the
 session 28 prompt names (review-2 rules 1, 2, 3 and 7, `ALLOW-SNMP`, the
 `BARCLAY` prefix rule), then the same strata as review 2.
+
+## Session 29: rule semantics and review-3 fixes (decision 0044)
+
+The project lead reviewed `review-3.md` and approved decision 0043, then
+asked for decision 0044: confirmed names only in the intent, two-letter names
+never confirmed by the policy name, `dc` out of the server roles and `ad` read
+only on LDAP or Kerberos, the name/service flag only when no object carries
+the service word, an Ask line that never says "the team that runs any",
+several conflicts in one clause, and rule semantics: deny and reject rules,
+catch-all deny (cleanup) rules, Junos factory default policies, broad
+permits, quoted stated purpose, ticket look-up in the question.
+
+Same 32 configurations, configuration alone, before (session 28 code,
+`65acdfe`) and after (session 29 code), counted by one local script on both:
+
+| measure | before | after |
+|---|---|---|
+| MEDIUM / LOW rules | 57 / 235 | 92 / 200 |
+| C-T3 rules (two sources) | 35 | 28 |
+| rules with a named intent (any level) | 107 | 103 |
+| rules with "Purpose unknown" | 131 | 88 |
+| Ask lines "the team that runs any" | 128 | 0 |
+| deny or reject rules | 16 | 16 |
+| of which catch-all deny, keep (V-CLEANUP-RULE) | 0 | 9 |
+| of which asked "Is this block still wanted?" | 0 | 7 |
+| factory default policies (V-FACTORY-DEFAULT) | not read | 33, in 21 configurations (`default-permit` 25, `trust-to-untrust` 8) |
+| broad permits (V-BROAD-PERMIT) | not read | 58 |
+| intents quoting a stated purpose | 0 | 15 |
+| questions citing a ticket to look up | 0 | 21 |
+| intents summarizing several conflicts | 0 | 2 |
+| name/service contradictions | 7 | 7 (`ALLOW-SNMP` rules, objects carry no service word) |
+| verdicts | 290 verify, 2 removal candidates | 281 verify, 9 keep, 2 removal candidates (the same two, both deactivated) |
+
+Every verdict move is verify to keep, all 9 on active catch-all deny rules
+(cleanup rules, a deny never opens a flow). `FG-MB-AIRCON` is LOW (the policy
+name no longer confirms `mb`), and its Ask line names `MB-Air-Con`, not the
+person names of its sources. A new local review file
+`../palimp-realconfigs/review-4.md` holds 30 rules: the seven rules the
+session 29 prompt names, then the same strata plus 6 deny or reject rules,
+3 factory defaults and 2 broad permits.
