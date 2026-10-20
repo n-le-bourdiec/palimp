@@ -39,9 +39,12 @@ Confidence rules (about the intent), first match wins:
   documented intent may be stale (deactivated, rare or unlogged policy).
 - C-T1-ONLY (MEDIUM): T1 names an application, the objects name none.
 - C-T3 (MEDIUM): two independent names point to the same application
-  (decision 0042): the address objects on both sides of the rule, or an
-  address object and the policy name, a custom application name or a
-  dynamic application.
+  (decisions 0042 and 0043): the address objects (both sides together count
+  once: one naming convention), the policy name, a custom application or
+  application-set name.
+- C-DYNAMIC-APP (MEDIUM): a dynamic application names the application: the
+  rule's own match criterion, not a name chosen by a person (decision 0043).
+  Never HIGH without traffic.
 - C-T3-SINGLE (LOW): only one of those names points to an application. A name
   alone may be a place, a person or a generic word (`dan-pc`, `en-srv`), so it
   stays LOW until a second source names the same application. This only
@@ -66,7 +69,7 @@ LEVELS = ("LOW", "MEDIUM", "HIGH")
 # T1 kinds that state why a policy exists (a decommission states why it ended).
 INTENT_KINDS = frozenset({"description", "annotation", "commit_comment", "ticket"})
 # T3 and T4 items whose names may point to an application, each one independent source
-# (decision 0042). Address objects count once per side of the rule.
+# (decision 0042). Address objects count once, both sides together (decision 0043).
 NAMING = {
     "policy_name": "the policy name",
     "services": "a custom application name",
@@ -244,6 +247,15 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
     if named:
         apps = list(named)
         sure = [a for a in apps if len(named[a]) >= 2]
+        dynamic = [a for a in apps if NAMING["dynamic_application"] in {w for w, _ in named[a]}]
+        if dynamic and not sure:
+            apps = dynamic + [a for a in apps if a not in dynamic]
+            reason = (
+                "a dynamic application names the application: the rule's own match "
+                "criterion, not a name chosen by a person (" + _sources(dynamic, named) + ")"
+            )
+            cited = sorted({i for a in dynamic for _, i in named[a]}, key=_order)
+            return "MEDIUM", "C-DYNAMIC-APP", reason, cited, apps, []
         if sure:
             apps = sure + [a for a in apps if a not in sure]
             reason = "two independent names point to the application: " + _sources(sure, named)
@@ -266,11 +278,10 @@ def _named(evidence: list[Evidence]) -> dict[str, set[tuple[str, str]]]:
     found: dict[str, set[tuple[str, str]]] = {}
     for item in evidence:
         if item.kind == "address_objects" and item.apps:
-            sides = item.sides or {"": None}
-            for side, names in sides.items():
-                for app in names.apps if names else item.apps:
-                    what = f"the {side} address objects" if side else "the address objects"
-                    found.setdefault(app, set()).add((what, item.id))
+            # Both sides together are one source: the same prefix on each side of a
+            # rule is one naming convention (decision 0043).
+            for app in item.apps:
+                found.setdefault(app, set()).add(("the address objects", item.id))
         elif item.kind in NAMING:
             for app in item.apps:
                 found.setdefault(app, set()).add((NAMING[item.kind], item.id))
@@ -278,7 +289,7 @@ def _named(evidence: list[Evidence]) -> dict[str, set[tuple[str, str]]]:
 
 
 def _sources(apps: list[str], named: dict[str, set[tuple[str, str]]]) -> str:
-    """`crm: the policy name and the source address objects; ...`"""
+    """`crm: the address objects and the policy name; ...`"""
     return "; ".join(f"{a}: {' and '.join(sorted({w for w, _ in named[a]}))}" for a in apps)
 
 

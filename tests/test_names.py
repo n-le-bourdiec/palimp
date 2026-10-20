@@ -86,10 +86,12 @@ def test_a_name_on_one_side_only_stays_low() -> None:
     assert confidence(rules, "p2")[:3] == ("LOW", "C-T3-SINGLE", ["zorvex"])
 
 
-def test_both_sides_or_an_application_name_corroborate() -> None:
+def test_an_application_name_corroborates_both_sides_do_not() -> None:
+    # Decision 0043: the same name on both sides is one naming convention, not two
+    # independent sources.
     rules = policy("p1", "zorvex-app-01", "zorvex-db-01")
     rules += policy("p2", "any", "kelvo-01", "kelvo-tcp")
-    assert confidence(rules, "p1")[:3] == ("MEDIUM", "C-T3", ["zorvex"])
+    assert confidence(rules, "p1")[:3] == ("LOW", "C-T3-SINGLE", ["zorvex"])
     assert confidence(rules, "p2")[:3] == ("MEDIUM", "C-T3", ["kelvo"])
 
 
@@ -142,7 +144,9 @@ def test_dynamic_application_names_the_application() -> None:
     assert item.tier == "T3" and item.apps == ["quibble"]  # a group names no application
     assert "junos:QUIBBLE, junos:web:shopping" in item.claim
     assert found.assessment.intent_apps == ["quibble"]
-    assert found.assessment.confidence_rule == "C-T3-SINGLE"  # one source only
+    # Decision 0043: the rule's own match criterion gives MEDIUM alone, never HIGH.
+    assert found.assessment.confidence == "MEDIUM"
+    assert found.assessment.confidence_rule == "C-DYNAMIC-APP"
     services = next(e for e in found.evidence if e.kind == "services")
     assert "default ports of the dynamic applications" in services.claim
 
