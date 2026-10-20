@@ -118,3 +118,41 @@ two sources (MEDIUM); a policy name is independent only when it does not
 repeat an object name of the rule; person names on both sides of a rule
 would be MEDIUM (not observed). Term-based custom applications (`term`
 statements) show as "protocol unknown": a parser gap, not changed.
+
+## Session 28: second pass on intent quality (decision 0043)
+
+The project lead reviewed `review-2.md` and approved decision 0042, then
+asked for decision 0043: a conflict never sets the intent, the cleanup
+question in the assessment, product and application names as name sources,
+address objects counted once, a dynamic application alone MEDIUM,
+predefined applications, product ports, server roles matching the service,
+two-letter names only when confirmed, flows described without an
+application, `term` applications read, and the name/service contradiction.
+
+Same 32 configurations, configuration alone, before (session 27 code,
+`a5f4b8c`) and after (session 28 code), counted by one local script on both:
+
+| measure | before | after |
+|---|---|---|
+| MEDIUM rules | 17 | 58 |
+| of which C-T3 (two sources) / C-DYNAMIC-APP | 15 / 0 | 36 / 20 |
+| MEDIUM rules naming a generic, short or person-like word (session 27 classifier) | 0 | 9 |
+| rules with a named intent (any level) | 91 | 107 |
+| rules naming a person-like word (all LOW) | 12 | 8 |
+| rules with a flow described, no application named | 19 | 54 |
+| rules with "Purpose unknown" | 182 | 131 |
+| name/service contradictions | not read | 7 (`ALLOW-SNMP` to `ALLOW-SNMP-6`, all on `junos-https`) |
+| shared address / shared source items | 0 / 4 | 5 / 4 |
+| deactivated rules with the cleanup question | 0 of 2 | 2 of 2 |
+| verdicts | 290 verify, 2 removal candidates | identical, rule by rule |
+
+The 9 flagged MEDIUM rules are all two-letter names confirmed by a policy
+name and an object that start with the same code (`LT-Gates-Paxton`,
+`FG-MB-AIRCON`, `FG_Server_EG_Camera`, `AZURE-MS-SQL`): the rule as asked
+(two sources), but the codes look like site or team prefixes, a question for
+the project lead. The 20 C-DYNAMIC-APP rules are the `unified-*` rules of one
+configuration. Person-like words drop from 12 to 8 because a shared source
+no longer adds the other object's name to the intent. A new local review
+file `../palimp-realconfigs/review-3.md` holds 30 rules: the six rules the
+session 28 prompt names (review-2 rules 1, 2, 3 and 7, `ALLOW-SNMP`, the
+`BARCLAY` prefix rule), then the same strata as review 2.
