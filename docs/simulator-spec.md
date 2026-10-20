@@ -316,6 +316,61 @@ force that day: zone pair, then first matching policy in order, then the
 default policy (deny). The attribution drives both hit counts and log lines.
 Policies without logging produce hits but no log lines.
 
+### 4.11 Firewall team rules (Medium and Hard, decision 0045)
+
+Real configurations hold rules that serve no application flow
+(`docs/real-configs-robustness.md`, session 29: 16 deny or reject rules, 9
+catch-all deny rules, 58 broad permits and 33 factory default policies in 32
+configurations). From simulator 0.4.0, Medium and Hard add them, drawn per
+scenario from their own sub-generator (`rule-kinds`, `rulekinds.py`), so the
+application timeline and the traps keep their draws. They are planned after
+the routine commits, so the number of routine commits does not change; each
+comes with an event of kind `security_rule`, a senior admin or the operator,
+and a commit comment drawn with the persona's comment rate.
+
+| Kind | Medium count | Hard count | Rule |
+|---|---|---|---|
+| specific deny (service) | 0 to 3 (weights 0.3, 0.3, 0.25, 0.15) | 0 to 5 | `deny` (0.8) or `reject` (0.2) of one insecure service (`junos-telnet`, `junos-ftp`, `tcp-3389`, `udp-69`, `tcp-445`) from the user sites, the DMZ or anywhere to a whole zone (users to servers, internet to DMZ, users to management, DMZ to servers; Hard also users and DMZ to the restricted zone), on top of the zone pair |
+| specific deny (hostile range) | 0 to 2 | 0 to 2 | any application from an outside range of 198.51.100.0/24 (object `BLACKLIST`, `bad-actors`, `Block-198.51.100.64`) to anything in the DMZ or the servers zone, on top of the zone pair |
+| deactivated deny | each specific deny with probability 0.2, 60 to 900 days later | same | `deactivate` (VSRX-2), event note `deny rule deactivated` |
+| catch-all deny | 0 to 3 zone pairs (weights 0.4, 0.3, 0.2, 0.1) | 0 to 3 | any/any/any `deny` kept last in its zone pair; one name in every pair for half the scenarios (`deny-all`, `cleanup`, `DENY-ANY`), else one name per pair |
+| broad permit | 0 to 2 zone pairs (weights 0.55, 0.3, 0.15) | 0 to 3 | any/any/any `permit` kept last in its zone pair (`allow-all`, `any-any`, `TEMP-ANY`, `trust-to-dmz-any`), logged with probability 0.3 |
+| factory default | 0.5 of the scenarios whose zones are named `trust` and `untrust` | same | in the initial configuration, kept last: `trust-to-untrust` alone (FACTORY-1, half of them) or `default-permit` on trust to trust and trust to untrust (FACTORY-2 and FACTORY-3) |
+
+Placement keeps every trap as it was: a specific deny matches only services or
+sources no application flow uses; the rules kept last (`tail`) carry only
+traffic no rule above them matches; none goes in a zone pair a global policy
+covers (from the management zone, servers to internet). Hit count cleanups
+leave these rules alone (nobody removes a deny or an any/any permit on hit
+counts alone), and the cleaner never renames them.
+
+Each rule carries one flow of its own, from zone-wide prefixes no
+application rule matches, counted from a separate generator (traffic.py):
+blocked attempts for a deny (40% stop some day), other refused traffic for a
+catch-all deny, and undocumented traffic only the permit-all rule lets
+through for a broad permit or a factory default (it stops some day for 40%
+of them). Deny rules never log (`RT_FLOW_SESSION_DENY` has no captured
+sample).
+
+Ground truth (`app_id` `firewall`, owner `firewall_team`):
+
+| Kind (`intent.kind`) | Verdict | Best achievable | Max justified confidence | Status |
+|---|---|---|---|---|
+| `block`, active | keep | keep | MEDIUM | `still_needed` true, `hits_reason` `blocked` when hit |
+| `block`, deactivated | removal_candidate | removal_candidate | MEDIUM | TRAP-DEACTIVATED |
+| `cleanup_deny` | keep | keep | MEDIUM | `still_needed` true |
+| `broad_permit` | verify when its flow is live, else removal_candidate | verify | LOW | `still_needed` = live |
+| `factory_default` | verify when its flow is live, else removal_candidate | verify | MEDIUM | `still_needed` = live |
+
+Removing a deny opens traffic, so an active deny is kept whatever its hits
+(decision 0044 item 9). The intent of these rules is read from their
+structure (action and match), so confidence is fixed: MEDIUM, as for the
+analyzer's catch-all and factory default readings; a broad permit says what
+it allows but nothing says why, so LOW. Their only traps are
+TRAP-HISTORY-HORIZON and TRAP-DEACTIVATED. Evidence: description and
+retained comment (T1), hit count and log lines (T2), the match and action
+(T3), the applications (T4).
+
 ## 5. Output artifacts
 
 Directory layout of one generated scenario:
@@ -669,7 +724,9 @@ wrote into the artifacts and that name the rule's true application:
    as traffic. It is never below `max_justified_confidence`.
 
 Dynamic applications and custom application names are sources in the
-analyzer's model; the simulator writes neither, so they never appear.
+analyzer's model; the simulator writes neither, so they never appear. The
+rule kinds of section 4.11 have fixed confidence levels instead (their intent
+is read from the rule's structure, not from names).
 
 ## 7. Difficulty levels
 

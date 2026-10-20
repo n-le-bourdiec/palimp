@@ -38,6 +38,7 @@ from palimp_sim.levels import TRAP_COUNT_WEIGHTS
 from palimp_sim.model import Admin, App, Endpoint, Event, Flow, Person, PolicyMeta
 from palimp_sim.naming import Namer
 from palimp_sim.rng import Rng
+from palimp_sim.rulekinds import RuleKindsMixin
 from palimp_sim.traffic import Matcher
 from palimp_sim.world import SENIOR, Simulation
 
@@ -62,7 +63,7 @@ CLEAR_PAIRS = (("servers", "internet"), ("servers", "management"), ("management"
 BACKUP = "app:shared-backup:bkp"
 
 
-class MediumSimulation(Simulation):
+class MediumSimulation(RuleKindsMixin, Simulation):
     def __init__(self, level, seed: int) -> None:
         super().__init__(level, seed)
         root = Rng(f"palimp-sim:{level.name}:{seed}")
@@ -70,6 +71,7 @@ class MediumSimulation(Simulation):
         self.rng_traps = root.derive("traps")
         self.rng_counts = root.derive("trap_counts")
         self.rng_clear = root.derive("hit_count_clear")
+        self.rng_kinds = root.derive("rule-kinds")  # decision 0045, rulekinds.py
         self._copied_count = 0
         self.zone_names = dict(self.zone_names)
         self.zone_names["management"] = self.rng_medium.choice(catalog.MANAGEMENT_NAMES)
@@ -220,6 +222,16 @@ class MediumSimulation(Simulation):
         self.admins = [first, operator, second, robot]
 
     # ------------------------------------------------------------------ events
+
+    def _bootstrap(self, day: int) -> None:
+        """Initial configuration, with the factory default policies when kept."""
+        admin = self.active_admin(day)
+        self.config.logins = [a.login for a in self.admins if a.active(day)]
+        event = self._event("bootstrap", day, admin)
+        created = self._factory_defaults(event, admin)
+        commit = self._commit(day, admin, "Initial configuration", event, created=created)
+        for uid in created:
+            self.policy_meta[uid].commit_seq = commit.seq
 
     def _app_admin_new_app(self, app: App, day: int, admin: Admin, event: Event, ticket) -> list:
         self._create_servers(app, day)
@@ -762,23 +774,30 @@ class MediumSimulation(Simulation):
         routine_count = max(0, level.commits_per_year * level.years - expected)
         for _ in range(routine_count):
             plan.append((self.workday(rng.randint(5, total - 1)), 6, "routine", None))
+        # Firewall team rules (decision 0045), planned after the routine
+        # commits so that their count and days do not move.
+        self._plan_kinds(plan)
 
-        handlers = {
-            "bootstrap": lambda day, _: self._bootstrap(day),
-            "new_app": lambda day, app: self._new_app(app, day),
-            "batch": lambda day, group: self._batch(group, day),
-            "decommission": lambda day, app: self._decommission(app, day),
-            "migration": lambda day, app: self._migrate(app, day),
-            "migration_cleanup": lambda day, app: self._migration_cleanup(app, day),
-            "emergency": lambda day, app: self._emergency(app, day),
-            "access": lambda day, request: self._access(day, request),
-            "access_end": lambda day, request: self._access_end(day, request),
-            "cleanup": lambda day, _: self._partial_cleanup(day),
-            "upgrade": lambda day, _: self._upgrade(day),
-            "admin_join": lambda day, admin: self._admin_change(day, admin, True),
-            "admin_leave": lambda day, admin: self._admin_change(day, admin, False),
-            "routine": lambda day, _: self._routine(day),
-        } | self._more_handlers()
+        handlers = (
+            {
+                "bootstrap": lambda day, _: self._bootstrap(day),
+                "new_app": lambda day, app: self._new_app(app, day),
+                "batch": lambda day, group: self._batch(group, day),
+                "decommission": lambda day, app: self._decommission(app, day),
+                "migration": lambda day, app: self._migrate(app, day),
+                "migration_cleanup": lambda day, app: self._migration_cleanup(app, day),
+                "emergency": lambda day, app: self._emergency(app, day),
+                "access": lambda day, request: self._access(day, request),
+                "access_end": lambda day, request: self._access_end(day, request),
+                "cleanup": lambda day, _: self._partial_cleanup(day),
+                "upgrade": lambda day, _: self._upgrade(day),
+                "admin_join": lambda day, admin: self._admin_change(day, admin, True),
+                "admin_leave": lambda day, admin: self._admin_change(day, admin, False),
+                "routine": lambda day, _: self._routine(day),
+            }
+            | self._more_handlers()
+            | self._kind_handlers()
+        )
         for day, _, kind, subject in sorted(plan, key=lambda p: (p[0], p[1])):
             handlers[kind](day, subject)
         self._copy_pasted_comments()

@@ -252,3 +252,23 @@ def ticket_summary(category: str, app_id: str, rng: Rng) -> str:
         "access": (f"Access request {app}", f"Need access to {app} server", f"{app} - access pls"),
     }[category]
     return rng.choice(options)
+
+
+def security_comment(persona: str, kind: str, rng: Rng, **facts) -> str:
+    """Commit comment of a firewall team rule (decision 0045)."""
+    what, where = facts.get("what", ""), facts.get("where", "")
+    if persona == "meticulous_senior":
+        options = {
+            "deny": (f"block {what}", f"deny {what} to {where}", "security hardening"),
+            "host_block": ("block ext attacker range", "blacklist update", f"deny {what}"),
+            "cleanup": ("add explicit deny at end", f"cleanup rule {where}", "log and drop rest"),
+            "broad": (
+                f"allow all {where} (temp)",
+                "open all for troubleshooting",
+                "any any for now",
+            ),
+            "deactivate": ("old block disabled", "deny not needed anymore"),
+        }[kind]
+        return rng.choice(options)
+    options = ("fix", "upd", "as requested", "add rule", "block" if kind != "broad" else "open")
+    return typo(rng.choice(options), rng, 0.4)

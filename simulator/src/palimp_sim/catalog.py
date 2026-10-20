@@ -636,6 +636,10 @@ PREDEFINED_APPLICATIONS = {
     # documentation gives NTP port 123 without the `junos-` name. Kept until a
     # capture settles it.
     "junos-ntp": ("udp", 123),
+    # Deny rules of Medium and Hard (decision 0045), in the junos-defaults
+    # sample (junos_defaults_applications_full_13.2.txt).
+    "junos-telnet": ("tcp", 23),
+    "junos-ftp": ("tcp", 21),
 }
 
 

@@ -314,7 +314,8 @@ def test_history_horizon_rules_have_no_direct_evidence(medium: Scenario) -> None
 def test_deactivated_policy_still_reads_as_a_permit_rule(medium: Scenario) -> None:
     rules = medium.rules("TRAP-DEACTIVATED")
     assert rules
-    for rule in rules:
+    # A deactivated deny of the firewall team reads as a deny (decision 0045).
+    for rule in [r for r in rules if r["intent"]["app_id"] != "firewall"]:
         lines = medium.policy_lines(rule)
         # Naive reading (set lines only): an active permit rule.
         assert any(line.endswith(" then permit") for line in lines)

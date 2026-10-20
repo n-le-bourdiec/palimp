@@ -55,7 +55,7 @@ SEEDS = [0, 2, 3, 4, 11]
 # `keep` on unobservable scanner rules; Easy and Medium bytes unchanged.
 # Session 30 (simulator 0.4.0, decision 0045): realistic names, the naming
 # source confidence model and new rule kinds.
-GOLDEN_HARD = {0: "6377abd096de4c711d3d8d08d00388b8f63fe9edd2e711e44d6b540febff43a5"}
+GOLDEN_HARD = {0: "48e984474e541d119ab962c8b9484a2557cf955c07797b4b751a3e1ead3ba2d5"}
 # Trap counts of Hard seeds 0 to 49 (session 25), so that the distribution
 # check needs no generation. The fixture seeds are regenerated against them in
 # every run, the other seeds one test each under "full" (spread by xdist).
@@ -391,7 +391,9 @@ def test_every_policy_has_one_ground_truth_entry(hard: Scenario) -> None:
     keys = [key_of(r) for r in hard.truth["rules"]]
     assert len(keys) == len(set(keys))
     assert sorted(keys) == sorted(hard.config["policies"])
-    names = [k[2] for k in keys]
+    # Firewall team rules may share a name across zone pairs (decision 0045).
+    rules = zip(hard.truth["rules"], keys, strict=True)
+    names = [k[2] for r, k in rules if r["intent"]["app_id"] != "firewall"]
     assert len(names) == len(set(names))
 
 

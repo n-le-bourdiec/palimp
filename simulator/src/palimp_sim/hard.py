@@ -35,6 +35,7 @@ from palimp_sim.levels import HARD_TRAP_COUNT_WEIGHTS
 from palimp_sim.medium import AUTOMATION, OPERATOR, MediumSimulation
 from palimp_sim.model import Admin, App, Endpoint, Flow, Person
 from palimp_sim.rng import Rng
+from palimp_sim.rulekinds import FIREWALL
 from palimp_sim.world import SENIOR
 
 CONTRACTOR = "contractor"
@@ -588,6 +589,7 @@ class HardSimulation(MediumSimulation):
             and not p.is_global
             and p.uid not in involved
             and p.uid not in facts.renames
+            and self.policy_meta[p.uid].app_id != FIREWALL
             and self.commits[self.policy_meta[p.uid].commit_seq].day <= day - 60
         ]
         renamed_policies, renamed_objects = [], []

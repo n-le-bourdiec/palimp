@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 from palimp_sim import __version__, sources, voice
 from palimp_sim.artifacts import RETAINED, commit_index
 from palimp_sim.junos import ANY
+from palimp_sim.rulekinds import FIREWALL, FIREWALL_APP, FIREWALL_OWNER, NEW_KINDS
 from palimp_sim.traffic import TrafficResult
 
 GENERIC_ADDRESSES = {ANY, "users-all", "servers-net"}
@@ -139,6 +140,8 @@ def _rule(
     sim, policy, traffic: TrafficResult, live: dict, log_lines: dict, log_names=frozenset()
 ) -> dict:
     meta = sim.policy_meta[policy.uid]
+    if meta.intent_kind in NEW_KINDS:
+        return _kind_rule(sim, policy, meta, traffic, live, log_lines)
     commit = sim.commits[meta.commit_seq]
     index = commit_index(sim, commit.seq)
     retained = index < RETAINED
@@ -429,6 +432,106 @@ def _rule(
     }
 
 
+def _kind_rule(sim, policy, meta, traffic: TrafficResult, live: dict, log_lines: dict) -> dict:
+    """A firewall team rule (decision 0045, spec 4.11).
+
+    Deny, catch-all deny, broad permit or factory default: its intent is read
+    from its structure, so its confidence is fixed (MEDIUM; LOW for a broad
+    permit, which nothing explains).
+    """
+    kind = meta.intent_kind
+    commit = sim.commits[meta.commit_seq]
+    index = commit_index(sim, commit.seq)
+    retained = index < RETAINED
+    stats = traffic.policies.get(policy.uid)
+    hits = stats.hits_since_reset if stats else 0
+    lines = log_lines.get(policy.uid, 0)
+    is_live = policy.uid in live
+    blocks = policy.action != "permit"
+    evidence: list[dict] = []
+
+    def add(tier: str, artifact: str, locator: str, supports: str) -> None:
+        item = {"id": f"G{len(evidence) + 1}", "tier": tier, "artifact": artifact}
+        evidence.append(item | {"locator": locator, "supports": supports, "misleading": False})
+
+    if policy.description:
+        add("T1", "config.set", f"policy {policy.name} description", "intent")
+    if retained and commit.comment:
+        add("T1", "commits.txt", f"commit {index} comment", "intent")
+    if policy.inactive:
+        if sim.level.config_format == "hierarchical":
+            where = f"inactive: policy {policy.name}"
+        else:
+            where = (
+                f"deactivate security policies from-zone {policy.from_zone} "
+                f"to-zone {policy.to_zone} policy {policy.name}"
+            )
+        add("T3", "config.set", where, "not_live")
+    else:
+        add("T2", "hitcount.txt", f"policy {policy.name}", "live" if hits else "not_live")
+        if policy.log_init or policy.log_close:
+            support = "live" if lines else "not_live"
+            add("T2", "logs/rt_flow.log", f'policy-name="{policy.name}"', support)
+    match = " ".join(policy.sources + policy.destinations + policy.applications)
+    add("T3", "config.set", f"policy {policy.name} match {match} then {policy.action}", "intent")
+    add("T4", "config.set", "applications " + ", ".join(policy.applications), "intent")
+    traps = []
+    if not retained and not any(e["tier"] == "T1" for e in evidence):
+        traps.append("TRAP-HISTORY-HORIZON")
+    if policy.inactive:
+        traps.append("TRAP-DEACTIVATED")
+    if policy.inactive:
+        verdict = best = "removal_candidate"  # a deactivated rule does nothing
+    elif blocks:
+        verdict = best = "keep"  # removing a deny opens traffic (decision 0044)
+    else:
+        verdict = "verify" if is_live else "removal_candidate"
+        best = "verify"  # nothing tells what an any/any permit still carries
+    level = "LOW" if kind == "broad_permit" else "MEDIUM"
+    expected = {
+        "verdict": verdict,
+        "best_achievable_verdict": best,
+        "max_justified_confidence": level,
+    }
+    if sim.level.name == "hard":
+        expected["best_achievable_confidence"] = level
+    expected["owner_to_ask"] = FIREWALL_OWNER
+    reason = "none" if not hits else "blocked" if blocks else "business"
+    return {
+        "rule_uid": policy.uid,
+        "key": {"from_zone": policy.from_zone, "to_zone": policy.to_zone, "name": policy.name},
+        "name_history": [policy.name],
+        "deactivated": policy.inactive,
+        "created": {
+            "event_id": meta.event_id,
+            "date": _iso(sim, commit.day),
+            "admin_id": meta.admin_id,
+            "persona": next(a.persona for a in sim.admins if a.admin_id == meta.admin_id),
+            "commit_index": index,
+            "in_retained_history": retained,
+        },
+        "intent": {
+            "kind": kind,
+            "app_id": FIREWALL,
+            "flows": meta.flow_ids,
+            "summary": meta.summary,
+        },
+        "status": {
+            "live": is_live,
+            "still_needed": not policy.inactive if blocks else is_live,
+            "carried_flows": live.get(policy.uid, []),
+            "last_real_use": _iso(sim, stats.last_hit if stats else None),
+            "hits_in_window": hits,
+            "hits_total": stats.hits_total if stats else 0,
+            "log_lines": lines,
+            "hits_reason": reason,
+        },
+        "expected": expected,
+        "evidence": evidence,
+        "traps": traps,
+    }
+
+
 def _shows_traffic(item: dict) -> bool:
     return item["tier"] == "T2" and item["supports"] == "live"
 
@@ -510,7 +613,12 @@ def ground_truth(
                 "retired": _iso(sim, app.retired),
             }
             for app in sim.apps.values()
-        ],
+        ]
+        + (
+            [FIREWALL_APP | {"shared": True, "go_live": None, "retired": None}]
+            if any(f.app_id == FIREWALL for f in sim.flows.values())
+            else []
+        ),
         "flows": [
             {
                 "flow_id": flow.flow_id,

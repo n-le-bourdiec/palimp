@@ -45,7 +45,12 @@ def test_every_policy_has_exactly_one_ground_truth_entry(scenario) -> None:
 
 
 def test_policy_names_are_unique(scenario) -> None:
+    # Firewall team rules may share a name across zone pairs (`default-permit`,
+    # `deny-all` in every pair, decision 0045); application rules never do.
+    truth = json.loads(scenario["ground_truth.json"])
+    shared = {r["key"]["name"] for r in truth["rules"] if r["intent"]["app_id"] == "firewall"}
     names = [key[2] for key in config_policies(scenario["artifacts/config.set"])]
+    names = [name for name in names if name not in shared]
     assert len(names) == len(set(names))
 
 
@@ -80,6 +85,8 @@ def test_log_lines_name_known_policies(scenario) -> None:
 def test_verdicts_follow_live_status(scenario) -> None:
     for rule in json.loads(scenario["ground_truth.json"])["rules"]:
         expected = rule["expected"]
+        if rule["intent"]["app_id"] == "firewall":
+            continue  # test_firewall_team_rules
         if rule["status"]["live"]:
             # A load-bearing emergency rule is needed but must be replaced.
             emergency = "TRAP-EMERGENCY-LOADBEARING" in rule["traps"]
@@ -102,3 +109,33 @@ def test_manifest_hashes_match_files(scenario) -> None:
     for path, digest in manifest["files"].items():
         assert hashlib.sha256(scenario[path].encode("utf-8")).hexdigest() == digest
     assert set(manifest["files"]) == set(scenario) - {"manifest.json"}
+
+
+EXPECTED_KINDS = {
+    # kind: (verdict when active, best, confidence), decision 0045
+    "block": ("keep", "keep", "MEDIUM"),
+    "cleanup_deny": ("keep", "keep", "MEDIUM"),
+    "broad_permit": (None, "verify", "LOW"),
+    "factory_default": (None, "verify", "MEDIUM"),
+}
+
+
+def test_firewall_team_rules(scenario) -> None:
+    for rule in json.loads(scenario["ground_truth.json"])["rules"]:
+        kind = rule["intent"]["kind"]
+        if rule["intent"]["app_id"] != "firewall":
+            assert kind not in EXPECTED_KINDS
+            continue
+        verdict, best, level = EXPECTED_KINDS[kind]
+        expected = rule["expected"]
+        assert expected["owner_to_ask"] == "firewall_team"
+        assert expected["max_justified_confidence"] == level
+        if rule["deactivated"]:
+            assert kind == "block"
+            assert expected["verdict"] == expected["best_achievable_verdict"]
+            assert expected["verdict"] == "removal_candidate"
+            continue
+        assert expected["best_achievable_verdict"] == best
+        if verdict is None:
+            verdict = "verify" if rule["status"]["live"] else "removal_candidate"
+        assert expected["verdict"] == verdict, rule["key"]
