@@ -103,8 +103,15 @@ Part B (rule semantics, `palimp.semantics`):
 ## Consequences
 
 - Verdicts move toward verify (broad permits, factory defaults, deny rules
-  with not-live signals) and toward keep only for active catch-all deny
-  rules (V-CLEANUP-RULE), which carry no traffic risk: a deny never opens a
-  flow. No move toward removal_candidate.
+  with not-live signals) and toward keep in two cases the project lead asked
+  for: active catch-all deny rules (V-CLEANUP-RULE, 9 real rules), which carry
+  no traffic risk since a deny never opens a flow, and rules whose
+  name/service flag no longer fires (item 4: 7 Medium `bank-sftp` rules back
+  to keep, = best). No move toward removal_candidate.
+- The simulator has no deny, broad permit or factory default rule: Part B is
+  checked by unit tests and the real configurations only.
+- Dev sets (session 29): 0 dangerous errors; intent 95.3% (Medium,
+  unchanged) and 92.1% to 92.0% (Hard), the losses are two-letter names only
+  the policy name confirmed.
 - Dev set and real configuration numbers: `docs/evaluation-history.md`
   (session 29) and `docs/real-configs-robustness.md`.
