@@ -621,8 +621,55 @@ Field meanings:
   artifacts, with tier (T1 to T4 as in CLAUDE.md), location, what it supports
   (`intent`, `live`, `not_live`, `owner`) and whether it is misleading.
   Evidence destroyed by retention or log rotation is not listed, but the loss is
-  flagged (`in_retained_history: false`).
+  flagged (`in_retained_history: false`). Medium and Hard (0.4.0) also list the
+  policy name (T3) when it names the rule's application, and the ticket when
+  the policy name cites it.
 - `traps`: ids from section 7.3.
+
+### 6.1 Confidence from naming sources (Medium and Hard, decision 0045)
+
+Easy computes `max_justified_confidence` from the tiers of the sound evidence
+(T1 and T2 give HIGH, T1 or T3 MEDIUM, otherwise LOW). From simulator 0.4.0,
+Medium and Hard follow the project lead's evidence model, stated in decisions
+0042 to 0044 and restated here as simulator rules (`sources.py`; the analyzer
+code is never read). The rules count the sources that the generator actually
+wrote into the artifacts and that name the rule's true application:
+
+1. A text names an application when it holds the application id or its code
+   as a token (case ignored, a trailing number ignored: `crm-web-01`,
+   `EG-CRM-SQL01`, `ESHOP01`, `CRM go-live`). A regional instance needs its
+   whole id or code (`erp-de`, `ERPDE`).
+2. Sources: (a) the address objects of the rule, both sides together and
+   address set members included, count as one source, whatever they share (a
+   site prefix on both sides is one naming convention); generic objects (user
+   sites, the set of every site, the server range) never count; (b) the policy
+   name, only when it does not repeat an address object name of the rule
+   (separators, case and trailing numbers aside: `users-to-crm-web` with
+   `crm-web-01`, or `Allow-EG-CRM-SQL01` with `EG-CRM-SQL01`, is the same
+   source as the objects); (c) a service whose port stands for the
+   application (`SERVICE_SOURCES`: `tcp-8200` for `vault`, `junos-smtp` and
+   `tcp-993` for `mail`, `tcp-9100` for `print`, `udp-5060` for `telephony`,
+   `junos-dns-udp`, `junos-ntp`, `udp-161` and `tcp-10000` for the DNS, NTP,
+   monitoring and backup services); (d) the description, and the annotation
+   where the output shows it (hierarchical, HIER-1c), as one source; (e) the
+   creation commit comment while it is retained; (f) an exported ticket whose
+   id the policy name, the description or the retained comment cites, with
+   `related_ci` equal to the application.
+3. (c) to (f) are not names. A name source (a or b) that names the
+   application only by a two-letter name (`ci`, `bi`, `hr`, `kb`, `s4`, or the
+   code `MX` of `mail`) counts only when the rule has a source that is not a
+   name.
+4. Fewer than two counted sources: `LOW`. Two or more: `MEDIUM`. `HIGH` needs
+   two or more, one of them a direct statement (d, e or f), and traffic seen: a
+   sound T2 item that supports `live` (hits or log lines).
+5. Misleading sources name another application, so they never count for the
+   true one. `best_achievable_confidence` (Hard, decision 0040) applies the
+   same rules to what the artifacts show: an unobservable stale name counts
+   the sources that name the old application, and masked T2 evidence counts
+   as traffic. It is never below `max_justified_confidence`.
+
+Dynamic applications and custom application names are sources in the
+analyzer's model; the simulator writes neither, so they never appear.
 
 ## 7. Difficulty levels
 

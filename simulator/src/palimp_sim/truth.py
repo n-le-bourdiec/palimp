@@ -7,12 +7,13 @@ from importlib.resources import files
 
 from jsonschema import Draft202012Validator
 
-from palimp_sim import __version__, voice
+from palimp_sim import __version__, sources, voice
 from palimp_sim.artifacts import RETAINED, commit_index
 from palimp_sim.junos import ANY
 from palimp_sim.traffic import TrafficResult
 
 GENERIC_ADDRESSES = {ANY, "users-all", "servers-net"}
+LEVELS = ("LOW", "MEDIUM", "HIGH")
 MIN_WINDOW_FOR_REMOVAL = 90  # days of hit counts needed to call a zero-hit rule removable
 ENDING_EVENTS = {"decommission", "migration", "migration_cleanup"}
 
@@ -238,6 +239,8 @@ def _rule(
         add("T1", "commits.txt", f"commit {index} comment", "intent", other or stale_named, hidden)
     if ticket and ticket.exported:
         texts = [policy.description or "", commit.comment if retained else ""]
+        # Medium and Hard: a policy named after its ticket cites it too.
+        texts += [policy.name] if sim.level.traps else []
         if any(ticket.ticket_id in text for text in texts):
             add("T1", "tickets.csv", f"ticket {ticket.ticket_id}", "intent")
     if copied:
@@ -274,6 +277,9 @@ def _rule(
         add("T3", "config.set", locator, "intent", wrong, stale_hidden)
     if stale_named and _mentions(policy.name, old_app):
         add("T3", "config.set", f"policy {policy.name} name", "intent", True, stale_hidden)
+    elif sim.level.traps and sources.names(policy.name, meta.app_id):
+        # The policy name names the application (decision 0042, spec 6.1).
+        add("T3", "config.set", f"policy {policy.name} name", "intent")
     if reused:
         # The address of the retired server is also the new server's object.
         config = sim.config
@@ -363,15 +369,28 @@ def _rule(
             # Hit counts only, and nothing visible says the flows ended:
             # the probe hits read as business use (decision 0040).
             best = "keep"
+    if sim.level.traps:
+        # Naming sources (spec 6.1, decision 0045).
+        found = _sources(sim, policy, meta.app_id, commit if retained else None)
+        traffic = any(_shows_traffic(e) and not e["misleading"] for e in evidence)
+        justified = sources.confidence(found, traffic)
+    else:
+        justified = _confidence(evidence)
     expected = {
         "verdict": verdict,
         "best_achievable_verdict": best,
-        "max_justified_confidence": _confidence(evidence),
+        "max_justified_confidence": justified,
     }
     if sim.level.name == "hard":
-        # What the artifacts allow (decision 0040); Easy and Medium unchanged.
+        # What the artifacts allow (decision 0040): misleading evidence no
+        # artifact reveals reads as sound. A hidden stale name makes the old
+        # application the apparent one.
         apparent = [e | {"misleading": e["misleading"] and e["id"] not in masked} for e in evidence]
-        expected["best_achievable_confidence"] = _confidence(apparent)
+        seen = any(_shows_traffic(e) and not e["misleading"] for e in apparent)
+        named = old_app if stale_hidden else meta.app_id
+        found = _sources(sim, policy, named, commit if retained else None)
+        achievable = sources.confidence(found, seen)
+        expected["best_achievable_confidence"] = max(achievable, justified, key=LEVELS.index)
     expected["owner_to_ask"] = sim.apps[reuse["app"]].owner_id if reused else app.owner_id
     return {
         "rule_uid": policy.uid,
@@ -408,6 +427,31 @@ def _rule(
         "evidence": evidence,
         "traps": traps,
     }
+
+
+def _shows_traffic(item: dict) -> bool:
+    return item["tier"] == "T2" and item["supports"] == "live"
+
+
+def _sources(sim, policy, app_id: str, commit) -> list:
+    """Sources that name `app_id` on a rule (spec 6.1). `commit`: retained creation commit."""
+    config = sim.config
+    objects = []
+    for name in _named(sim, policy):
+        objects += [name, *config.address_sets.get(name, [])]
+    texts = [policy.description or ""]
+    if sim.level.config_format == "hierarchical":
+        texts.append(policy.annotation or "")  # HIER-1c
+    comment = commit.comment if commit else None
+    cited = [policy.name, policy.description or "", comment or ""]
+    tickets = [
+        t.related_ci
+        for t in sim.tickets
+        if t.exported and any(t.ticket_id in text for text in cited)
+    ]
+    return sources.rule_sources(
+        app_id, objects, policy.name, policy.applications, texts, comment, tickets
+    )
 
 
 def _hits_reason(hits: int, reused: bool, scanned: bool, noise_kind: str | None) -> str:

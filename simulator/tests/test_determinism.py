@@ -80,7 +80,7 @@ def test_unknown_level_is_rejected() -> None:
 # 0.2.0 (session 9): Medium added; Easy output unchanged.
 # 0.3.0 (session 10): trap counts drawn per scenario (decision 0018).
 GOLDEN_MEDIUM = {
-    0: "d92530379acd59ee8e1439ce0791afd84224059e4f349f0c6cc9ae6c6805c5cd",
+    0: "2f718eeed18fe56f676cd69c6dab9976b09b1441d347b9cbc9215929d5e2df12",
 }
 
 
