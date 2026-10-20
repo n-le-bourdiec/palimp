@@ -108,3 +108,14 @@ moves keep to verify only.
   application on both sides), see `docs/evaluation-history.md`, session 28.
 - The product list is incomplete by nature; a product it lacks is read like
   any other name.
+- Dev sets (session 28): 0 dangerous errors, intent right 93.9% to 95.3%
+  (Medium) and 91.2% to 92.1% (Hard), underconfidence 48% to 57% and 57% to
+  68%, every verdict move toward verify.
+- Safe initiative (session 28 prompt item 6, cause clear): a shared address
+  is found even when the rule's own object names nothing, and two-letter
+  names count for that check (a conflict, never the intent). It restores
+  the 5 Hard TRAP-IP-REUSE rules session 27 left at keep. The 2 Medium
+  V-CONTRADICTION rules stay at keep: their decommission names `ci`, and a
+  two-letter name in a not-live signal would move rules toward removal.
+- Real configurations: MEDIUM 17 to 57, "Purpose unknown" 182 to 131, the 7
+  `ALLOW-SNMP` rules on junos-https flagged, verdicts identical.
