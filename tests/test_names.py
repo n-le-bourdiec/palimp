@@ -2,6 +2,7 @@
 
 from palimp.apps import (
     GENERIC_WORDS,
+    PRODUCTS,
     ROLE_WORDS,
     SERVER_ROLES,
     not_an_application,
@@ -184,3 +185,49 @@ def test_zone_name_words_are_not_applications() -> None:
     found = collect(dataset(rules), PolicyKey.parse("Quarry_7/b/q1"))
     assert found.assessment.intent_apps == []
     assert "quarry" in vocabulary(dataset(rules)).zone_words
+
+
+def test_a_product_name_is_an_application_even_in_a_zone_name() -> None:
+    # Session 28 (review-2): the zone, the policy name and the application set all say
+    # redis. A product is not a server role and not a zone word.
+    head = "set security policies from-zone REDIS-QX-PRIV to-zone b policy QX-WITNESS-REDIS-PFS"
+    rules = (
+        "set security address-book global address en-qxa1red002 10.3.0.1/32\n"
+        "set security address-book global address en-qxb1red001 10.3.0.2/32\n"
+        "set applications application TCP-3333 protocol tcp\n"
+        "set applications application TCP-3333 destination-port 3333\n"
+        "set applications application-set REDIS application TCP-3333\n"
+        f"{head} match source-address en-qxa1red002\n"
+        f"{head} match destination-address en-qxb1red001\n"
+        f"{head} match application REDIS\n"
+        f"{head} then permit\n"
+    )
+    assert "redis" in PRODUCTS and "redis" not in SERVER_ROLES
+    assert not not_an_application("redis")
+    found = collect(dataset(rules), PolicyKey.parse("REDIS-QX-PRIV/b/QX-WITNESS-REDIS-PFS"))
+    a = found.assessment
+    assert a.intent_apps == ["redis"]
+    assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3")
+    assert "the policy name" in a.confidence_reason
+    assert "a custom application name" in a.confidence_reason
+    # tcp is a generic word: TCP-3333 names nothing.
+    assert "tcp" not in vocabulary(dataset(rules)).names
+
+
+def test_application_names_are_learned_like_object_names() -> None:
+    rules = (
+        "set applications application QUORLAN-PORTS protocol tcp\n"
+        "set applications application QUORLAN-PORTS destination-port 7710\n"
+        + policy("p1", "any", "any", "QUORLAN-PORTS")
+    )
+    vocab = vocabulary(dataset(rules))
+    assert "quorlan" in vocab.names
+    found = collect(dataset(rules), PolicyKey.parse("a/b/p1"))
+    assert found.assessment.intent_apps == ["quorlan"]
+    assert found.assessment.confidence_rule == "C-T3-SINGLE"
+
+
+def test_a_product_in_free_text_is_read_as_before() -> None:
+    vocab = vocabulary(dataset(""))
+    assert vocab.in_text("pushed by ansible") == []
+    assert vocab.in_object("ansible-ctl-01") == ["ansible"]

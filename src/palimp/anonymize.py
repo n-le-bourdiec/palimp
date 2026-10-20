@@ -49,7 +49,7 @@ from pathlib import Path
 
 from palimp import __version__
 from palimp.addresses import NON_PUBLIC
-from palimp.apps import GENERIC_WORDS, ROLE_WORDS, SERVER_ROLES, vocabulary
+from palimp.apps import GENERIC_WORDS, PRODUCTS, ROLE_WORDS, SERVER_ROLES, vocabulary
 from palimp.evidence import TEMPORARY_WORDS
 from palimp.formats.commits import ACTIVATE, CONFIRMED, ENTRY, RESCUE, REVISION
 from palimp.formats.junos_config import detect_format
@@ -162,6 +162,7 @@ def is_signal(word: str) -> bool:
         or word in ROLE_WORDS
         or word in GENERIC_WORDS
         or word in SERVER_ROLES
+        or word in PRODUCTS
         or word in TEMPORARY_WORDS
         or word in TICKET_PREFIXES
         or word in SIGNAL_WORDS

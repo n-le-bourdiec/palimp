@@ -26,6 +26,13 @@ tickets.csv backs (related CIs, their bare regional names,
 ticket short names and abbreviations of a related CI) are kept whatever their
 length or word: a ticket is an explicit source.
 
+Products and application names (session 28). A product name (PRODUCTS: `redis`,
+`nessus`, `oracle`, `sap`) names an application in any object, policy or
+application name, zone names included; free text is read as before (a commit
+comment that mentions `ansible` is about the tool, not the rule). The first
+segment of custom application and application-set names is learned like that
+of address object names (`REDIS` names redis, `CRM-PORTS` crm).
+
 Regional instances (session 24). Related CIs such as `payroll-uk` and
 `hr-de` end with a two-letter instance suffix; the suffixes seen this way are
 learned. A name followed by a learned suffix (`payroll-pl-app-01`,
@@ -93,6 +100,22 @@ GENERIC_WORDS = frozenset(
     denied block blocked permit src source dst dest destination from to and the for
     primary secondary vip nat snat dnat static dynamic vpn tunnel ipsec ssl traffic
     access outbound inbound out in
+    tcp udp icmp proto protocol port ports svc service services custom junos
+    """.split()
+)
+# Product names (session 28): software that names what a host runs, not a role
+# (`redis`, `nessus`, `oracle`, `sap`). A product name is an application in any
+# object, policy or application name, even one that is also a zone name word
+# (`REDIS-DMZ-PRIV` is the zone of the redis servers). Free text is not affected.
+PRODUCTS = frozenset(
+    """
+    redis nessus tenable qualys rapid7 oracle sap hana mysql mssql postgres postgresql
+    mongodb mongo mariadb sybase teradata elasticsearch elastic kibana logstash splunk
+    graylog zabbix nagios prometheus grafana solarwinds prtg jenkins gitlab github
+    bitbucket jira confluence sharepoint exchange citrix vmware vcenter esxi veeam
+    commvault netbackup kafka rabbitmq vault tableau salesforce workday servicenow
+    crowdstrike sccm wsus okta docker kubernetes ansible puppet saltstack nexus
+    artifactory sonarqube tomcat nginx weblogic websphere jboss informatica cognos
     """.split()
 )
 # Server roles: what a host does, not which application it serves. With no
@@ -100,8 +123,6 @@ GENERIC_WORDS = frozenset(
 # sharing between SQL servers"). Each word maps to the label used in that text.
 SERVER_ROLES: dict[str, str] = {
     "sql": "SQL",
-    "mssql": "SQL",
-    "mysql": "MySQL",
     "db": "database",
     "dbs": "database",
     "database": "database",
@@ -152,6 +173,8 @@ MIN_NAME = 3
 def not_an_application(token: str) -> bool:
     """A word that never names an application unless tickets.csv backs it (decision 0042)."""
     token = token.lower()
+    if token in PRODUCTS:
+        return False
     return (
         len(token) < MIN_NAME
         or token in ROLE_WORDS
@@ -193,17 +216,21 @@ class Vocabulary:
     # Words of the zone names (`Security_52` gives `security`): a zone, not an application.
     zone_words: set[str] = field(default_factory=set)
 
-    def lookup(self, token: str) -> str | None:
+    def lookup(self, token: str, name: bool = False) -> str | None:
+        """The application TOKEN names. With NAME (an object, policy or application
+        name, not free text), a product name always names itself."""
         token = token.lower()
         if token in ROLE_WORDS:
             return None
+        if name and token in PRODUCTS:
+            return token
         if token not in self.backed and (not_an_application(token) or token in self.zone_words):
             return None
         if token in self.names:
             return token
         return self.aliases.get(token)
 
-    def _apps(self, tokens: list[tuple[str, bool]]) -> list[str]:
+    def _apps(self, tokens: list[tuple[str, bool]], name: bool = False) -> list[str]:
         """Applications named by TOKENS, each with whether it is joined to the next one
         by `-` or `_` (`payroll` + `pl` gives the instance `payroll-pl`)."""
         found: list[str] = []
@@ -212,7 +239,7 @@ class Vocabulary:
             token, joined = tokens[i]
             token = token.lower()
             after = tokens[i + 1][0].lower() if joined and i + 1 < len(tokens) else ""
-            app = self.lookup(token)
+            app = self.lookup(token, name)
             if after and self.regions and f"{token}-{after}" in self.names | self.cis:
                 app, i = f"{token}-{after}", i + 1
             elif app and after in self.regions:
@@ -252,7 +279,7 @@ class Vocabulary:
                     tokens[-1] = (tokens[-1][0], False)
                 continue
             tokens.append((token, True))
-        return self._apps(tokens)
+        return self._apps(tokens, name=True)
 
 
 def _ci(value: str | None) -> str | None:
@@ -297,7 +324,10 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
         zones = [policy.from_zone, policy.to_zone, *policy.match_from_zones]
         for zone in zones + policy.match_to_zones:
             vocab.zone_words.update(re.split(r"[-_.]", zone.lower()))
-    for name in dataset.config.addresses:
+    # Address object names, then custom application and application-set names: both
+    # are names a person chose for what the rule serves (session 28).
+    custom = [n for n in dataset.config.applications if not n.lower().startswith("junos-")]
+    for name in [*dataset.config.addresses, *custom]:
         first = re.split(r"[-_.]", name.lower())[0]
         if not first.isalpha() or len(first) < 2 or first in ROLE_WORDS:
             continue
@@ -311,7 +341,7 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
         if len(first) >= MIN_ABBREVIATION and len(expanded) == 1:
             vocab.aliases[first] = expanded[0]
             vocab.backed.add(first)
-        elif not not_an_application(first) and first not in vocab.zone_words:
+        elif not not_an_application(first) and (first not in vocab.zone_words or first in PRODUCTS):
             vocab.names.add(first)
     found = set(vocab.cis)
     for name in dataset.config.addresses:
