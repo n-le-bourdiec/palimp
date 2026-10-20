@@ -36,9 +36,22 @@ comparable (`docs/evaluation-history.md`). Easy artifacts are unchanged.
   `max_justified_confidence` LOW 0.8% to 68.7% (Medium), 1.7% to 75.9%
   (Hard); 337 Medium and 279 Hard firewall team rules.
 
+### CI is red (analyzer tests on simulator 0.4.0)
+
+CI run 39432778559 (commit b0ae226): 9 analyzer tests fail on the new
+Medium and Hard scenarios, simulator tests all pass (580/580 locally):
+`tests/test_report.py::test_medium_report[1,2,4]` (rule id sets differ) and
+`tests/test_anonymize.py` medium and hierarchical seeds 2, 7, 8 ("original
+names left in the copy", judgments not identical after anonymize). This
+simulator session neither reads nor changes analyzer code or tests. The
+anonymize failures look like real findings with realistic names (names
+anonymize does not know, people's workstation names); the report failures
+may be expected-value tests tied to 0.3.0 output.
+
 ### Next
 
-- Analyzer session: measure palimp on simulator 0.4.0 dev seeds (Medium
+- Analyzer session, first: make CI green on simulator 0.4.0 (the 9 tests
+  above). Then measure palimp on simulator 0.4.0 dev seeds (Medium
   20-99, Hard 20-49), new enum values and `firewall_team` in the
   evaluation.
 - Project lead review of `../palimp-realconfigs/review-4.md` (carried).
