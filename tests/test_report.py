@@ -22,7 +22,7 @@ from palimp.assess import NOT_LIVE_KINDS
 from palimp.cli import app
 from palimp.evidence import collect_all
 from palimp.ingest import ingest
-from palimp.questions import answers_csv, cleanup_list
+from palimp.questions import TEAM_RULES, answers_csv, cleanup_list
 from palimp.questions import build as build_questions
 from palimp.report import (
     FIREWALL_TEAM,
@@ -37,6 +37,8 @@ from palimp.report import (
     is_shared,
     look_risk,
     markdown,
+    name_mismatch,
+    team_finding,
     worth_a_look,
 )
 
@@ -117,12 +119,26 @@ def check(report: Report) -> None:
     expected = [r.ref for r in report.rules if r.section != "keep"]
     assert sorted({ref for q in questionnaires for ref in q.rules}) == sorted(expected)
     cleanup = {r.ref for r in report.rules if is_cleanup(r.finding)}
-    team = cleanup | {r.ref for r in report.rules if is_shared(r.finding)}
+    team_only = cleanup | {r.ref for r in report.rules if is_shared(r.finding)}
+    team_only |= {
+        r.ref
+        for r in report.rules
+        if r.section != "keep" and r.finding.assessment.verdict_rule in TEAM_RULES  # type: ignore[union-attr]
+    }
+    # Factory defaults, broad permits and name/service mismatches are firewall team
+    # findings whatever the verdict (session 29); a rule asked for another reason (a
+    # temporary rule still in use) is also asked of its owner.
+    findings = {
+        r.ref
+        for r in report.rules
+        if r.section != "keep" and (team_finding(r.finding) or name_mismatch(r.finding))
+    }
+    team = team_only | findings
     for q in questionnaires:
         if q.group == FIREWALL_TEAM:
             assert set(q.rules) == team
         else:
-            assert not set(q.rules) & team, q.name
+            assert not set(q.rules) & team_only, q.name
         assert len(q.rules) == len(set(q.rules))
     people = [p for q in questionnaires if q.group != FIREWALL_TEAM for p in q.recipients]
     assert len(people) == len(set(people))
