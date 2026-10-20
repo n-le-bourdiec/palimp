@@ -47,8 +47,8 @@ Confidence rules (about the intent), first match wins:
   application-set name.
   A well-known port counts as a source for the product it stands for
   (`tcp/8834` and an object naming nessus), and a server role that offers the
-  service of the port names that service with two sources (a `dns` object on
-  udp/53 names dns), decision 0043.
+  service of the port names that service with two sources when no name names
+  an application (a `dns` object on udp/53 names dns), decision 0043.
 - C-DYNAMIC-APP (MEDIUM): a dynamic application names the application: the
   rule's own match criterion, not a name chosen by a person (decision 0043).
   Never HIGH without traffic.
@@ -320,7 +320,10 @@ def _named(evidence: list[Evidence]) -> dict[str, set[tuple[str, str]]]:
     for app in found:
         if set(ports) & aliases(app):
             found[app].add(port)
-    # A server role offering the service of the port names that service.
+    # A server role offering the service of the port names that service, when no name
+    # names an application: `billing-db-01` on tcp/1433 is for billing, not mssql.
+    if found:
+        return found
     objects = next((e for e in evidence if e.kind == "address_objects"), None)
     labels = {r for side in objects.sides.values() for r in side.roles} if objects else set()
     for app in ports:

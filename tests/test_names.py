@@ -353,3 +353,10 @@ def test_a_name_naming_another_service_is_a_conflict_for_the_firewall_team(
     (team,) = [q for q in questionnaires if q.name == CLEANUP_NAME]
     assert entry.ref in team.rules and NAME_SERVICE_QUESTION in team.text
     assert all(entry.ref not in q.rules for q in questionnaires if q is not team)
+
+
+def test_a_server_role_never_names_the_service_over_an_application() -> None:
+    # zorvex-db-01 on tcp/1433: the rule is for zorvex, the database role is how.
+    rules = policy("p1", "any", "zorvex-db-01", "junos-ms-sql")
+    a = collect(dataset(rules), PolicyKey.parse("a/b/p1")).assessment
+    assert a.intent_apps == ["zorvex"]

@@ -65,7 +65,9 @@ bugs and answered two questions:
 8. **A server role that matches the service** (`ROLE_SERVICES`: a `dns`
    object on udp/53, an `ntp` object on udp/123, a database object on
    tcp/1521) counts as two sources and names that service (or product) as
-   the application.
+   the application, only when no name names an application: `billing-db-01`
+   on tcp/1433 is for billing, the role says how (found on the dev sets,
+   where the first version put `mssql` ahead of the application).
 9. **Two-letter names** (`bi`, `hr`, `ad`): the first segment of an object or
    application name, when it is not a generic word, a role or a zone word, is
    kept as a two-letter name (`Vocabulary.short`). It names an application
