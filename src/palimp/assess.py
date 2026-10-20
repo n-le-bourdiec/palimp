@@ -290,6 +290,13 @@ def _named(evidence: list[Evidence]) -> dict[str, set[tuple[str, str]]]:
         elif item.kind in NAMING:
             for app in item.apps:
                 found.setdefault(app, set()).add((NAMING[item.kind], item.id))
+    # Two-letter names (`bi`): only with two sources, never alone (decision 0043).
+    short: dict[str, set[tuple[str, str]]] = {}
+    for item in evidence:
+        what = "the address objects" if item.kind == "address_objects" else NAMING.get(item.kind)
+        for app in item.short_apps if what else []:
+            short.setdefault(app, set()).add((what, item.id))
+    found.update({a: s for a, s in short.items() if len(s) >= 2 and a not in found})
     services = next((e for e in evidence if e.kind == "services"), None)
     ports = services.port_apps if services else []
     if not services or not ports:

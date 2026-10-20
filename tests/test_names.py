@@ -274,3 +274,22 @@ def test_a_server_role_matching_the_service_names_it() -> None:
     # A role that does not offer the service names nothing.
     a = collect(dataset(rules), PolicyKey.parse("a/b/p3")).assessment
     assert a.intent_apps == [] and a.confidence == "LOW"
+
+
+def test_a_two_letter_name_needs_a_second_source() -> None:
+    # Decision 0043: `qx` alone names nothing; the object and the policy name together
+    # name it (MEDIUM). Both sides of the rule are one source.
+    rules = (
+        "set security address-book global address qx-web-01 10.5.0.1/32\n"
+        "set security address-book global address qx-db-01 10.5.0.2/32\n"
+        + policy("p1", "any", "qx-web-01")
+        + policy("p2", "qx-web-01", "qx-db-01")
+        + policy("allow-qx-reports", "any", "qx-web-01")
+    )
+    assert "qx" in vocabulary(dataset(rules)).short
+    for name in ("p1", "p2"):
+        a = collect(dataset(rules), PolicyKey.parse(f"a/b/{name}")).assessment
+        assert "qx" not in a.intent_apps and a.confidence == "LOW"
+    a = collect(dataset(rules), PolicyKey.parse("a/b/allow-qx-reports")).assessment
+    assert a.intent_apps == ["qx"]
+    assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-T3")

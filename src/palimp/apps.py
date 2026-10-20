@@ -152,7 +152,6 @@ SERVER_ROLES: dict[str, str] = {
     "print": "print",
     "printer": "print",
     "ldap": "directory",
-    "ad": "directory",
     "dc": "domain controller",
     "radius": "RADIUS",
     "syslog": "log",
@@ -215,6 +214,14 @@ class Vocabulary:
     backed: set[str] = field(default_factory=set)
     # Words of the zone names (`Security_52` gives `security`): a zone, not an application.
     zone_words: set[str] = field(default_factory=set)
+    # Two-letter first segments (`bi`, `hr`): names only when a second source confirms
+    # them, never alone (decision 0043).
+    short: set[str] = field(default_factory=set)
+
+    def short_in(self, name: str) -> list[str]:
+        """Two-letter names of `short` in an object, policy or application name."""
+        tokens = [t.lower() for t in re.split(r"[-_.]", name)]
+        return list(dict.fromkeys(t for t in tokens if t in self.short))
 
     def lookup(self, token: str, name: bool = False) -> str | None:
         """The application TOKEN names. With NAME (an object, policy or application
@@ -331,6 +338,14 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
         first = re.split(r"[-_.]", name.lower())[0]
         if not first.isalpha() or len(first) < 2 or first in ROLE_WORDS:
             continue
+        if (
+            len(first) == 2
+            and first not in GENERIC_WORDS
+            and first not in SERVER_ROLES
+            and first not in vocab.zone_words
+            and first not in vocab.backed
+        ):
+            vocab.short.add(first)
         if first in vocab.names or first in vocab.aliases:
             continue
         if any(vocab.base(ci) == first for ci in cis if ci != first):

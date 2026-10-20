@@ -79,6 +79,7 @@ class Item(NamedTuple):
     address: str = ""
     objects: list[str] = []
     port_apps: list[str] = []
+    short_apps: list[str] = []
 
 
 LIST_SHOWN = 5
@@ -438,17 +439,46 @@ def collect(
                 roles=list(dict.fromkeys(r for n in names for r in roles(n))),
             )
         locator = "address objects " + shown(named)
-        items.append(Item("T3", "config.set", locator, claim, None, "address_objects", apps, sides))
+        short = list(dict.fromkeys(a for n in named for a in vocab.short_in(n)[:1]))
+        items.append(
+            Item(
+                "T3",
+                "config.set",
+                locator,
+                claim,
+                None,
+                "address_objects",
+                apps,
+                sides,
+                short_apps=short,
+            )
+        )
     # A policy name that repeats an address object name of the rule is not an
     # independent source for what that object names (decision 0042).
-    echoed = {a for n in named if _echoes(policy.name, n) for a in vocab.in_object(n)}
-    if name_apps := [a for a in vocab.in_object(policy.name) if a not in echoed]:
+    echoed = {
+        a for n in named if _echoes(policy.name, n) for a in vocab.in_object(n) + vocab.short_in(n)
+    }
+    name_apps = [a for a in vocab.in_object(policy.name) if a not in echoed]
+    name_short = [a for a in vocab.short_in(policy.name) if a not in echoed]
+    if name_apps or name_short:
+        said = name_apps + [f"{a} (a two-letter name, read only if confirmed)" for a in name_short]
         claim = (
-            f"the policy name names {', '.join(name_apps)}: a name chosen for the rule, "
+            f"the policy name names {', '.join(said)}: a name chosen for the rule, "
             "not a statement of why it exists"
         )
         locator = f"policy {policy.name} name"
-        items.append(Item("T3", "config.set", locator, claim, None, "policy_name", name_apps))
+        items.append(
+            Item(
+                "T3",
+                "config.set",
+                locator,
+                claim,
+                None,
+                "policy_name",
+                name_apps,
+                short_apps=name_short,
+            )
+        )
     items += shared_address_items(dataset, policy, vocab)
     if policy.dynamic_applications:
         claim = (
@@ -551,6 +581,7 @@ def collect(
         # A custom application named after a known application names it too.
         custom = [n for n in policy.applications if n != "any" and not n.startswith("junos-")]
         apps = list(dict.fromkeys(a for n in custom for a in vocab.in_object(n)))
+        short = list(dict.fromkeys(a for n in custom for a in vocab.short_in(n)[:1]))
         plain = [
             s for n in policy.applications for s in service_names(n, dataset.config.applications)
         ]
@@ -566,6 +597,7 @@ def collect(
                 apps,
                 services=list(dict.fromkeys(plain)),
                 port_apps=list(dict.fromkeys(ports)),
+                short_apps=short,
             )
         )
 
@@ -584,6 +616,7 @@ def collect(
             address=item.address,
             objects=item.objects,
             port_apps=item.port_apps,
+            short_apps=item.short_apps,
         )
         for i, item in enumerate(items, start=1)
     ]

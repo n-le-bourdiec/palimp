@@ -56,7 +56,6 @@ bugs and answered two questions:
 6. **Dynamic application alone: MEDIUM** (rule C-DYNAMIC-APP), never HIGH
    without traffic: it is the rule's own match criterion, not a name chosen
    by a person.
-
 7. **Predefined applications and product ports.** `palimp.services.PREDEFINED`
    holds the Junos predefined applications of the documentation (VSRX-12d).
    `PORT_NAMES` maps a well-known port to the product or service it stands
@@ -67,6 +66,13 @@ bugs and answered two questions:
    object on udp/53, an `ntp` object on udp/123, a database object on
    tcp/1521) counts as two sources and names that service (or product) as
    the application.
+9. **Two-letter names** (`bi`, `hr`, `ad`): the first segment of an object or
+   application name, when it is not a generic word, a role or a zone word, is
+   kept as a two-letter name (`Vocabulary.short`). It names an application
+   only when two sources name it (for example the address objects and the
+   policy name), never alone. `ad` leaves `SERVER_ROLES` for this. The
+   not-live readers (decommissions, migration leftovers) do not use these
+   names: a two-letter name never moves a rule toward removal.
 
 All of these change confidence or the intent text, never a verdict.
 

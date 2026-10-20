@@ -292,6 +292,9 @@ class Evidence(BaseModel):
     # and the products or services their ports stand for (palimp.services.PORT_NAMES).
     services: list[str] = []
     port_apps: list[str] = []
+    # address_objects, policy_name and services: two-letter names (`bi`), read as an
+    # application only when two sources name them (decision 0043).
+    short_apps: list[str] = []
     # shared_address and shared_source only: the address, and the objects sharing it
     # (the policy's own object first).
     address: str = ""
