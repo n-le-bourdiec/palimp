@@ -27,7 +27,13 @@ from pydantic import BaseModel
 
 from palimp import __version__
 from palimp.addresses import is_public
-from palimp.assess import CLEANUP_ASK, CLEANUP_QUESTION, NOT_LIVE_KINDS
+from palimp.assess import (
+    CLEANUP_ASK,
+    CLEANUP_QUESTION,
+    DENY_QUESTION,
+    NOT_LIVE_KINDS,
+    TEAM_ASK,
+)
 from palimp.counters import clears
 from palimp.evidence import collect_all, shown
 from palimp.lineage import networks
@@ -165,6 +171,9 @@ YES_NO = {
     "V-TRAFFIC-NOT-RECENT": "Is this flow still needed, even if it runs rarely?",
     "V-NO-TRAFFIC-SEEN": "Is this flow still needed, even if it runs rarely?",
     "V-NO-VISIBILITY": "Is this flow still needed?",
+    "V-DENY-NOTLIVE": DENY_QUESTION,
+    "V-FACTORY-DEFAULT": "Was this factory default kept on purpose?",
+    "V-BROAD-PERMIT": "Is this broad access wanted as it is?",
 }
 
 
@@ -229,7 +238,29 @@ def allows(finding: Finding, dataset: Dataset) -> Cited:
 def intent(finding: Finding) -> Cited:
     assessment = finding.assessment
     assert assessment is not None
-    if assessment.intent_apps:
+    policy = finding.policy
+    kinds = {e.kind for e in finding.evidence}
+    level = f"{assessment.confidence} confidence: {assessment.confidence_reason}."
+    deny = (policy.action or "").lower() in ("deny", "reject")
+    verb = "Rejects" if (policy.action or "").lower() == "reject" else "Blocks"
+    if "catch_all_deny" in kinds:
+        text = (
+            f"Cleanup rule: {verb.lower()} all traffic from {policy.zones_text('from')} to "
+            f"{policy.zones_text('to')} that no rule above permits (catch-all deny), {level}"
+        )
+    elif "factory_default" in kinds:
+        text = (
+            "Junos factory default policy: permits all traffic from "
+            f"{policy.zones_text('from')} to {policy.zones_text('to')}, {level}"
+        )
+    elif deny and assessment.intent_flow:
+        named = (
+            f", probably to protect {', '.join(assessment.intent_apps)}"
+            if assessment.intent_apps
+            else ""
+        )
+        text = f"{verb} {assessment.intent_flow}{named}, {level}"
+    elif assessment.intent_apps:
         text = (
             f"Probably for {', '.join(assessment.intent_apps)}, "
             f"{assessment.confidence} confidence: {assessment.confidence_reason}."
@@ -327,6 +358,15 @@ def name_mismatch(finding: Finding) -> bool:
     return not is_cleanup(finding) and any(
         e.kind == "name_service_mismatch" for e in finding.evidence
     )
+
+
+def team_finding(finding: Finding) -> str:
+    """`factory_default` or `broad_permit` when the rule is one (session 29), a finding
+    for the firewall team list whatever its verdict; "" otherwise or when deactivated."""
+    if is_cleanup(finding):
+        return ""
+    kinds = {e.kind for e in finding.evidence}
+    return next((k for k in ("factory_default", "broad_permit") if k in kinds), "")
 
 
 def is_shared(finding: Finding) -> bool:
@@ -817,8 +857,11 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
         cleanup = is_cleanup(finding)
         shared = is_shared(finding)
         question = YES_NO[assessment.verdict_rule] if assessment.verdict != "keep" else ""
+        if question and finding.policy.action in ("deny", "reject"):
+            question = DENY_QUESTION
         owner = assessment.ask or ""
         team = cleanup or shared or assessment.verdict_rule == "V-NAME-SERVICE"
+        team = team or assessment.verdict_rule in TEAM_ASK
         if cleanup:
             question, owner = CLEANUP_QUESTION, CLEANUP_ASK
         elif shared:

@@ -1,0 +1,28 @@
+# Source: https://www.juniper.net/documentation/en_US/junos12.1x47/topics/reference/general/security-branch-device-configuration-factory-default.html
+# Page title: SRX210 Factory Default Setting, A Sample - Technical Documentation - Support - Juniper Networks (a dash after Setting replaced by a comma, project rule)
+# Source type: documentation
+# Documentation set (page metadata): junos12.1x47
+# Junos release shown: not stated (page published 2014-04-24)
+# Retrieved: 2026-10-20
+# Assumptions: FACTORY-1
+# Note: "The following sample output shows the factory default configuration of an SRX210" (page text).
+# Note: excerpt: the security policies block only, under its security parent; the page prints
+# the whole configuration (system, interfaces, screen, nat, zones, vlans), left out here.
+# Indentation rebuilt from the nesting of the published example (4 spaces per level).
+# ---
+security {
+    policies {
+        from-zone trust to-zone untrust {
+            policy trust-to-untrust {
+                match {
+                    source-address any;
+                    destination-address any;
+                    application any;
+                }
+                then {
+                    permit;
+                }
+            }
+        }
+    }
+}

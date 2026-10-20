@@ -72,6 +72,7 @@ import re
 
 from palimp.models import Assessment, Conflict, Dataset, Evidence, Finding
 from palimp.owners import find_owner
+from palimp.semantics import is_deny
 from palimp.services import ROLE_SERVICES, aliases
 
 # Evidence kinds that say a policy is unused (decision 0020), not that nothing is known.
@@ -113,6 +114,15 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
     evidence = finding.evidence
     not_live = [e for e in evidence if e.kind in NOT_LIVE_KINDS]
     present = _in_use(finding)
+    policy = finding.policy
+    catch_all = [e for e in evidence if e.kind == "catch_all_deny"]
+    if catch_all and not policy.deactivated:
+        return (
+            "keep",
+            "V-CLEANUP-RULE",
+            "a catch-all deny: the cleanup rule that blocks whatever no rule above permits",
+            _ids(catch_all + present),
+        )
     probe = [e for e in evidence if e.kind == "probe_only"]
     absent = [e for e in evidence if e.tier == "T2" and e.signal == "absent"]
     temporary = [e for e in evidence if e.kind == "temporary_marker"]
@@ -131,6 +141,14 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
             "V-CONTRADICTION",
             "a not-live signal and traffic seen contradict each other",
             _ids(not_live + present),
+        )
+    if not_live and is_deny(policy) and not policy.deactivated:
+        return (
+            "verify",
+            "V-DENY-NOTLIVE",
+            "a not-live signal on a rule that blocks traffic: removing a block opens that "
+            "traffic, so a deny rule is never a removal candidate unless it is deactivated",
+            _ids(not_live + [e for e in evidence if e.tier == "T2"]),
         )
     if not_live:
         return (
@@ -200,6 +218,27 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
             "the rule may not do what its name says",
             _ids(mismatch + present),
         )
+    t2 = [e for e in evidence if e.tier == "T2" and e.signal != "blind"] or [
+        e for e in evidence if e.tier == "T2"
+    ]
+    factory = [e for e in evidence if e.kind == "factory_default"]
+    if factory:
+        return (
+            "verify",
+            "V-FACTORY-DEFAULT",
+            "a Junos factory default policy: it permits everything between its zones and may "
+            "have been kept from the initial setup, a question for the firewall team",
+            _ids(factory + t2),
+        )
+    broad = [e for e in evidence if e.kind == "broad_permit"]
+    if broad:
+        return (
+            "verify",
+            "V-BROAD-PERMIT",
+            "a broad permit (any source, any destination, any application): at most verify, "
+            "a question for the firewall team",
+            _ids(broad + t2),
+        )
     if present:
         return "keep", "V-TRAFFIC", "traffic seen", _ids(present)
     if absent:
@@ -221,6 +260,17 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
 
 def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], list[Conflict]]:
     evidence = finding.evidence
+    # The match and action alone say what these rules are for (session 29).
+    for kind, rule, reason in (
+        ("catch_all_deny", "C-CLEANUP", "a catch-all deny is a cleanup rule by its match"),
+        (
+            "factory_default",
+            "C-FACTORY-DEFAULT",
+            "the zones, name and match are those of a Junos factory default policy",
+        ),
+    ):
+        if found := [e for e in evidence if e.kind == kind]:
+            return "MEDIUM", rule, reason, _ids(found), [], []
     direct = [e for e in evidence if e.tier == "T1" and e.apps and e.kind in INTENT_KINDS]
     objects = next((e for e in evidence if e.kind == "address_objects" and e.apps), None)
     object_apps = set(objects.apps) if objects else set()
@@ -428,6 +478,38 @@ def flow(finding: Finding) -> str | None:
     return f"{what} from {origin} to {goal}"
 
 
+def _block_side(names: list[str], zones: str, dataset: Dataset) -> str:
+    """One side of a blocked flow: "the 192.168.1.0/24 network", "host 10.0.0.5", object
+    names, or anywhere in its zones."""
+    names = [n for n in names if n not in ("any", "any-ipv4", "any-ipv6")]
+    if not names:
+        return f"anywhere in {zones}"
+    if len(names) == 1:
+        obj = dataset.config.addresses.get(names[0])
+        if obj is not None and obj.kind == "address" and obj.value:
+            value = obj.value
+            if value.endswith(("/32", "/128")) or "/" not in value:
+                return f"host {value.split('/')[0]} ({names[0]})"
+            if re.match(r"^[\d.:a-fA-F]+/\d+$", value):
+                return f"the {value} network ({names[0]})"
+    more = f" and {len(names) - 3} more" if len(names) > 3 else ""
+    return f"{', '.join(names[:3])}{more} in {zones}"
+
+
+def blocked(finding: Finding, dataset: Dataset) -> str:
+    """What a deny or reject rule blocks, in words (session 29): "FTP from anywhere in zone
+    untrust to the 192.168.1.0/24 network (addr-192-168-1-0-24)"."""
+    policy = finding.policy
+    services = [s for e in finding.evidence if e.kind == "services" for s in e.services]
+    if policy.applications == ["any"] or not services:
+        what = "all traffic"
+    else:
+        what = " and ".join(services[:2]) + (" and more" if len(services) > 2 else "")
+    origin = _block_side(policy.sources, policy.zones_text("from"), dataset)
+    goal = _block_side(policy.destinations, policy.zones_text("to"), dataset)
+    return f"{what} from {origin} to {goal}"
+
+
 def _capped(
     finding: Finding, found: tuple[str, str, str, list[str], list[str], list[Conflict]]
 ) -> tuple[str, str, str, list[str], list[str], list[Conflict]]:
@@ -503,6 +585,19 @@ QUESTIONS = {
     "(backup, year-end job, disaster recovery), or is it no longer needed?",
     "V-NO-VISIBILITY": "Nothing shows whether this policy is used (no logging, no counters). "
     "Is the flow still needed?",
+    "V-DENY-NOTLIVE": "This rule blocks traffic, and a record says what it protects is gone. "
+    "Is this block still wanted?",
+    "V-FACTORY-DEFAULT": "Was this factory default kept on purpose?",
+    "V-BROAD-PERMIT": "This rule permits any source to any destination for any application. "
+    "Is it wanted as it is, or should it be narrowed?",
+}
+# Deny and reject rules (session 29): the question is about the block itself.
+DENY_QUESTION = "Is this block still wanted?"
+TEAM_ASK = {
+    "V-FACTORY-DEFAULT": "firewall team: a Junos factory default policy, a question about the "
+    "setup of the firewall itself",
+    "V-BROAD-PERMIT": "firewall team: a broad permit (any source, any destination, any "
+    "application), a question about the rule itself",
 }
 
 
@@ -519,6 +614,10 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
         finding, dataset, list(dict.fromkeys(apps + objects)), bool(conflicts), confirmed
     )
     ask = owner.text
+    if v_rule in TEAM_ASK:
+        ask = TEAM_ASK[v_rule]
+    elif is_deny(finding.policy) and verdict == "verify":
+        question = DENY_QUESTION
     if finding.policy.deactivated and verdict != "keep":
         question, ask = CLEANUP_QUESTION, CLEANUP_ASK
     return Assessment(
@@ -531,7 +630,11 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
         confidence_reason=c_reason,
         confidence_evidence=c_evidence,
         intent_apps=apps,
-        intent_flow=None if apps else flow(finding),
+        intent_flow=blocked(finding, dataset)
+        if is_deny(finding.policy)
+        else None
+        if apps
+        else flow(finding),
         conflicts=conflicts,
         question=question,
         ask=ask,

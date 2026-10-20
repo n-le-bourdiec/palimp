@@ -19,6 +19,10 @@ objects, never one question per rule to owners.
 Decision 0043: a rule whose name names a service it does not match is asked of the
 firewall team as well (is the name stale, or the match wrong?). When that is the
 only reason to verify it (V-NAME-SERVICE), its owners are not asked.
+
+Session 29: Junos factory default policies and broad permits (any source, any
+destination, any application) are listed for the firewall team too. When that is the
+reason to verify them (V-FACTORY-DEFAULT, V-BROAD-PERMIT), owners are not asked.
 """
 
 import csv
@@ -32,6 +36,7 @@ from palimp.report import (
     FIREWALL_TEAM,
     NAME_SERVICE_QUESTION,
     SHARED_QUESTION,
+    YES_NO,
     Report,
     RuleEntry,
     SharedAddress,
@@ -39,6 +44,7 @@ from palimp.report import (
     is_shared,
     name_mismatch,
     shared_addresses,
+    team_finding,
 )
 
 ANSWER_COLUMNS = [
@@ -56,6 +62,8 @@ ANSWER_COLUMNS = [
 ]
 
 CLEANUP_NAME = "00-firewall-team-cleanup"
+# Verdict rules asked of the firewall team only, never of the owners.
+TEAM_RULES = frozenset({"V-NAME-SERVICE", "V-FACTORY-DEFAULT", "V-BROAD-PERMIT"})
 
 
 class Questionnaire(BaseModel):
@@ -123,6 +131,11 @@ def _plain_reason(entry: RuleEntry) -> str:
         "job (yearly, quarterly, disaster recovery) that this period does not cover.",
         "V-NO-VISIBILITY": "The firewall does not record whether this rule is used, so we "
         "cannot tell from our side.",
+        "V-DENY-NOTLIVE": "This rule blocks traffic, and a record says what it protects was "
+        "retired or moved. Removing a block opens that traffic, so we ask first.",
+        "V-FACTORY-DEFAULT": "It looks like a policy of the firewall's factory configuration, "
+        "kept since the initial setup.",
+        "V-BROAD-PERMIT": "It lets any source reach any destination for any application.",
     }
     return texts[rule] + f" (ref {entry.ref}: {', '.join(assessment.verdict_evidence)})"
 
@@ -130,6 +143,8 @@ def _plain_reason(entry: RuleEntry) -> str:
 def _purpose(entry: RuleEntry) -> str:
     assessment = entry.finding.assessment
     assert assessment is not None
+    if (entry.finding.policy.action or "").lower() in ("deny", "reject"):
+        return "It blocks this traffic on purpose, as far as we can tell."
     if assessment.intent_apps:
         return f"We believe it serves {', '.join(assessment.intent_apps)}."
     return "We could not tell which application it serves."
@@ -254,9 +269,45 @@ def _named_items(entries: list[RuleEntry], start: int) -> list[str]:
     return lines
 
 
+TEAM_SECTIONS = {
+    "factory_default": (
+        "Junos factory default policies",
+        "Each rule below has the zones, name and match of a policy of the Junos factory "
+        "configuration (permit everything between its zones). It may have been kept from the "
+        "initial setup rather than written for a flow.",
+    ),
+    "broad_permit": (
+        "Broad permits",
+        "Each rule below permits any source to any destination for any application. It "
+        "lets through flows no one may have asked for: is it wanted as it is, or should it "
+        "be narrowed?",
+    ),
+}
+
+
+def _team_items(entries: list[RuleEntry], kind: str, start: int) -> list[str]:
+    lines = []
+    for number, entry in enumerate(entries, start=start):
+        item = next(e for e in entry.finding.evidence if e.kind == kind)
+        rule = "V-FACTORY-DEFAULT" if kind == "factory_default" else "V-BROAD-PERMIT"
+        lines += [
+            f"{number}. Rule {entry.ref} ({entry.finding.policy.name})",
+            f"   What it allows: {entry.allows.text}",
+            f"   What we found: {item.claim} (ref {entry.ref}: {item.id})",
+            f"   Question: {YES_NO[rule]}",
+            "   Answer: [ ] yes   [ ] no   Comment:",
+            "",
+        ]
+    return lines
+
+
 def _cleanup_letter(
-    entries: list[RuleEntry], shared: list[SharedAddress], named: list[RuleEntry]
+    entries: list[RuleEntry],
+    shared: list[SharedAddress],
+    named: list[RuleEntry],
+    team: dict[str, list[RuleEntry]] | None = None,
 ) -> str:
+    team = team or {}
     parts = []
     if entries:
         parts.append(f"{len(entries)} deactivated rule{'s' if len(entries) != 1 else ''}")
@@ -264,6 +315,9 @@ def _cleanup_letter(
         parts.append(f"{len(shared)} shared address{'es' if len(shared) != 1 else ''}")
     if named:
         parts.append(f"{len(named)} rule name{'s' if len(named) != 1 else ''} to check")
+    for kind, listed in team.items():
+        if listed:
+            parts.append(f"{len(listed)} {TEAM_SECTIONS[kind][0].lower()}")
     lines = [f"Subject: Firewall cleanup list: {', '.join(parts)}", "", "Hello firewall team,", ""]
     if entries:
         lines += [
@@ -297,6 +351,20 @@ def _cleanup_letter(
             "",
             *_named_items(named, len(entries) + len(shared) + 1),
         ]
+    start = len(entries) + len(shared) + len(named) + 1
+    for kind, listed in team.items():
+        if not listed:
+            continue
+        title, text = TEAM_SECTIONS[kind]
+        lines += [
+            f"{title} ({len(listed)})",
+            "",
+            text,
+            NO_REMOVAL,
+            "",
+            *_team_items(listed, kind, start),
+        ]
+        start += len(listed)
     return "\n".join(lines + CLOSING)
 
 
@@ -313,16 +381,19 @@ def build(report: Report) -> list[Questionnaire]:
     cleanup = []
     team_shared: list[RuleEntry] = []
     named: list[RuleEntry] = []
+    team: dict[str, list[RuleEntry]] = {"factory_default": [], "broad_permit": []}
     for entry in sorted(asked, key=lambda r: r.section != "removal_candidate"):
         assessment = entry.finding.assessment
         assert assessment is not None
         if name_mismatch(entry.finding):
             named.append(entry)
+        if kind := team_finding(entry.finding):
+            team[kind].append(entry)
         if is_cleanup(entry.finding):
             cleanup.append(entry)
         elif is_shared(entry.finding):
             team_shared.append(entry)
-        elif assessment.verdict_rule == "V-NAME-SERVICE":
+        elif assessment.verdict_rule in TEAM_RULES:
             continue
         elif assessment.owner:
             owned.setdefault(assessment.owner, []).append(entry)
@@ -333,14 +404,15 @@ def build(report: Report) -> list[Questionnaire]:
             unnamed.setdefault(entry.group, []).append(entry)
     found = []
     shared = shared_addresses(team_shared)
-    if cleanup or shared or named:
+    listed = [e for entries in team.values() for e in entries]
+    if cleanup or shared or named or listed:
         found.append(
             Questionnaire(
                 name=CLEANUP_NAME,
                 group=FIREWALL_TEAM,
                 recipients=[FIREWALL_TEAM],
-                owned=list(dict.fromkeys(e.ref for e in cleanup + team_shared + named)),
-                text=_cleanup_letter(cleanup, shared, named),
+                owned=list(dict.fromkeys(e.ref for e in cleanup + team_shared + named + listed)),
+                text=_cleanup_letter(cleanup, shared, named, team),
             )
         )
     number = 0
