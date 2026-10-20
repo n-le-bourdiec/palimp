@@ -1,0 +1,22 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-policy-custom-applications.html
+# Page title: Custom Policy Applications | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-20
+# Assumptions: APP-TERM-1
+# Note: The configuration-mode set commands of the page, then its 'show applications' output, as published: the output does not show the destination-port the commands set.
+# Note: Text copied verbatim from the page <pre> blocks (line endings normalized, leading and trailing blank lines dropped), blocks separated by one blank line.
+# ---
+user@host# set applications application app-name term custom-options
+user@host# set applications application app-name term custom-options alg dns
+user@host#set applications application app-name term custom-options protocol udp
+user@host#set applications application app-name term custom-options source-port 24000
+user@host#set applications application app-name term custom-options destination-port 23000
+user@host#set applications application app-name term  custom-options inactivity-timeout 60
+
+[edit]
+    user@host# show applications
+    application app-name {
+    term custom-options alg dns protocol udp source-port 24000 inactivity-timeout 60;
+}

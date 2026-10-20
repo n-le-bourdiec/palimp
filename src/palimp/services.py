@@ -161,13 +161,17 @@ def describe(name: str, applications: dict[str, Application], depth: int = 0) ->
         return [
             line for member in app.members for line in describe(member, applications, depth + 1)
         ]
-    port = f"{app.protocol or '?'}/{app.destination_port}" if app.destination_port else ""
-    if not port:
-        return [f"{name}: custom application, protocol {app.protocol or 'unknown'}"]
-    service = WELL_KNOWN.get(port)
-    if service is None:
-        return [f"{name}: {port}, no well-known service on this port"]
-    return [f"{name}: {service} ({port}, custom application)"]
+    lines = []
+    for number, (protocol, destination) in enumerate(app.ports()):
+        label = f"{name} term {app.terms[number].name}" if app.terms else name
+        port = f"{protocol or '?'}/{destination}" if destination else ""
+        if not port:
+            lines.append(f"{label}: custom application, protocol {protocol or 'unknown'}")
+        elif (service := WELL_KNOWN.get(port)) is None:
+            lines.append(f"{label}: {port}, no well-known service on this port")
+        else:
+            lines.append(f"{label}: {service} ({port}, custom application)")
+    return lines
 
 
 def service_names(name: str, applications: dict[str, Application], depth: int = 0) -> list[str]:
@@ -183,7 +187,5 @@ def service_names(name: str, applications: dict[str, Application], depth: int = 
             return []
         found = [s for m in app.members for s in service_names(m, applications, depth + 1)]
         return list(dict.fromkeys(found))
-    if not app.destination_port:
-        return []
-    service = WELL_KNOWN.get(f"{app.protocol or '?'}/{app.destination_port}")
-    return [service] if service else []
+    found = [WELL_KNOWN.get(f"{p or '?'}/{d}") for p, d in app.ports() if d]
+    return list(dict.fromkeys(s for s in found if s))

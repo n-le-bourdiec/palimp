@@ -7,6 +7,7 @@ so the inline samples below put those constructs, as the documentation
 shows them on other statements, on a policy. They say so.
 """
 
+import re
 from pathlib import Path
 
 from palimp.formats.junos_config import detect_format, parse_config
@@ -82,7 +83,8 @@ def test_applications() -> None:
     config = parse_config(body("hier_applications.txt"))
     assert config.stats.unknown == 0
     app = config.applications["src_2123"]
-    assert (app.protocol, app.destination_port) == ("udp", "0-0")
+    # A one-port range is read as that port (session 28): `0-0` is port 0.
+    assert (app.protocol, app.destination_port) == ("udp", "0")
 
 
 def test_annotations_attach_to_the_next_statement() -> None:
@@ -646,3 +648,18 @@ def test_dynamic_application_in_both_formats() -> None:
     for flat_policy, tree_policy in zip(flat.policies[1:], tree.policies, strict=True):
         assert tree_policy.dynamic_applications == flat_policy.dynamic_applications
         assert tree_policy.action == flat_policy.action
+
+
+def test_custom_applications_with_terms() -> None:
+    # APP-TERM-1: the `show applications` output of the page (its configuration-mode
+    # commands carry a prompt, ignored as typed commands, G1). The published output
+    # omits the destination port the commands set.
+    config = parse_config(body("hier_application_term.txt"))
+    assert config.stats.unknown == 0
+    (term,) = config.applications["app-name"].terms
+    assert (term.name, term.protocol, term.destination_port) == ("custom-options", "udp", None)
+    # The same commands, prompts removed, are the statements `display set` prints.
+    first = body("hier_application_term.txt").split("\n\n")[0]
+    commands = re.sub(r"(?m)^user@host# ?", "", first)
+    (term,) = parse_config(commands).applications["app-name"].terms
+    assert (term.protocol, term.destination_port) == ("udp", "23000")

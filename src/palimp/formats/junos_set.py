@@ -19,7 +19,15 @@ level (`show | display set relative`, gap G2) get the `X Y` prefix back.
 import re
 
 from palimp.formats.terminal import edit_path, is_terminal_noise
-from palimp.models import GLOBAL, AddressObject, Application, Config, ParseStats, Policy
+from palimp.models import (
+    GLOBAL,
+    AddressObject,
+    Application,
+    AppTerm,
+    Config,
+    ParseStats,
+    Policy,
+)
 
 TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|(\S+)')
 
@@ -96,6 +104,34 @@ def locate(path: list[str]) -> tuple[tuple[str, str, str], list[str]] | None:
 def tokenize(line: str) -> list[str]:
     """Split a set line on spaces, keeping double-quoted strings as one token."""
     return [m.group(1) if m.group(1) is not None else m.group(2) for m in TOKEN.finditer(line)]
+
+
+# Options of an application or term that take one value (APP-TERM-1): read past,
+# only the protocol and destination port are kept.
+APPLICATION_OPTIONS = frozenset(
+    {
+        "protocol",
+        "destination-port",
+        "source-port",
+        "inactivity-timeout",
+        "alg",
+        "application-protocol",
+        "icmp-type",
+        "icmp-code",
+        "icmp6-type",
+        "icmp6-code",
+        "rpc-program-number",
+        "uuid",
+        "ttl-threshold",
+        "description",
+    }
+)
+
+
+def _port(value: str) -> str:
+    """`2121-2121` is port 2121; other ranges stay as they are."""
+    low, sep, high = value.partition("-")
+    return low if sep and low == high else value
 
 
 class _Builder:
@@ -269,13 +305,25 @@ class _Builder:
             app = self.applications.setdefault(
                 path[1], Application(name=path[1], kind="application")
             )
-            if len(path) == 4 and path[2] == "protocol":
-                app.protocol = path[3]
-                return "parsed"
-            if len(path) == 4 and path[2] == "destination-port":
-                app.destination_port = path[3]
-                return "parsed"
-            return "ignored"
+            options = path[2:]
+            target: Application | AppTerm = app
+            if options[0] == "term" and len(options) >= 2:
+                # APP-TERM-1: `term NAME` then options, one or several on a line.
+                target = next((t for t in app.terms if t.name == options[1]), None) or AppTerm(
+                    name=options[1]
+                )
+                if target not in app.terms:
+                    app.terms.append(target)
+                options = options[2:]
+            read = False
+            for key, value in zip(options[::2], options[1::2], strict=False):
+                if key == "protocol":
+                    target.protocol, read = value, True
+                elif key == "destination-port":
+                    target.destination_port, read = _port(value), True
+                elif key not in APPLICATION_OPTIONS:
+                    break
+            return "parsed" if read else "ignored"
         member = ("application", "application-set")
         if len(path) == 4 and path[0] == "application-set" and path[2] in member:
             # A set may hold other sets (resolved by palimp.services).

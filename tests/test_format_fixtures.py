@@ -289,3 +289,25 @@ def test_vsrx12_predefined_applications_match_junos_defaults() -> None:
         assert name in PREDEFINED, name
     table = body("predefined_applications_table.txt")
     assert "SNMP | 161 |" in table and PREDEFINED["junos-snmp-get"][1] == "udp/161"
+
+
+# APP-TERM-1: custom applications with `term`, several options on one set line.
+
+
+def test_app_term_1_terms_and_options_on_one_line() -> None:
+    from palimp.services import describe
+
+    # Configuration-mode commands: prompts removed, they are `display set` statements.
+    commands = body("display_set_application_term.txt").replace("user@host# ", "")
+    config = parse_set(commands)
+    assert config.stats.unknown == 0
+    (term,) = config.applications["test"].terms
+    # The last value wins, as for any repeated set statement.
+    assert (term.protocol, term.destination_port) == ("udp", "1111")
+    ftp = config.applications["ftp-1"]
+    assert (ftp.protocol, ftp.destination_port, ftp.terms) == ("tcp", "2121", [])
+    telnet = config.applications["telnet-1"]
+    assert telnet.destination_port == "2300-2348"
+    assert describe("test", config.applications) == [
+        "test term test: udp/1111, no well-known service on this port"
+    ]

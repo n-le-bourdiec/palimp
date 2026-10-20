@@ -1,0 +1,17 @@
+# Source: https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/policy-application-sets-configuration.html
+# Page title: Security Policy Applications and Application Sets | Junos OS | Juniper Networks
+# Source type: documentation
+# Documentation set (page metadata): junos current
+# Junos release shown: not stated
+# Retrieved: 2026-10-20
+# Assumptions: APP-TERM-1
+# Note: Two configuration-mode blocks of the page, in page order: a custom application with a term (several options on one line, then one option per line) and two applications without a term, several options on one line.
+# Note: Text copied verbatim from the page <pre> blocks (line endings normalized, leading and trailing blank lines dropped), blocks separated by one blank line.
+# ---
+user@host# set applications application test term test protocol tcp destination-port 1035-1035 inactivity-timeout 20
+user@host# set applications application test term test protocol udp
+user@host# set applications application test term test source-port 1-65535
+user@host# set applications application test term test destination-port 1111-1111
+
+user@host# set applications application ftp-1 protocol tcp source-port 0-65535 destination-port 2121-2121 inactivity-timeout 10
+user@host# set applications application telnet-1 protocol tcp source-port 0-65535 destination-port 2300-2348 inactivity-timeout 20

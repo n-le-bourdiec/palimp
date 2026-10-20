@@ -91,12 +91,28 @@ class AddressObject(BaseModel):
     book: str = "global"
 
 
+class AppTerm(BaseModel):
+    """One `term` of a custom application (APP-TERM-1)."""
+
+    name: str
+    protocol: str | None = None
+    destination_port: str | None = None
+
+
 class Application(BaseModel):
     name: str
     kind: Literal["application", "application_set"]
     protocol: str | None = None
     destination_port: str | None = None
     members: list[str] = []
+    # Applications defined with `term` statements: one entry per term.
+    terms: list[AppTerm] = []
+
+    def ports(self) -> list[tuple[str | None, str | None]]:
+        """(protocol, destination port) of each term, or of the application itself."""
+        if self.terms:
+            return [(t.protocol, t.destination_port) for t in self.terms]
+        return [(self.protocol, self.destination_port)]
 
 
 class ParseStats(BaseModel):
