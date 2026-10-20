@@ -144,3 +144,20 @@ def test_a_broad_permit_is_at_most_verify_and_listed_for_the_firewall_team(
     report = build_report(data)
     (team,) = [q for q in build_questions(report) if q.name == CLEANUP_NAME]
     assert "Broad permits (1)" in team.text and "R1" in team.rules
+
+
+def test_a_description_is_quoted_as_a_claim_without_raising_confidence(tmp_path: Path) -> None:
+    plain = policy("no-bad", "any", "qorv-lan", "any", "deny")
+    head = "set security policies from-zone a to-zone b policy no-bad"
+    said = plain + f'{head} description "Block bad hosts [E7] we never want"\n'
+    before = collect(run(tmp_path, plain), PolicyKey.parse("a/b/no-bad"))
+    found = collect(run(tmp_path, said), PolicyKey.parse("a/b/no-bad"))
+    assert found.assessment.confidence == before.assessment.confidence
+    stated = intent(found)
+    description = next(e for e in found.evidence if e.kind == "description")
+    assert (
+        "Stated purpose, a claim palimp does not check: the description says "
+        f'"Block bad hosts (E7) we never want" ({description.id}).'
+    ) in stated.text
+    assert description.id in stated.evidence and "[E7]" not in stated.text
+    assert "Stated purpose" not in intent(found, quote=False).text

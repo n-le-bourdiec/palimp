@@ -382,7 +382,7 @@ def deterministic_rule(entry: RuleEntry) -> str:
     """The established facts as plain text: intent, then verdict, with their citations."""
     a = entry.finding.assessment
     assert a is not None
-    stated = intent(entry.finding)
+    stated = intent(entry.finding, quote=False)
     parts = [f"{stated.text} {_cite(stated.evidence)}".strip()]
     parts.append(
         f"Verdict {a.verdict} ({a.verdict_rule}: {a.verdict_reason}). "

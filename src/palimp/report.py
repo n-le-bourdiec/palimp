@@ -235,7 +235,37 @@ def allows(finding: Finding, dataset: Dataset) -> Cited:
     return Cited(text=text, evidence=cited)
 
 
-def intent(finding: Finding) -> Cited:
+# Longest stated purpose quoted in the intent sentence.
+QUOTE_SHOWN = 160
+
+
+def stated_purpose(finding: Finding) -> tuple[str, list[str]]:
+    """Free text of the description and annotations, quoted as the stated purpose
+    (session 29): a claim, it never raises confidence. Empty when there is none."""
+    items = [e for e in finding.evidence if e.kind in ("description", "annotation")]
+    quotes = []
+    for item in items:
+        # Untrusted text (decision 0028): no quote mark or bracket that could close the
+        # quote or fake a citation.
+        text = " ".join(item.claim.split()).replace('"', "'")
+        text = text.replace("[", "(").replace("]", ")")
+        if len(text) > QUOTE_SHOWN:
+            text = text[: QUOTE_SHOWN - 3].rstrip() + "..."
+        quotes.append(f'"{text}" ({item.id})')
+    if not quotes:
+        return "", []
+    where = (
+        "the description and annotations say"
+        if len(items) > 1
+        else ("the description says" if items[0].kind == "description" else "an annotation says")
+    )
+    clause = f" Stated purpose, a claim palimp does not check: {where} {'; '.join(quotes)}."
+    return clause, [e.id for e in items]
+
+
+def intent(finding: Finding, quote: bool = True) -> Cited:
+    """The intent sentence. QUOTE: with the stated purpose quoted from the free text
+    (the report); the LLM fallback leaves it out, free text licenses no fact there."""
     assessment = finding.assessment
     assert assessment is not None
     policy = finding.policy
@@ -276,7 +306,10 @@ def intent(finding: Finding) -> Cited:
             f"Purpose unknown, {assessment.confidence} confidence: {assessment.confidence_reason}."
         )
     text += conflicts_clause(finding)
-    return Cited(text=text, evidence=list(assessment.confidence_evidence))
+    clause, quoted = stated_purpose(finding) if quote else ("", [])
+    evidence = list(assessment.confidence_evidence)
+    evidence += [i for i in quoted if i not in evidence]
+    return Cited(text=text + clause, evidence=evidence)
 
 
 CONFLICT_LABELS = {
