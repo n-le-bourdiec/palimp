@@ -15,8 +15,16 @@ by rule, palimp's assessment with the ground truth `expected` block
   when present (Hard rules, decision 0040: what a perfect analyzer can justify
   from the artifacts alone), else `expected.max_justified_confidence`. The
   count against `max_justified_confidence` alone is printed next to it;
-- calibration: per confidence level, how often palimp's intent application
-  is the ground truth one (`intent.app_id`), and how often the verdict is the
+- intent against what the artifacts allow (decision 0047, session 33):
+  application rules on `expected.best_achievable_intent` (palimp's first
+  named application; when it is null, palimp is right when it names no
+  application: "purpose unknown" or a flow without an application), firewall
+  team rules on `expected.rule_kind` against palimp's own reading of the rule
+  (cleanup, block, broad permit, factory default). The old number, palimp's
+  first application against the true one (`intent.app_id`), is printed next
+  to it as "vs true application";
+- calibration: per confidence level, how often palimp's intent is right (vs
+  best achievable and vs true application), and how often the verdict is the
   best achievable one;
 - the same per trap (per rule, and per instance: rules tagged with the same
   trap and created by the same event) and per format variant (manifest);
@@ -61,6 +69,49 @@ def app_of(value: str) -> str:
     return value.lower().removeprefix("shared-")
 
 
+def palimp_kind(finding: dict) -> str:
+    """palimp's own reading of the rule, in the order the report's intent sentence uses."""
+    kinds = {e.get("kind") for e in finding["evidence"]}
+    for sign, kind in (
+        ("catch_all_deny", "cleanup_deny"),
+        ("factory_default", "factory_default"),
+        ("broad_permit", "broad_permit"),
+    ):
+        if sign in kinds:
+            return kind
+    if (finding["policy"].get("action") or "").lower() in ("deny", "reject"):
+        return "block"
+    return "application"
+
+
+def rule_kind(rule: dict) -> str:
+    """`expected.rule_kind`; from the intent kind for a ground truth older than 0.5.0."""
+    kind = rule["intent"]["kind"]
+    return rule["expected"].get("rule_kind", kind if kind in FIREWALL_KINDS else "application")
+
+
+def intent_best_ok(rule: dict, finding: dict) -> bool:
+    """Intent right against what the artifacts allow (decision 0047): the rule kind for a
+    firewall team rule, else `best_achievable_intent` (null: no application named)."""
+    kind = rule_kind(rule)
+    if kind != "application":
+        return palimp_kind(finding) == kind
+    if palimp_kind(finding) != "application":
+        return False
+    apps = finding["assessment"]["intent_apps"]
+    best = rule["expected"].get("best_achievable_intent", rule["intent"]["app_id"])
+    if best is None:
+        return not apps
+    return app_of(best) in [app_of(a) for a in apps[:1]]
+
+
+def any_source(finding: dict) -> bool:
+    """A source address object named like the `any` keyword (`ANY`, `Any-Hosts`)."""
+    return any(
+        s != "any" and s.lower() in ("any", "any-hosts") for s in finding["policy"]["sources"]
+    )
+
+
 class Score:
     """Counters for one scope (all rules, a trap, a format variant)."""
 
@@ -82,6 +133,7 @@ class Score:
         c["underconfident"] += LEVELS[row["confidence"]] < LEVELS[row["best_conf"]]
         c["kind recognized"] += row["kind_recognized"]
         c["intent ok"] += row["intent_ok"]
+        c["intent best ok"] += row["intent_best_ok"]
         c["owner named"] += row["owner_ok"]
         c["owner certain right"] += row["owner_certain"] == "right"
         c["owner certain wrong"] += row["owner_certain"] == "wrong"
@@ -150,6 +202,8 @@ def evaluate(truth: dict, findings: list[dict], manifest: dict) -> list[dict]:
                 "traps": rule["traps"],
                 "kind": rule["intent"]["kind"],
                 "kind_recognized": kind_recognized(rule["intent"]["kind"], finding),
+                "rule_kind": rule_kind(rule),
+                "any_source": any_source(finding),
                 "instance": (truth["scenario_id"], rule["created"]["event_id"]),
                 "formats": formats,
                 "live": rule["status"]["live"],
@@ -166,6 +220,7 @@ def evaluate(truth: dict, findings: list[dict], manifest: dict) -> list[dict]:
                 "confidence_rule": assessment["confidence_rule"],
                 "intent_ok": app_of(rule["intent"]["app_id"])
                 in [app_of(a) for a in assessment["intent_apps"][:1]],
+                "intent_best_ok": intent_best_ok(rule, finding),
                 "owner_ok": bool(assessment["ask"]) and owner in assessment["ask"],
                 "owner_certain": owner_certain(assessment, owner, names),
                 "owner_candidate_ok": owner in assessment.get("owner_candidates", []),
@@ -207,7 +262,14 @@ def headline(scores: dict[str, Score]) -> None:
         f"| underconfidence (below best_achievable_confidence, else max_justified) | "
         f"{pct(c['underconfident'], n)} ({c['underconfident']}) | n/a |"
     )
-    print(f"| intent application right (first named app) | {pct(c['intent ok'], n)} | n/a |")
+    print(
+        "| intent right vs best achievable (best_achievable_intent, rule_kind) | "
+        f"{pct(c['intent best ok'], n)} ({c['intent best ok']}) | n/a |"
+    )
+    print(
+        "| intent application right vs true application (intent.app_id, first named app) | "
+        f"{pct(c['intent ok'], n)} ({c['intent ok']}) | n/a |"
+    )
     print(f"| owner named in `ask` | {pct(c['owner named'], n)} | n/a |")
     for label, key in (
         ("owner stated as certain, right", "owner certain right"),
@@ -254,14 +316,37 @@ def table(title: str, scores: dict[str, Score], prefix: str, instances: dict | N
         )
 
 
+def summary(scores: dict[str, Score]) -> None:
+    """One table: all rules, per rule kind, shadowed rules and rules with an `ANY` source."""
+    print("\nSummary")
+    print(
+        "| scope | rules | verdict vs best | intent vs best achievable | intent vs true "
+        "application | overconfident | underconfident | dangerous palimp | dangerous naive |"
+    )
+    print("|---|---|---|---|---|---|---|---|---|")
+    present = {s.removeprefix("rule kind ") for s in scores if s.startswith("rule kind ")}
+    order = ["all"] + [f"rule kind {k}" for k in ("application", *FIREWALL_KINDS) if k in present]
+    order += ["trap TRAP-SHADOWED-BY-DENY", "ANY source"]
+    for scope in order:
+        c = scores[scope].c if scope in scores else Counter()
+        n = c["rules"]
+        print(
+            f"| {scope} | {n} | {pct(c['palimp ok best'], n)} | {pct(c['intent best ok'], n)}"
+            f" | {pct(c['intent ok'], n)} | {pct(c['overconfident'], n)}"
+            f" | {pct(c['underconfident'], n)} | {c['palimp dangerous']}"
+            f" | {c['naive dangerous']} |"
+        )
+
+
 def kinds(scores: dict[str, Score]) -> None:
     """Per ground truth intent kind; firewall team kinds first (decision 0045)."""
     print("\nPer intent kind")
     print(
-        "| kind | rules | palimp vs expected | palimp vs best | dangerous | intent app right "
-        "| kind recognized | overconfident | underconfident |"
+        "| kind | rules | palimp vs expected | palimp vs best | dangerous | intent vs best "
+        "achievable | intent vs true application | kind recognized | overconfident "
+        "| underconfident |"
     )
-    print("|---|---|---|---|---|---|---|---|---|")
+    print("|---|---|---|---|---|---|---|---|---|---|")
     present = sorted(s.removeprefix("kind ") for s in scores if s.startswith("kind "))
     order = [k for k in FIREWALL_KINDS if k in present] + [
         k for k in present if k not in FIREWALL_KINDS
@@ -272,7 +357,8 @@ def kinds(scores: dict[str, Score]) -> None:
         recognized = pct(c["kind recognized"], n) if kind in FIREWALL_KINDS else ""
         print(
             f"| {kind} | {n} | {pct(c['palimp ok expected'], n)} | {pct(c['palimp ok best'], n)}"
-            f" | {c['palimp dangerous']} | {pct(c['intent ok'], n)} | {recognized}"
+            f" | {c['palimp dangerous']} | {pct(c['intent best ok'], n)}"
+            f" | {pct(c['intent ok'], n)} | {recognized}"
             f" | {pct(c['overconfident'], n)} | {pct(c['underconfident'], n)} |"
         )
 
@@ -280,15 +366,16 @@ def kinds(scores: dict[str, Score]) -> None:
 def calibration(rows: list[dict]) -> None:
     print("\nCalibration (per palimp confidence level)")
     print(
-        "| confidence | rules | intent app right | verdict = best | at or below best achievable "
-        "| at or below max justified |"
+        "| confidence | rules | intent vs best achievable | intent vs true application "
+        "| verdict = best | at or below best achievable | at or below max justified |"
     )
-    print("|---|---|---|---|---|---|")
+    print("|---|---|---|---|---|---|---|")
     for level in ("HIGH", "MEDIUM", "LOW"):
         group = [r for r in rows if r["confidence"] == level]
         n = len(group)
         print(
-            f"| {level} | {n} | {pct(sum(r['intent_ok'] for r in group), n)}"
+            f"| {level} | {n} | {pct(sum(r['intent_best_ok'] for r in group), n)}"
+            f" | {pct(sum(r['intent_ok'] for r in group), n)}"
             f" | {pct(sum(r['palimp'] == r['best'] for r in group), n)}"
             f" | {pct(sum(LEVELS[level] <= LEVELS[r['best_conf']] for r in group), n)}"
             f" | {pct(sum(LEVELS[level] <= LEVELS[r['max_conf']] for r in group), n)} |"
@@ -348,6 +435,9 @@ def main() -> int:
         scopes = ["all", *(f"trap {t}" for t in row["traps"] or ["(none)"])]
         scopes += [f"format {f}" for f in row["formats"]]
         scopes.append(f"kind {row['kind']}")
+        scopes.append(f"rule kind {row['rule_kind']}")
+        if row["any_source"]:
+            scopes.append("ANY source")
         for scope in scopes:
             scores[scope].add(row)
         for trap in row["traps"] or ["(none)"]:
@@ -359,6 +449,7 @@ def main() -> int:
     else:
         print(f"level {args.level}, dev seeds {args.seeds}")
     headline(scores)
+    summary(scores)
     table("Per trap (verdict accuracy)", scores, "trap ", instances)
     table("Per format variant", scores, "format ", None)
     kinds(scores)
