@@ -1,6 +1,8 @@
 # Held-out evaluation (decisions 0007 and 0021). Started by hand only, by the
 # project lead, from the Actions tab. It prints aggregate tables only: never the
 # salt, a seed, a per-rule line or a scenario file, and it uploads nothing.
+# Medium is the headline, compared run to run; the Hard table comes next to it,
+# never merged into it (decision 0036, added in session 33 for simulator 0.5.0).
 name: Held-out evaluation
 
 on:
@@ -16,10 +18,10 @@ concurrency:
 jobs:
   holdout:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
-      LEVEL: medium
-      SCENARIOS: "50"
+      MEDIUM_SCENARIOS: "50"
+      HARD_SCENARIOS: "30"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -31,13 +33,21 @@ jobs:
           # Scenarios are generated under this directory only, deleted at the end.
           mkdir -p "$RUNNER_TEMP/holdout"
           echo "TMPDIR=$RUNNER_TEMP/holdout" >> "$GITHUB_ENV"
-      - name: Evaluate held-out scenarios (aggregate tables only)
+      - name: Evaluate held-out Medium scenarios, the headline (aggregate tables only)
         env:
           HOLDOUT_SALT: ${{ secrets.HOLDOUT_SALT }}
         run: |
-          uv run python eval/verdicts.py --level "$LEVEL" --holdout "$SCENARIOS" \
-            > "$RUNNER_TEMP/holdout-report.md"
-          cat "$RUNNER_TEMP/holdout-report.md"
+          uv run python eval/verdicts.py --level medium --holdout "$MEDIUM_SCENARIOS" \
+            > "$RUNNER_TEMP/holdout-medium.md"
+          cat "$RUNNER_TEMP/holdout-medium.md"
+      - name: Evaluate held-out Hard scenarios, next to the headline (aggregate tables only)
+        if: always()
+        env:
+          HOLDOUT_SALT: ${{ secrets.HOLDOUT_SALT }}
+        run: |
+          uv run python eval/verdicts.py --level hard --holdout "$HARD_SCENARIOS" \
+            > "$RUNNER_TEMP/holdout-hard.md"
+          cat "$RUNNER_TEMP/holdout-hard.md"
       - name: Write the run record
         if: always()
         run: |
@@ -50,16 +60,19 @@ jobs:
             echo "| palimp commit | $(git rev-parse HEAD) |"
             echo "| palimp version | $(uv run palimp --version 2>/dev/null || echo n/a) |"
             echo "| simulator version | $(uv run palimp-sim --version) |"
-            echo "| level | $LEVEL |"
-            echo "| scenarios | $SCENARIOS |"
+            echo "| scenarios | Medium $MEDIUM_SCENARIOS (headline), Hard $HARD_SCENARIOS |"
             echo "| started by | $GITHUB_ACTOR |"
-            echo
-            if [ -s "$RUNNER_TEMP/holdout-report.md" ]; then
-              cat "$RUNNER_TEMP/holdout-report.md"
-            else
-              echo "Evaluation failed: no aggregate tables (details hidden, decision 0007)."
-            fi
+            for level in medium hard; do
+              echo
+              echo "## Level $level"
+              echo
+              if [ -s "$RUNNER_TEMP/holdout-$level.md" ]; then
+                cat "$RUNNER_TEMP/holdout-$level.md"
+              else
+                echo "Evaluation failed: no aggregate tables (details hidden, decision 0007)."
+              fi
+            done
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Delete generated scenarios
         if: always()
-        run: rm -rf "$RUNNER_TEMP/holdout" "$RUNNER_TEMP/holdout-report.md"
+        run: rm -rf "$RUNNER_TEMP/holdout" "$RUNNER_TEMP"/holdout-*.md
