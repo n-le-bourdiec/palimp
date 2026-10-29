@@ -1,88 +1,70 @@
 # Handoff
 
-## Last session: 32 (2026-10-20), simulator: best achievable intent, shadowed rules, ANY sets, simulator 0.5.0 (decision 0047)
-
-Work is on branch `sim-0.5`, NOT merged. The next analyzer session merges
-it into main once CI is green on the branch (CLAUDE.md, main stays green).
-
-### Note to analyzer sessions (schema change, decision 0017)
-
-The ground truth JSON Schema changed (additive, `schema_version` stays 1):
-
-- `expected.rule_kind` in every rule: `application`, or the firewall team
-  kind (`block`, `cleanup_deny`, `broad_permit`, `factory_default`, equal
-  to `intent.kind`).
-- `expected.best_achievable_intent` in every rule: the application a
-  perfect analyzer can name from the artifacts, or null. Application
-  rules: `intent.app_id` when at least one counted naming source names it
-  (one source is enough), null when nothing in the artifacts names it
-  ("purpose unknown" is then the right answer). Hard: 85 rules with a
-  hidden stale name have the replaced application (decision 0040). Firewall
-  team rules: always null.
-- The pseudo application `firewall` stays only in `intent.app_id`,
-  `flows[].app_id` and `apps` (the schema needs a string there). Score
-  firewall team rules on `rule_kind`, application rules on
-  `best_achievable_intent`.
-- Both fields are optional in the schema, always written from 0.5.0.
-- New trap id `TRAP-SHADOWED-BY-DENY`: an access rule after the catch-all
-  deny of its zone pair; `best_achievable_verdict` verify, `verdict` verify
-  while `still_needed` (removal_candidate once its flow has ended), owner
-  `firewall_team`, evidence `policy X after catch-all deny Y`.
-- Address sets named `ANY` or `Any-Hosts` hold user site subnets (never
-  0.0.0.0/0) and are the source of a few application permits.
+## Last session: 33 (2026-10-29), analyzer: merge simulator 0.5.0, intent scored vs best achievable, active deny keep, intent tuning (decision 0048)
 
 ### Done
 
-- Session 31 metrics finalized (190 calls, 12.06 USD).
-- Ground truth: `expected.rule_kind` and `expected.best_achievable_intent`
-  for every rule, Easy included (spec 6, 6.1; schema descriptions).
-- Shadowed rules in Medium and Hard (own sub-generator, spec 4.11,
-  `TRAP-SHADOWED-BY-DENY`), isolated from every other draw.
-- `ANY` / `Any-Hosts` address sets in Medium and Hard (own sub-generator,
-  spec 2.5).
-- Simulator 0.5.0: Easy artifacts byte-identical, Easy ground truth
-  changes only by version and the two fields
-  (`test_easy_changed_only_by_version`, against 0.3.0 and 0.4.0); goldens
-  and stored Hard trap counts regenerated; every 0.4.0 rule of Medium 0-99
-  and Hard 0-49 keeps its expected values (only uniqueness suffixes of a
-  few names move, 6 scenarios).
-- Measured (spec 7.7): application rules with `best_achievable_intent` null
-  33.4% Medium (5228 / 15662), 36.5% Hard (7590 / 20771); shadowed rules
-  10 Medium (8 scenarios), 21 Hard (14 scenarios); `ANY` rules 19 Medium
-  (12 scenarios), 31 Hard (19 scenarios).
-- Evaluation history: 0.4.0 numbers never published, 0.5.0 is the release
-  basis. Simulator tests 595/595 with `--runslow`; analyzer not run.
+- Session 32 metrics finalized (102 calls, 7.83 USD).
+- `sim-0.5` merged into main through PR #1 (full suite 900/900 with
+  `--runslow` on the branch, CI green on the branch and on main after the
+  merge).
+- `eval/verdicts.py`: intent scored against `expected.best_achievable_intent`
+  (null: right when palimp names no application) and, for firewall team
+  rules, `expected.rule_kind` against palimp's own reading (cleanup, block,
+  broad permit, factory default). Old number kept, labeled "vs true
+  application". New summary table: all rules, each rule kind,
+  TRAP-SHADOWED-BY-DENY, rules with an `ANY` source. Hidden stale names need
+  no special case (`best_achievable_intent` is the shown name).
+- Every active deny or reject rule is keep (project lead's answer):
+  `V-DENY-NOTLIVE` (now keep), `V-DENY-TRAFFIC`, `V-DENY-QUIET`,
+  `V-DENY-BLIND`. NOTLIVE and BLIND stay in the firewall team list, last
+  section "Rules that block traffic (low priority)".
+- Intent tuning on Medium 0-19 and Hard 0-19 only: workstation and remote
+  access objects (`pc`, `lt`, `vpn`, `remote`, ...) name no application;
+  site prefixes (`GRT-ERP-APP01`, `OKV-DB01`, `MRD-Users`) are not learned;
+  database engines and file, backup or mail protocols on a matching server
+  role no longer become the intent. Not-live signals and shared addresses
+  keep the earlier reading (`vocabulary(places=False)`) so no verdict moves.
+  Anonymize keeps the new signal words.
+- Held-out workflow: Medium 50 (headline) and Hard 30 next to it, same
+  aggregate tables. NOT run: the project lead triggers it after rotating
+  the salt.
+- Dev numbers recorded in `docs/evaluation-history.md` as the 0.5.0 release
+  basis (Medium 20-99: intent vs best 52.7% to 82.1%, verdict vs best 91.7%
+  unchanged, 0 dangerous; Hard 20-49: intent vs best 51.2% to 78.6%, verdict
+  vs best 98.1%, 0 dangerous). Real configs: 7 verdict moves, all deny
+  verify to keep (`V-DENY-BLIND`); 10 intent changes
+  (`docs/real-configs-robustness.md`).
+- Work was done in a git worktree on branch `s33-work`, fast-forwarded into
+  main after each item.
 
 ### Next
 
-- Analyzer session: make CI green on `sim-0.5`, merge it into main; score
-  intent against `best_achievable_intent` and `rule_kind` in the eval
-  script; measure `V-SHADOWED` on the simulated shadowed rules and the
-  `ANY` reading (decision 0046 item 5).
-- Project lead: review decision 0047 (hidden stale names give the replaced
-  application, not null) and decision 0046 (items 5 and 7).
-- Held-out workflow: add the Hard table (decision 0036) before the second
-  held-out run; consider rotating the salt (simulator version changed).
+- Project lead: run the held-out workflow (Medium 50 + Hard 30) after
+  rotating the salt; review decision 0048.
+- C-T1-ONLY calibration: a T1 naming the application alone gives MEDIUM;
+  on Medium 0-19, 149 such rules have best achievable HIGH and 197 LOW.
+  Find what separates them (ticket vs description vs commit comment,
+  traffic). It is what raised Medium overconfidence (9.5% to 10.1% on 20-99).
+- Block rules: underconfidence 17.7% (Medium) and 18.4% (Hard).
 - Release preparation (decision 0032 item 5).
 
 ### Open questions
 
-- Decision 0047: a Hard rule whose only naming is a stale name no artifact
-  reveals has the replaced application as best achievable intent, for
-  consistency with decision 0040. The prompt's wording ("null when no source
-  names it") read strictly would give null. Which one?
+- Approval needed to read not-live signals and shared addresses with the
+  new name rules (endpoints, site prefixes). With them, 5 tuning rules moved
+  toward removal_candidate (2 Medium where best is removal_candidate, 3 Hard
+  where best is verify) and 17 Hard TRAP-IP-REUSE rules lost their shared
+  address (verify to keep). Kept on the old reading for now.
+- Product names from a port and a name (decision 0043): `postgresql`,
+  `oracle`, `mssql` named from a database role are gone; a product named by
+  an object and its port (`redis-01` on tcp/6379) still names the product.
+  The simulator counts no product as naming an application. Keep?
 - Shadowed rule whose flow has ended: `verdict` removal_candidate (full
-  knowledge), best verify. Fine?
-
+  knowledge), best verify. Fine? (from session 32)
 - Shadowed rules: removal_candidate needs approval (not before release).
-  Today a shadowed keep becomes verify; a shadowed rule with hits stays
-  verify with the contradiction stated.
-- An object named `ANY` that is not 0.0.0.0/0 no longer makes a rule a
-  catch-all deny or broad permit: its verdict follows the usual rules,
-  removal_candidate included on a positive not-live signal (asked in the
-  session 31 prompt; no real configuration verdict moved).
-- `V-DENY-QUIET` keeps a deny with no traffic seen; a deny with no
-  visibility at all stays verify (firewall team). Should it be keep too?
+  Today a shadowed keep becomes verify; a shadowed active deny stays keep
+  (decision 0048).
 - Carried from session 30: owner of deny rules naming an application
   object; ceilings of catch-all deny, broad permit and factory default;
   deactivated deny as removal_candidate.
@@ -112,7 +94,13 @@ The ground truth JSON Schema changed (additive, `schema_version` stays 1):
 - Commit `74e382a` says it restores the 5 Hard rules; it restored 4, the
   fifth came with `d8ffe8d`.
 - Person names stay possible applications at LOW (no name list, decision
-  0042).
+  0042), except in workstation and remote access objects (decision 0048).
+  Endpoint words are read in any address object (`lt`, `ws`, `nb`,
+  `support`): an application object holding one names nothing unless a
+  ticket backs the word.
+- Site prefixes need two ticket-known applications, 6 server roles or a
+  user-area word after them; a site with few objects is still read as an
+  application.
 - `junos-ntp`, `junos-ldap`, `junos-ms-sql`, `junos-smb` and a few other
   predefined names still have no published definition (VSRX-12d).
 - Real configs, still unsupported: tenant and logical system policies
@@ -263,9 +251,11 @@ has transcript `7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e` (finalized in session
 (finalized in session 30). Session 30 has transcript
 `5fd285ac-95ef-4a18-a704-c9c5c246fd1b` (finalized in session 31). Session 31
 has transcript `82425030-2c0d-4a09-a086-7597631acbb2` (finalized in session
-32). Session 32 has transcript `dd4d1074-e17b-4649-9616-1ff42f7d9709`.
-Finalize it at the start of session 33 with:
+32). Session 32 has transcript `dd4d1074-e17b-4649-9616-1ff42f7d9709`
+(finalized in session 33). Session 33 has transcript
+`7c1bd47e-a91f-4aa2-9cdf-b9aa66afbb7a`. Finalize it at the start of
+session 34 with:
 
-    uv run python metrics/session_tokens.py dd4d1074-e17b-4649-9616-1ff42f7d9709
+    uv run python metrics/session_tokens.py 7c1bd47e-a91f-4aa2-9cdf-b9aa66afbb7a
 
 Cost is API-equivalent (decision 0006), not a billed amount.
