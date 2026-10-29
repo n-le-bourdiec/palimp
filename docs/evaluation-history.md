@@ -396,3 +396,60 @@ firewall team rules are scored on `rule_kind`. Easy artifacts are
 byte-identical; every 0.4.0 rule of Medium 0-99 and Hard 0-49 keeps its
 expected values, so verdict numbers stay comparable except on the 10
 Medium and 21 Hard shadowed rules (spec 7.7).
+
+## Simulator 0.5.0 release basis, session 33 (2026-10-29, dev seeds, not a held-out run)
+
+Decision 0048. Intent is now scored against what the artifacts allow
+(`best_achievable_intent` for application rules, null meaning palimp should
+name no application; `rule_kind` for firewall team rules); the old number
+stays as "vs true application". Changes: every active deny or reject rule is
+keep; endpoints and site prefixes name no application; a database engine or
+a file, backup or mail protocol on a matching server role is no longer the
+intent. Tuning on Medium 0-19 and Hard 0-19 only, in the safe direction (no
+verdict moves there). Before: `61b4d91` (session start, new scoring). After:
+`1c672ae`. These are the 0.5.0 release basis numbers.
+
+- Simulator: 0.5.0
+- Command: `uv run python eval/verdicts.py --level medium --seeds 20-99` and
+  `--level hard --seeds 20-49`, with `--json` for the per-rule comparison
+
+| metric | Medium 20-99 before | Medium 20-99 after | Hard 20-49 before | Hard 20-49 after |
+|---|---|---|---|---|
+| rules | 12840 | 12840 | 12671 | 12671 |
+| verdict vs best achievable | 91.7% | 91.7% | 98.1% | 98.1% |
+| verdict vs expected | 86.9% | 86.9% | 82.7% | 82.7% |
+| intent vs best achievable | 52.7% | 82.1% | 51.2% | 78.6% |
+| intent vs true application | 44.3% | 59.2% | 39.9% | 51.3% |
+| overconfidence (vs best achievable) | 9.5% | 10.1% | 7.6% | 5.3% |
+| underconfidence (vs best achievable) | 11.3% | 11.1% | 9.5% | 9.5% |
+| dangerous errors | 0 | 0 | 0 | 0 |
+| naive baseline dangerous errors | 191 | 191 | 148 | 148 |
+| HIGH: intent vs best / verdict = best | 96.1% / 97.7% | 96.7% / 97.7% | 94.3% / 99.0% | 95.6% / 99.0% |
+
+Per scope, after (verdict vs best, intent vs best achievable, intent vs true
+application, overconfident, underconfident, dangerous palimp / naive):
+
+| scope | Medium rules | Medium | Hard rules | Hard |
+|---|---|---|---|---|
+| application | 12557 | 91.6%, 81.7%, 60.6%, 10.4%, 11.2%, 0 / 164 | 12502 | 98.0%, 78.3%, 52.0%, 5.4%, 9.5%, 0 / 117 |
+| block | 141 | 100%, 100%, 0%, 0.7%, 17.7%, 0 / 27 | 87 | 100%, 100%, 0%, 1.1%, 18.4%, 0 / 31 |
+| cleanup_deny | 72 | 100%, 100%, 0%, 0%, 0%, 0 / 0 | 42 | 100%, 100%, 0%, 0%, 0%, 0 / 0 |
+| broad_permit | 49 | 100%, 100%, 0%, 0%, 0%, 0 / 0 | 30 | 100%, 100%, 0%, 0%, 0%, 0 / 0 |
+| factory_default | 21 | 100%, 100%, 0%, 0%, 0%, 0 / 0 | 10 | 100%, 100%, 0%, 0%, 0%, 0 / 0 |
+| TRAP-SHADOWED-BY-DENY | 4 | 100%, 75.0%, 50.0%, 0%, 25.0%, 0 / 4 | 12 | 100%, 100%, 58.3%, 16.7%, 8.3%, 0 / 9 |
+| ANY source | 19 | 94.7%, 73.7%, 68.4%, 5.3%, 15.8%, 0 / 0 | 19 | 100%, 89.5%, 73.7%, 0%, 15.8%, 0 / 0 |
+
+Firewall team rules read 0% "vs true application" by construction (their
+`app_id` is the pseudo application `firewall`). Verdict moves rule by rule:
+none on Medium 20-99 and Hard 20-49 (the deny change moves no simulated
+rule: simulated deny rules all have counters, so they were already
+`V-DENY-QUIET` keep). Tuning seeds, before and after: Medium 0-19 intent
+51.8% to 80.8%, overconfidence 7.2% to 9.7%; Hard 0-19 intent 48.7% to
+79.1%, overconfidence 7.4% to 5.3%; verdicts unchanged. Medium
+overconfidence rises because rules whose T1 names the application no longer
+conflict with a person's name in their objects and get MEDIUM (C-T1-ONLY)
+where the ground truth often says LOW (decision 0048, alternatives).
+
+Held-out: the workflow now runs Medium 50 (headline) and Hard 30 next to
+it. Not run in this session; the project lead triggers it after rotating
+the salt.

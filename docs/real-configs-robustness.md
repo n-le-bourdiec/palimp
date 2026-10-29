@@ -219,3 +219,30 @@ Confidence moves: 6 LOW to MEDIUM (deny rules, C-BLOCK), 4 MEDIUM to LOW
 (c29 `ON-PREM-to-AZURE-*` rules: `azure` no longer counts, the remaining
 `git` name has one source). `ON-PREM-to-AZURE-MS-SQL-CHG0092653` now names
 mssql from its application group `MS-SQL-PORT-GROUP`.
+
+## Session 33: active deny keep, endpoints, site prefixes, database roles (decision 0048)
+
+Same 32 configurations, configuration alone, before (`61b4d91`, session
+start, simulator 0.5.0 merged) and after (`1c672ae`), compared rule by rule
+by one local script on both (a rule counts as "purpose unknown" here when it
+names no application and describes no flow; the session 31 count used
+another script):
+
+| measure | before | after |
+|---|---|---|
+| verdicts | 281 verify, 9 keep, 2 removal candidates | 274 verify, 16 keep, 2 removal candidates |
+| MEDIUM / LOW rules | 94 / 198 | 85 / 207 |
+| rules naming an application | 103 | 94 |
+| rules with no application and no flow | 121 | 121 |
+| Ask lines to the firewall team | 100 | 100 |
+
+Verdict moves, rule by rule: 7, all verify to keep on active deny rules
+with no visibility (`V-NO-VISIBILITY` to `V-DENY-BLIND`, item 2 of decision
+0048), still asked of the firewall team at low priority. No other verdict
+moves; the two removal candidates are unchanged.
+
+Intent moves (10 rules): 7 rules no longer name `smtp` or `mssql` from a
+mail or database server role and its port (now LOW, the flow described);
+`support` is no longer an application (`*-AZURE-SUPPORT-TOOL`, 2 rules); the
+misspelled city `Glaswgow` is read as a site prefix (1 rule). Confidence
+moves: 9 MEDIUM to LOW, none up.
