@@ -1,47 +1,52 @@
 # Handoff
 
-## Last session: 33 (2026-10-29), analyzer: merge simulator 0.5.0, intent scored vs best achievable, active deny keep, intent tuning (decision 0048)
+## Last session: 34 (2026-10-29), simulator: 0.5.1, a direct statement alone justifies MEDIUM (decision 0049)
 
 ### Done
 
-- Session 32 metrics finalized (102 calls, 7.83 USD).
-- `sim-0.5` merged into main through PR #1 (full suite 900/900 with
-  `--runslow` on the branch, CI green on the branch and on main after the
-  merge).
-- `eval/verdicts.py`: intent scored against `expected.best_achievable_intent`
-  (null: right when palimp names no application) and, for firewall team
-  rules, `expected.rule_kind` against palimp's own reading (cleanup, block,
-  broad permit, factory default). Old number kept, labeled "vs true
-  application". New summary table: all rules, each rule kind,
-  TRAP-SHADOWED-BY-DENY, rules with an `ANY` source. Hidden stale names need
-  no special case (`best_achievable_intent` is the shown name).
-- Every active deny or reject rule is keep (project lead's answer):
-  `V-DENY-NOTLIVE` (now keep), `V-DENY-TRAFFIC`, `V-DENY-QUIET`,
-  `V-DENY-BLIND`. NOTLIVE and BLIND stay in the firewall team list, last
-  section "Rules that block traffic (low priority)".
-- Intent tuning on Medium 0-19 and Hard 0-19 only: workstation and remote
-  access objects (`pc`, `lt`, `vpn`, `remote`, ...) name no application;
-  site prefixes (`GRT-ERP-APP01`, `OKV-DB01`, `MRD-Users`) are not learned;
-  database engines and file, backup or mail protocols on a matching server
-  role no longer become the intent. Not-live signals and shared addresses
-  keep the earlier reading (`vocabulary(places=False)`) so no verdict moves.
-  Anonymize keeps the new signal words.
-- Held-out workflow: Medium 50 (headline) and Hard 30 next to it, same
-  aggregate tables. NOT run: the project lead triggers it after rotating
-  the salt.
-- Dev numbers recorded in `docs/evaluation-history.md` as the 0.5.0 release
-  basis (Medium 20-99: intent vs best 52.7% to 82.1%, verdict vs best 91.7%
-  unchanged, 0 dangerous; Hard 20-49: intent vs best 51.2% to 78.6%, verdict
-  vs best 98.1%, 0 dangerous). Real configs: 7 verdict moves, all deny
-  verify to keep (`V-DENY-BLIND`); 10 intent changes
-  (`docs/real-configs-robustness.md`).
-- Work was done in a git worktree on branch `s33-work`, fast-forwarded into
-  main after each item.
+- Session 33 metrics finalized (157 calls, 10.69 USD).
+- Branch `sim-0.5.1`, draft PR (not merged). Simulator 0.5.1, decision
+  0049 (supersedes the "one source gives LOW" part of decision 0045 item 2
+  for direct statements; 0045 and 0047 status lines amended; spec 6.1 item
+  4 rewritten; `docs/evaluation-history.md` records 0.5.1 as the release
+  basis).
+- Rule (Medium and Hard, `max_justified_confidence` and Hard
+  `best_achievable_confidence`): a direct statement (description or
+  annotation, retained creation comment, cited exported ticket) counted
+  alone gives MEDIUM, unless the rule is disputed (another description,
+  comment or cited ticket on the rule names a different application, or
+  TRAP-MISLEADING-COMMENT), then LOW. HIGH unchanged (two sources, one
+  direct, plus traffic). Names and services keep the 0045 rule; two or more
+  sources are not lowered by a dispute.
+- Every change is LOW to MEDIUM, application rules only. Medium 0-99:
+  1406/15662 (9.0%); Hard 0-49: 1033/20771 (5.0%), best achievable 1037.
+  Disputed and kept LOW: 118 Medium, 63 Hard. Per trap (moved / rules with
+  the trap, max_justified): Medium no trap 1159/7662, BATCH-COMMIT 117/843,
+  DEACTIVATED 98/1326, RARE-JOB 22/97, LIVE-NOLOG 9/99, SHADOWED-BY-DENY
+  1/10, MISLEADING-COMMENT 0/215, HISTORY-HORIZON 0/6646,
+  EMERGENCY-LOADBEARING 0/147; Hard no trap 778/4799, DEACTIVATED
+  136/3592, BATCH-COMMIT 83/752, RARE-JOB 13/111, SCANNER-HITS 9/102,
+  RENAME-CHAIN 6/259, IP-REUSE 4/137, LIVE-NOLOG 3/80, SHADOWED-BY-DENY
+  2/21, STALE-NAME 0/223 (best achievable 4/223), MISLEADING-COMMENT 0/122,
+  HISTORY-HORIZON 0/14228, EMERGENCY-LOADBEARING 0/117.
+- Easy artifacts byte-identical (ground truth differs by the version
+  string only); Medium and Hard artifacts byte-identical to 0.5.0 too, only
+  `ground_truth.json` and `manifest.json` change. Goldens regenerated; Hard
+  trap counts unchanged.
+
+### Note to analyzer sessions (decision 0017 does not apply: no schema change)
+
+- Simulator 0.5.1 changes only confidence values. Re-measure calibration on
+  Medium 20-99 and Hard 20-49 when merging `sim-0.5.1`; verdict and intent
+  numbers stay comparable with session 33. Overconfidence from C-T1-ONLY
+  (session 33) should fall.
 
 ### Next
 
-- Project lead: run the held-out workflow (Medium 50 + Hard 30) after
-  rotating the salt; review decision 0048.
+- Analyzer session: merge `sim-0.5.1` (draft PR), make main green, measure
+  calibration on 0.5.1.
+- Project lead: review decision 0049; run the held-out workflow (Medium 50
+  + Hard 30) on 0.5.1 after rotating the salt; review decision 0048.
 - C-T1-ONLY calibration: a T1 naming the application alone gives MEDIUM;
   on Medium 0-19, 149 such rules have best achievable HIGH and 197 LOW.
   Find what separates them (ticket vs description vs commit comment,
@@ -50,6 +55,12 @@
 - Release preparation (decision 0032 item 5).
 
 ### Open questions
+
+- Decision 0049 readings to confirm: a description naming both ends of a
+  flow (`BILL AS > FILESRV FS 445`) counts as a dispute; a dispute does not
+  lower two or more sources; a direct statement alone with traffic stays
+  MEDIUM (not HIGH); a two-letter direct statement (`CI acess`) alone gives
+  MEDIUM.
 
 - Approval needed to read not-live signals and shared addresses with the
   new name rules (endpoints, site prefixes). With them, 5 tuning rules moved
@@ -188,6 +199,12 @@ on held-out or on the real public configs.
 For simulator sessions. Analyzer sessions add items here, they never read
 simulator code.
 
+- A product named by an object plus its well-known port (`redis-01` on
+  tcp/6379) as two sources (session 34 prompt; see the decision 0043 open
+  question). Today the simulator counts no product as naming an
+  application, and `SERVICE_SOURCES` lists only ports that stand for the
+  application itself.
+
 - Deny rules naming an application object, deny rules with logging
   (needs a `RT_FLOW_SESSION_DENY` sample), custom application names and
   dynamic applications as naming sources (decision 0045).
@@ -253,9 +270,10 @@ has transcript `7aff9bc7-fe4f-4fd9-bae1-a4831d16e63e` (finalized in session
 has transcript `82425030-2c0d-4a09-a086-7597631acbb2` (finalized in session
 32). Session 32 has transcript `dd4d1074-e17b-4649-9616-1ff42f7d9709`
 (finalized in session 33). Session 33 has transcript
-`7c1bd47e-a91f-4aa2-9cdf-b9aa66afbb7a`. Finalize it at the start of
-session 34 with:
+`7c1bd47e-a91f-4aa2-9cdf-b9aa66afbb7a` (finalized in session 34). Session 34
+has transcript `1a30456b-3d7f-4f82-879c-0f2217725452`. Finalize it at the
+start of session 35 with:
 
-    uv run python metrics/session_tokens.py 7c1bd47e-a91f-4aa2-9cdf-b9aa66afbb7a
+    uv run python metrics/session_tokens.py 1a30456b-3d7f-4f82-879c-0f2217725452
 
 Cost is API-equivalent (decision 0006), not a billed amount.
