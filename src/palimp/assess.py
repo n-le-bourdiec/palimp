@@ -5,6 +5,12 @@ Every output names the rule that produced it and cites evidence IDs.
 Verdict rules, first match wins:
 - V-CLEANUP-RULE (keep): an active catch-all deny (any source, any destination,
   any application): the cleanup rule (decision 0044).
+- V-DENY-NOTLIVE, V-DENY-TRAFFIC, V-DENY-QUIET, V-DENY-BLIND (keep): any other
+  active deny or reject rule, whatever its signals (session 33, decision 0048):
+  removing a block opens traffic, keeping it opens nothing. The rule name says
+  what the artifacts show (a not-live signal, traffic tried, no traffic, no
+  visibility). V-DENY-NOTLIVE and V-DENY-BLIND rules stay in the firewall team
+  list ("Is this block still wanted?"), last, at low priority.
 - V-SHARED-ADDRESS (verify): a destination address is also an object named after
   another application, and traffic is seen or a not-live signal exists: the
   address may have been reused (or the application renamed). Never keep, never
@@ -12,8 +18,6 @@ Verdict rules, first match wins:
 - V-CONTRADICTION (verify): a positive not-live signal, but traffic is seen.
   When the only logged traffic is probe traffic (scanner or monitoring, see
   palimp.formats.rt_flow), hits on the counters do not count as traffic seen.
-- V-DENY-NOTLIVE (verify): the same on an active deny or reject rule: removing a
-  block opens traffic, so a deny is a removal candidate only when deactivated.
 - V-NOTLIVE (removal_candidate): a positive not-live signal, no traffic seen.
 - V-PROBE-ONLY (verify): the only logged traffic is probe traffic, no
   not-live signal: not in use as far as the artifacts show, not unused either.
@@ -137,6 +141,8 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
         )
     probe = [e for e in evidence if e.kind == "probe_only"]
     absent = [e for e in evidence if e.tier == "T2" and e.signal == "absent"]
+    if is_deny(policy) and not policy.deactivated:
+        return _deny_verdict(finding, not_live, present, absent)
     temporary = [e for e in evidence if e.kind == "temporary_marker"]
     shared = [e for e in evidence if e.kind == "shared_address"]
     if shared and (present or not_live):
@@ -153,14 +159,6 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
             "V-CONTRADICTION",
             "a not-live signal and traffic seen contradict each other",
             _ids(not_live + present),
-        )
-    if not_live and is_deny(policy) and not policy.deactivated:
-        return (
-            "verify",
-            "V-DENY-NOTLIVE",
-            "a not-live signal on a rule that blocks traffic: removing a block opens that "
-            "traffic, so a deny rule is never a removal candidate unless it is deactivated",
-            _ids(not_live + [e for e in evidence if e.tier == "T2"]),
         )
     if not_live:
         return (
@@ -253,14 +251,6 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
         )
     if present:
         return "keep", "V-TRAFFIC", "traffic seen", _ids(present)
-    if absent and is_deny(policy) and not policy.deactivated:
-        return (
-            "keep",
-            "V-DENY-QUIET",
-            "a rule that blocks traffic and sees none: nobody tries the blocked flow, and "
-            "keeping a block opens nothing (session 31)",
-            _ids(absent),
-        )
     if absent:
         return (
             "verify",
@@ -597,6 +587,51 @@ CLEANUP_ASK = (
     "change the action (decision 0026)"
 )
 
+
+def _deny_verdict(
+    finding: Finding, not_live: list[Evidence], present: list[Evidence], absent: list[Evidence]
+) -> tuple[str, str, str, list[str]]:
+    """An active deny or reject rule is kept whatever its signals (session 33, decision
+    0048): removing a block opens the traffic it blocks, keeping it opens nothing."""
+    t2 = [e for e in finding.evidence if e.tier == "T2"]
+    if not_live:
+        return (
+            "keep",
+            "V-DENY-NOTLIVE",
+            "a not-live signal on a rule that blocks traffic: removing a block opens that "
+            "traffic, keeping it opens nothing; whether the block is still wanted is a "
+            "question for the firewall team",
+            _ids(not_live + t2),
+        )
+    if present:
+        return (
+            "keep",
+            "V-DENY-TRAFFIC",
+            "a rule that blocks traffic, and traffic still reaches it: the block is at work",
+            _ids(present),
+        )
+    if absent:
+        return (
+            "keep",
+            "V-DENY-QUIET",
+            "a rule that blocks traffic and sees none: nobody tries the blocked flow, and "
+            "keeping a block opens nothing (session 31)",
+            _ids(absent),
+        )
+    return (
+        "keep",
+        "V-DENY-BLIND",
+        "a rule that blocks traffic, and no artifact shows whether anything tries it: "
+        "keeping a block opens nothing; whether it is still wanted is a question for the "
+        "firewall team",
+        _ids(t2),
+    )
+
+
+# Keep verdicts of active deny rules still asked of the firewall team, last and at low
+# priority: "Is this block still wanted?" (session 33, decision 0048).
+DENY_ASKED = frozenset({"V-DENY-NOTLIVE", "V-DENY-BLIND"})
+
 QUESTIONS = {
     "V-PROBE-ONLY": "Only scanner or monitoring probes were seen on this policy. Does any "
     "business flow still need it?",
@@ -661,9 +696,10 @@ def ticket_lookup(finding: Finding) -> str:
 def _shadowed(verdict: tuple[str, str, str, list[str]], finding: Finding) -> tuple:
     """A rule placed after a catch-all deny of its zone pair can never match (session 31):
     a keep becomes verify, a question for the firewall team. Never a removal candidate
-    (that needs the project lead's approval); other verdicts are unchanged."""
+    (that needs the project lead's approval); other verdicts are unchanged. An active
+    deny stays keep: blocking what the deny above blocks opens nothing (decision 0048)."""
     shadowed = [e for e in finding.evidence if e.kind == "shadowed"]
-    if not shadowed or verdict[0] != "keep":
+    if not shadowed or verdict[0] != "keep" or verdict[1].startswith("V-DENY-"):
         return verdict
     hits = [e for e in finding.evidence if e.tier == "T2" and e.signal == "present"]
     reason = "the rule comes after a catch-all deny of its zone pair, so it can never match"
@@ -689,8 +725,9 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
     ask = owner.text
     if v_rule in TEAM_ASK:
         ask = TEAM_ASK[v_rule]
-    elif is_deny(finding.policy) and verdict == "verify":
-        question, ask = DENY_QUESTION, DENY_ASK
+    elif is_deny(finding.policy) and (verdict == "verify" or v_rule in DENY_ASKED):
+        ask = DENY_ASK
+        question = DENY_QUESTION if verdict != "keep" else question
     if finding.policy.deactivated and verdict != "keep":
         question, ask = CLEANUP_QUESTION, CLEANUP_ASK
     if question:

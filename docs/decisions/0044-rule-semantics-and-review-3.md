@@ -1,6 +1,6 @@
 # 0044 Rule semantics (deny, cleanup, factory default, broad permit) and review-3 fixes
 
-- Status: Accepted
+- Status: Accepted, partly superseded by decision 0048 (item 9: an active deny with a not-live signal is keep, not verify)
 - Date: 2026-10-20 (session 29, analyzer)
 - Supersedes: decision 0043 item 9, the part where the policy name may
   confirm a two-letter name, and the part where `ad` leaves the server roles;

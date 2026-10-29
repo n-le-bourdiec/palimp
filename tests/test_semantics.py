@@ -49,7 +49,8 @@ def test_a_deny_rule_says_what_it_blocks_and_asks_if_the_block_is_wanted(
     data = run(tmp_path, policy("no-ftp", "any", "qorv-lan", "junos-ftp", "deny"))
     found = collect(data, PolicyKey.parse("a/b/no-ftp"))
     a = found.assessment
-    assert a.verdict == "verify" and a.question == "Is this block still wanted?"
+    # Decision 0048: kept with no visibility, still asked of the firewall team.
+    assert (a.verdict, a.verdict_rule) == ("keep", "V-DENY-BLIND") and a.question is None
     text = intent(found).text
     assert text.startswith(
         "Blocks FTP from anywhere in zone a to the 10.30.0.0/24 network (qorv-lan)"
@@ -59,7 +60,8 @@ def test_a_deny_rule_says_what_it_blocks_and_asks_if_the_block_is_wanted(
 
 
 def test_a_deny_rule_is_never_a_removal_candidate_unless_deactivated(tmp_path: Path) -> None:
-    # A not-live signal on an active deny gives verify: removing a block opens traffic.
+    # A not-live signal on an active deny gives keep: removing a block opens traffic
+    # (decision 0048).
     data = run(tmp_path, policy("no-ftp", "any", "qorv-web-01", "junos-ftp", "reject"))
     found = collect(data, PolicyKey.parse("a/b/no-ftp"))
     signal = Evidence(
@@ -80,7 +82,8 @@ def test_a_deny_rule_is_never_a_removal_candidate_unless_deactivated(tmp_path: P
         evidence=[*found.evidence, signal],
     )
     a = assess(marked, data)
-    assert (a.verdict, a.verdict_rule) == ("verify", "V-DENY-NOTLIVE")
+    assert (a.verdict, a.verdict_rule) == ("keep", "V-DENY-NOTLIVE")
+    assert a.ask.startswith("firewall team") and a.question is None
     assert intent(found).text.startswith("Rejects FTP from anywhere in zone a to host 10.30.0.5")
     config = policy("old-block", "any", "qorv-web-01", "junos-ftp", "deny")
     config += "deactivate security policies from-zone a to-zone b policy old-block\n"
@@ -278,7 +281,7 @@ def test_deny_questions_go_to_the_firewall_team(tmp_path: Path) -> None:
     assert report.rules[0].group == FIREWALL_TEAM
     questionnaires = build_questions(report)
     assert [q.name for q in questionnaires] == [CLEANUP_NAME]
-    assert "Rules that block traffic (1)" in questionnaires[0].text
+    assert "Rules that block traffic (low priority) (1)" in questionnaires[0].text
     assert "Question: Is this block still wanted?" in questionnaires[0].text
 
 
@@ -322,3 +325,27 @@ def test_a_quiet_deny_is_kept_and_states_its_block(tmp_path: Path) -> None:
     assert (a.confidence, a.confidence_rule) == ("MEDIUM", "C-BLOCK")
     other = collect(data, PolicyKey.parse("a/b/to-web")).assessment
     assert other.verdict == "verify" and other.confidence == "LOW"
+
+
+def test_every_active_deny_is_kept_low_priority_question_when_blind(tmp_path: Path) -> None:
+    # Decision 0048: an active deny or reject rule is keep whatever its signals. Traffic on
+    # it is the block at work; only a not-live signal or no visibility keeps the question,
+    # in the last section of the firewall team list.
+    config = policy("no-ftp", "any", "qorv-lan", "junos-ftp", "deny")
+    config += policy("no-ssh", "any", "qorv-lan", "junos-ssh", "reject")
+    config += policy("no-tel", "any", "qorv-lan", "junos-telnet", "deny")
+    config += "deactivate security policies from-zone a to-zone b policy no-tel\n"
+    hits = "1   a   b   no-ftp   12   Deny\n2   a   b   no-ssh   0   Reject\n"
+    data = run(tmp_path, config, hits)
+    verdicts = {
+        key: (a.verdict, a.verdict_rule)
+        for key in ("a/b/no-ftp", "a/b/no-ssh")
+        if (a := collect(data, PolicyKey.parse(key)).assessment)
+    }
+    assert verdicts == {
+        "a/b/no-ftp": ("keep", "V-DENY-TRAFFIC"),
+        "a/b/no-ssh": ("keep", "V-DENY-QUIET"),
+    }
+    assert collect(data, PolicyKey.parse("a/b/no-tel")).assessment.verdict != "keep"
+    questionnaires = build_questions(build_report(data))
+    assert not any("Rules that block traffic" in q.text for q in questionnaires)

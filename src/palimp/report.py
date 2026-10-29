@@ -30,6 +30,7 @@ from palimp.addresses import is_public
 from palimp.assess import (
     CLEANUP_ASK,
     CLEANUP_QUESTION,
+    DENY_ASKED,
     DENY_QUESTION,
     NOT_LIVE_KINDS,
     TEAM_ASK,
@@ -416,12 +417,17 @@ def name_mismatch(finding: Finding) -> bool:
 def team_finding(finding: Finding) -> str:
     """`factory_default` or `broad_permit` when the rule is one (session 29), a finding
     for the firewall team list whatever its verdict; `deny` for an active deny or reject
-    rule asked about (session 31); "" otherwise or when deactivated."""
+    rule asked about (session 31): a verify verdict, or a keep the firewall team is still
+    asked about at low priority (DENY_ASKED, decision 0048); "" otherwise or when
+    deactivated."""
     if is_cleanup(finding):
         return ""
     kinds = {e.kind for e in finding.evidence}
     found = next((k for k in ("factory_default", "broad_permit", "shadowed") if k in kinds), "")
-    if not found and is_deny(finding.policy) and finding.assessment.verdict != "keep":  # type: ignore[union-attr]
+    assessment = finding.assessment
+    assert assessment is not None
+    asked = assessment.verdict != "keep" or assessment.verdict_rule in DENY_ASKED
+    if not found and is_deny(finding.policy) and asked:
         found = "deny"
     return found
 
@@ -924,6 +930,8 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
         question = YES_NO[assessment.verdict_rule] if assessment.verdict != "keep" else ""
         if question and finding.policy.action in ("deny", "reject"):
             question = DENY_QUESTION
+        if assessment.verdict_rule in DENY_ASKED:
+            question = DENY_QUESTION  # a keep still asked, at low priority (decision 0048)
         owner = assessment.ask or ""
         team = cleanup or shared or assessment.verdict_rule == "V-NAME-SERVICE"
         team = team or assessment.verdict_rule in TEAM_ASK or team_finding(finding) == "deny"

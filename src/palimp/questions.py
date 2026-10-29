@@ -26,6 +26,10 @@ reason to verify them (V-FACTORY-DEFAULT, V-BROAD-PERMIT), owners are not asked.
 
 Session 31: broad permits from a zone named like the internet open the list; active deny
 and reject rules asked about go to the firewall team only (is the block still wanted?).
+
+Session 33 (decision 0048): active deny and reject rules are always keep. Those with a
+not-live signal or no visibility stay in the firewall team list, in the last section, at
+low priority.
 """
 
 import csv
@@ -288,10 +292,11 @@ TEAM_SECTIONS = {
         "leftover?",
     ),
     "deny": (
-        "Rules that block traffic",
-        "Each rule below denies or rejects traffic. Removing a block opens that traffic, so "
-        "whether it is still wanted is a question about the firewall itself, not for an "
-        "application owner.",
+        "Rules that block traffic (low priority)",
+        "Each rule below denies or rejects traffic and is kept: removing a block opens that "
+        "traffic, keeping it opens nothing. A record says what it protects is gone, or "
+        "nothing shows whether anything tries it. Whether it is still wanted is a question "
+        "about the firewall itself, not for an application owner, and it can wait.",
     ),
     "factory_default": (
         "Junos factory default policies",
@@ -416,7 +421,11 @@ def cleanup_list(report: Report) -> Questionnaire | None:
 
 
 def build(report: Report) -> list[Questionnaire]:
-    asked = [r for r in report.rules if r.section in ("removal_candidate", "verify")]
+    asked = [
+        r
+        for r in report.rules
+        if r.section in ("removal_candidate", "verify") or team_finding(r.finding) == "deny"
+    ]
     owned: dict[str, list[RuleEntry]] = {}
     may_own: dict[str, list[RuleEntry]] = {}
     unnamed: dict[str, list[RuleEntry]] = {}

@@ -1,6 +1,6 @@
 # 0046 Anonymize keeps kept-word prefixes; session 31 analyzer changes
 
-- Status: Accepted
+- Status: Accepted, partly superseded by decision 0048 (item 7: an active deny with no visibility is keep, not verify)
 - Date: 2026-10-20 (session 31, analyzer)
 - Supersedes: decision 0031, the limit "a kept signal word that starts a
   longer name no longer shares its prefix with it".
