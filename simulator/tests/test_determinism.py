@@ -25,9 +25,11 @@ from palimp_sim.generate import generate
 # in every rule, shadowed rules and `ANY` address sets in Medium and Hard
 # (decision 0047). Easy artifacts did not change; its ground truth gains the
 # two fields (test_easy_changed_only_by_version below).
+# 0.5.1 (session 34): a direct statement alone justifies MEDIUM in Medium and
+# Hard (decision 0049). Easy output did not change.
 GOLDEN = {
-    1: "321be406b21aed1831d9b78d8608d0458cfb14f6aedbcb83462597d3a1c6ba11",
-    7: "ecafedb605325af3e23ca4cce0292f76d56ab3482a59fb4e7f3e43eaa89859b7",
+    1: "df53a0ed1571a3c0fea68e0ca75b3b9c459601aa53001c4c4cd4eb45ac4bb34c",
+    7: "92e68539e72ed246e706e7540d5b1b6a2da5f2ab4c180e61e5963bb60c28f9f5",
 }
 # Easy hashes of earlier versions: still produced when the version string is
 # set back and the fields added since are left out of the ground truth.
@@ -36,8 +38,15 @@ GOLDEN_EARLIER = {
     ("0.3.0", 7): "c85ddc7f0b22dcf6d7188203ab3db48e23eb44b12062ae390dfeab1bf62df3d3",
     ("0.4.0", 1): "3c8ee77e905fe22bf2e478a163ce58eedb53d2ef534bd0c89ff409e79bd26324",
     ("0.4.0", 7): "b616ad6db3bb8d63ec44e227f3c0888b2ae81c8d925f5c1e0034c91ca93cdf12",
+    ("0.5.0", 1): "321be406b21aed1831d9b78d8608d0458cfb14f6aedbcb83462597d3a1c6ba11",
+    ("0.5.0", 7): "ecafedb605325af3e23ca4cce0292f76d56ab3482a59fb4e7f3e43eaa89859b7",
 }
-FIELDS_SINCE_0_4_0 = ("rule_kind", "best_achievable_intent")
+# Ground truth fields added after each earlier version.
+FIELDS_SINCE = {
+    "0.3.0": ("rule_kind", "best_achievable_intent"),
+    "0.4.0": ("rule_kind", "best_achievable_intent"),
+    "0.5.0": (),
+}
 
 
 def test_same_seed_same_bytes() -> None:
@@ -63,7 +72,7 @@ def test_easy_changed_only_by_version(
     files = generate("easy", seed)
     document = json.loads(files["ground_truth.json"])
     for rule in document["rules"]:
-        for name in FIELDS_SINCE_0_4_0:
+        for name in FIELDS_SINCE[version]:
             del rule["expected"][name]
     data = generate_module._json(document).encode("utf-8")
     manifest = json.loads(files["manifest.json"])
@@ -100,8 +109,9 @@ def test_unknown_level_is_rejected() -> None:
 # 0.3.0 (session 10): trap counts drawn per scenario (decision 0018).
 # 0.4.0 (session 30): decision 0045.
 # 0.5.0 (session 32): decision 0047.
+# 0.5.1 (session 34): decision 0049.
 GOLDEN_MEDIUM = {
-    0: "a2428c2403dde8b2cd2ce6d71ac7540162b8499f3fd6293d9d72b56a268278ba",
+    0: "83beb244763fc35e6684a79a1dd7f8036b7927fd8e75419868b8dbe1c5972a8c",
 }
 
 

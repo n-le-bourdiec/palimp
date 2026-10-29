@@ -17,9 +17,13 @@ in spec 6.1 as simulator rules (the analyzer code is never read):
   (or the policy name) cites;
 - a source that names the application only by a two-letter name (`ci`,
   `bi`, `hr`, `kb`, `s4`) counts only next to a source that is not a name;
-- one source gives at most LOW, two independent sources MEDIUM, and HIGH
+- one name gives at most LOW, two independent sources MEDIUM, and HIGH
   needs two sources, one of them a direct statement (description,
-  annotation, comment, ticket), and traffic seen.
+  annotation, comment, ticket), and traffic seen;
+- a direct statement is the strongest tier (T1), not a name: alone it gives
+  MEDIUM, unless another direct statement on the rule names a different
+  application or the rule carries a misleading comment, then LOW
+  (decision 0049).
 """
 
 import re
@@ -157,16 +161,40 @@ def rule_sources(
     return found
 
 
+def contradicted(
+    app_id: str,
+    others: list[str],
+    texts: list[str],
+    comment: str | None,
+    tickets: list[str],
+    misleading: bool = False,
+) -> bool:
+    """Whether a direct statement on the rule names an application other than `app_id`.
+
+    `others`: every other application of the scenario. The base of a
+    regional instance (`erp` for `erp-de`) is not another application: its
+    name is part of the instance name. `misleading`: the rule carries a
+    copied comment (TRAP-MISLEADING-COMMENT).
+    """
+    if misleading or any(t != app_id for t in tickets):
+        return True
+    statements = [t for t in [*texts, comment or ""] if t]
+    others = [o for o in others if o not in (app_id, _base(app_id))]
+    return any(names(t, o) for t in statements for o in others)
+
+
 def counted(found: list[Source]) -> list[Source]:
     """Sources that count: a two-letter name needs a source that is not a name."""
     backed = any(not s.name for s in found)
     return [s for s in found if not (s.name and s.short and not backed)]
 
 
-def confidence(found: list[Source], traffic: bool) -> str:
+def confidence(found: list[Source], traffic: bool, disputed: bool = False) -> str:
+    """`disputed`: another direct statement names a different application (`contradicted`)."""
     sources = counted(found)
     if len(sources) < 2:
-        return "LOW"
+        alone = sources and sources[0].direct and not disputed
+        return "MEDIUM" if alone else "LOW"
     if traffic and any(s.direct for s in sources):
         return "HIGH"
     return "MEDIUM"

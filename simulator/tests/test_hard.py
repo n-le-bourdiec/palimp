@@ -57,7 +57,9 @@ SEEDS = [0, 2, 3, 4, 11]
 # source confidence model and new rule kinds.
 # Session 32 (simulator 0.5.0, decision 0047): rule kind and best achievable
 # intent, shadowed rules and `ANY` address sets.
-GOLDEN_HARD = {0: "02d2f9fea57563e77606a03ca5f0f08760a09be29112c4249f3473e81d7c5c19"}
+# Session 34 (simulator 0.5.1, decision 0049): a direct statement alone
+# justifies MEDIUM.
+GOLDEN_HARD = {0: "16365f2d09ee605d84d8a9421c1a31a357eb4ab9190121d6cacb8b7c98175ba6"}
 # Trap counts of Hard seeds 0 to 49 (session 25), so that the distribution
 # check needs no generation. The fixture seeds are regenerated against them in
 # every run, the other seeds one test each under "full" (spread by xdist).
