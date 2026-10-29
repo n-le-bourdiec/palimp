@@ -153,6 +153,15 @@ no other draw of the timeline:
   ticket number alone (0.25, a `RITM` number when the rule has no ticket),
   or free text that names no application (0.2: `requested by <owner>`,
   `per change board`, `project Atlas`).
+- `ANY` address sets (simulator 0.5.0, decision 0047): in 20% of Medium and
+  30% of Hard scenarios (own sub-generator `any-object`), an address set
+  named `ANY` or `Any-Hosts` holds the user site subnets, the same members
+  as the set of every site, never 0.0.0.0/0. Each rule of a senior admin or
+  the operator whose source is the set of every site uses it instead with
+  probability 0.1, until the scenario's 1 to 3 rules are drawn. Traffic does
+  not change; the set names no application (`generic_names`). Measured on
+  Medium 0 to 99: 19 rules in 12 scenarios; Hard 0 to 49: 31 rules in 19
+  scenarios.
 
 ## 3. Admin personas
 
@@ -352,7 +361,41 @@ through for a broad permit or a factory default (it stops some day for 40%
 of them). Deny rules never log (`RT_FLOW_SESSION_DENY` has no captured
 sample).
 
-Ground truth (`app_id` `firewall`, owner `firewall_team`):
+Shadowed rules (simulator 0.5.0, decision 0047, own sub-generator
+`shadowed`). Junos appends a new policy at the end of its zone pair; a rule
+added without `insert policy ... before` lands after the catch-all deny and
+never matches (Junos behavior from general knowledge; S8 says shadowed rules
+are common; one real public configuration holds a global policy after a
+global catch-all deny, `docs/real-configs-robustness.md`).
+Per scenario 0, 1 or 2 (weights Medium 0.7, 0.25, 0.05; Hard 0.5, 0.35,
+0.15), 20 to 400 days after a catch-all deny from the users zone or the
+internet to the servers, DMZ or management zone, a senior admin or the
+operator adds an access rule (event `access_request`, note `rule after a
+catch-all deny`) for a new workstation (`10.10.<site>.241` to `.249`) or
+vendor (`203.0.113.100` to `.119`) to a live application tier, after the
+deny (`tail`). Its flow is counted from the rule kinds' generator and hits
+the deny. The rule is protected from hit count cleanups; a migration or a
+replacement of its application ends its flow without moving it; a
+decommission, a migration cleanup, a rename and a copied comment never
+pick it. So no other draw of the timeline moves.
+
+| Field | Shadowed rule |
+|---|---|
+| `intent` | the application and its access kind (`app_access`, `partner_access`) |
+| `status` | `live` false; `still_needed` true while its flow still runs and no permit carries it; `hits_reason` `none` |
+| `verdict` | verify while still needed, else removal_candidate |
+| `best_achievable_verdict` | verify |
+| `owner_to_ask` | `firewall_team` (only the firewall team can move the rule) |
+| evidence | `policy X after catch-all deny Y` (T3, `not_live`), plus the usual items |
+| `traps` | `TRAP-SHADOWED-BY-DENY` |
+
+Measured: Medium 0 to 99, 10 rules in 8 scenarios (6 still needed); Hard 0
+to 49, 21 rules in 14 scenarios (13 still needed).
+
+Ground truth of the firewall team rules (owner `firewall_team`; `intent.app_id`
+is the pseudo application `firewall`, kept only because the schema needs a
+string there, decision 0047; `expected.rule_kind` is the kind and
+`expected.best_achievable_intent` is null):
 
 | Kind (`intent.kind`) | Verdict | Best achievable | Max justified confidence | Status |
 |---|---|---|---|---|
@@ -658,11 +701,30 @@ Field meanings:
   is matched to the ground truth (zone pair plus final policy name).
 - `intent.kind`: enum `app_access`, `app_dependency`, `shared_service`,
   `management`, `monitoring`, `backup`, `partner_access`, `internet_access`,
-  `emergency_temporary`, `migration_bridge`, `test`, `unknown_origin`.
-  Intent accuracy is scored on `kind` plus `app_id`, not on free text.
+  `emergency_temporary`, `migration_bridge`, `test`, `unknown_origin`, and
+  the firewall team kinds `block`, `cleanup_deny`, `broad_permit`,
+  `factory_default` (section 4.11). Intent accuracy is scored on `kind` plus
+  `app_id`, not on free text; from simulator 0.5.0, on the two fields below.
+- `expected.rule_kind` (from 0.5.0, decision 0047): `application` for a rule
+  made for an application (shadowed rules included), else the firewall team
+  kind, equal to `intent.kind`. The pseudo application `firewall` stays in
+  `intent.app_id`, `flows[].app_id` and `apps` only, because the schema
+  needs a string there; it is never a value of `rule_kind` or
+  `best_achievable_intent`.
+- `expected.best_achievable_intent` (from 0.5.0, decision 0047): the
+  application a perfect analyzer can name from the artifacts, or null.
+  Application rules: `intent.app_id` when at least one naming source of
+  section 6.1 names it, counted with the rules of 6.1 (one source is
+  enough; a two-letter name alone does not count); null when none does, so
+  "purpose unknown" is the right answer. Hard: when a stale name no
+  artifact reveals (decision 0040) is the only naming, the replaced
+  application. Firewall team rules: always null. Easy computes it with the
+  same rules (every Easy object names its application). Both fields are
+  optional in the schema and always written from 0.5.0.
 - `status.live`: at least one flow the rule is meant for still exists and is
   matched by this rule. `hits_reason` explains traffic that is not business
-  use: `scanner`, `monitoring`, `ip_reuse`, `shadowing_other_rule`, `none`.
+  use: `scanner`, `monitoring`, `ip_reuse`, `shadowing_other_rule`, `none`,
+  and `blocked` for a deny's refused attempts.
 - `expected.verdict`: the right answer with perfect knowledge.
   `expected.best_achievable_verdict`: the best answer a perfect analyzer can
   give from the artifacts only. Scoring uses the latter, and reports both.
@@ -727,6 +789,9 @@ Dynamic applications and custom application names are sources in the
 analyzer's model; the simulator writes neither, so they never appear. The
 rule kinds of section 4.11 have fixed confidence levels instead (their intent
 is read from the rule's structure, not from names).
+
+The same counted sources give `expected.best_achievable_intent` (decision
+0047): one counted source names the application, none leaves it null.
 
 ## 7. Difficulty levels
 
@@ -846,6 +911,7 @@ before the retained history whose old name is still in the logs).
 | `TRAP-SCANNER-HITS` | Hard | hits only from scanners or monitoring | live | dead for business use |
 | `TRAP-EMERGENCY-LOADBEARING` | v1 | "temporary" broad rule now the only one carrying a flow | remove the temp rule | needed, verify and replace |
 | `TRAP-SHADOWED-DUPLICATE` | v2 | valid intent, rule never matched because an earlier rule covers it | dead, unknown intent | intent known, rule redundant |
+| `TRAP-SHADOWED-BY-DENY` | Medium and Hard (0.5.0) | access rule added after the catch-all deny of its zone pair; its flow keeps hitting the deny | zero hits, remove | still needed, broken; verify with the firewall team |
 | `TRAP-RENAME-CHAIN` | Hard | object or policy renamed, old rollbacks use old names | two unrelated rules | same rule |
 | `TRAP-DEACTIVATED` | v1 | deactivated policy still in config | active rule | inactive; intent historical |
 | `TRAP-TICKET-REJECTED` | v2 | ticket rejected or cancelled but rule exists | intent from ticket | intent unconfirmed |
@@ -957,6 +1023,27 @@ naming source, and the tier rule gave MEDIUM or HIGH to 99%. After, a third
 of the application rules have no source and most rules are LOW, as the
 project lead's model says for names seen once. Spec 7.5 numbers (415
 policies) are 0.3.0 measurements.
+
+### 7.7 Best achievable intent and the new cases, measured (0.5.0)
+
+Session 32, Medium seeds 0 to 99 and Hard seeds 0 to 49 (simulator 0.5.0).
+
+| Measure | Medium | Hard |
+|---|---|---|
+| rules | 15999 | 21050 |
+| application rules (`rule_kind` `application`) | 15662 | 20771 |
+| ... `best_achievable_intent` null | 5228 (33.4%) | 7590 (36.5%) |
+| ... `best_achievable_intent` another application (hidden stale name) | 0 | 85 (0.4%) |
+| firewall team rules (`best_achievable_intent` always null) | 337 | 279 |
+| shadowed rules (`TRAP-SHADOWED-BY-DENY`) | 10 in 8 scenarios | 21 in 14 scenarios |
+| ... still needed (verdict verify) | 6 | 13 |
+| ... `best_achievable_intent` null | 2 | 11 |
+| rules with an `ANY` or `Any-Hosts` source | 19 in 12 scenarios | 31 in 19 scenarios |
+
+Against 0.4.0 on the same seeds, every 0.4.0 rule keeps its expected
+values, owner, traps and intent; in 6 scenarios some policy and
+workstation names take another uniqueness suffix. Easy artifacts are
+byte-identical.
 
 ## 8. Determinism and the dev / held-out split
 
@@ -1152,6 +1239,7 @@ sources and remain simulator choices.
 | `TRAP-IP-REUSE` | Hard | S7 (an address reassigned after a decommission turns the stale rule into an exposure); the admin who finds the flow already open and adds no rule is UNGROUNDED |
 | `TRAP-SCANNER-HITS` | Hard | S18 |
 | `TRAP-SHADOWED-DUPLICATE` | v2 | S8 |
+| `TRAP-SHADOWED-BY-DENY` | Medium and Hard | S8 (shadowed rules are never used); one real public configuration holds a global policy after a global catch-all deny (session 31); that `set` appends a policy at the end of its zone pair is general Junos knowledge, no retrieved source |
 | `TRAP-RENAME-CHAIN` | Hard | S19 (the `rename` command), S20 (a new naming scheme over a mixed rule base), S4 (old rollbacks keep the old names); no source shows the renames in a real history |
 | `TRAP-TICKET-REJECTED` | v2 | UNGROUNDED |
 | `TRAP-SHARED-LOGIN` | v2 | S10 |
