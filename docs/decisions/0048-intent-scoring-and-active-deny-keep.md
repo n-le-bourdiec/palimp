@@ -1,10 +1,12 @@
-# 0048 Intent scored against what the artifacts allow; every active deny is keep
+# 0048 Intent scored against what the artifacts allow; every active deny is keep; endpoints and site prefixes
 
 - Status: Accepted
 - Date: 2026-10-29 (session 33, analyzer)
 - Supersedes: decision 0044 item 9, the part "an active deny with a not-live
   signal is verify (V-DENY-NOTLIVE)"; decision 0046 item 7, the part "rules
-  with no visibility at all stay verify".
+  with no visibility at all stay verify"; decision 0042, the part "person
+  names stay possible applications at LOW" for workstation objects; decision
+  0043 item 8, narrowed to services that are applications of their own.
 - Extends: decision 0047 (best achievable intent and rule kind in the ground
   truth), decision 0036 (Hard table in the held-out workflow).
 - Challenged by Nathan: yes (session 33 prompt, 1 challenge): a hidden stale
@@ -61,6 +63,39 @@ at all should be keep too (decision 0046 kept it verify).
    priority)". The report entry carries the question; the assessment's
    question stays empty (a keep is never asked of an owner).
 
+4. **Endpoints name no application** (tuned on Medium 0-19 and Hard 0-19).
+   An address object whose name holds a workstation or remote access word
+   (`pc`, `lt`, `laptop`, `nb`, `notebook`, `desktop`, `wks`, `ws`, `vpn`,
+   `remote`, `support`), unless a ticket backs that word as an application,
+   is a person's machine or an outside party's access: `greta-jansen-pc-5`,
+   `LT-Oskar-Gallo`, `Calder-Systems-VPN`. Its first segment is not learned
+   and it names no application. Policy names are not endpoints (they may name
+   the application next to `remote`). No person name list (decision 0042
+   stands on that): the rule reads the role word, not the name.
+5. **Site prefixes are not applications.** A first segment no ticket backs
+   is a site when the objects it starts go on with the names of two
+   applications tickets.csv knows (`GRT-ERP-APP01`, `GRT-LMS-WEB01`), with at
+   least 6 distinct server roles (`OKV-DB01`, `OKV-NS01`, `OKV-SMTP01`, ...),
+   or with a word for where users sit (`MRD-Users`, `DNX-LAN`,
+   `brv_clients`). It is not learned. Anonymize keeps the words of items 4
+   and 5 (as it keeps role words, decision 0042 item 5), so an anonymized
+   copy gives the same judgments.
+6. **A database engine or a file, backup or mail transfer protocol on a
+   matching server role names no application** (`ROLE_SERVICES` keeps DNS,
+   NTP, proxy, directory, RADIUS, log, monitoring and FTP). `srv-db-01` on
+   tcp/1433 says SQL Server, not which application uses it: the intent
+   describes the flow and names none, LOW (C-WEAK). On the tuning seeds the
+   old rule was right for dns, ntp and vault (services that are applications
+   here) and wrong for mssql, postgresql, oracle, mysql, smb, ndmp and smtp.
+7. **Verdicts do not move with items 4 and 5.** Positive not-live signals and
+   shared addresses keep the reading of names before session 33
+   (`vocabulary(places=False)`), like regional instances (session 24): read
+   with the new rules, a decommission of `crm-it` matched `DNX-CRMIT-APP01`
+   once `dnx` was a site (3 Hard and 2 Medium tuning rules toward
+   removal_candidate), and `RZ-TMS-APP01` no longer named a second
+   application for a shared address (17 TRAP-IP-REUSE rules toward keep).
+   Moving the not-live reading needs the project lead's approval.
+
 ## Alternatives considered
 
 - Keep `V-NO-VISIBILITY` verify on deny rules (decision 0046): the project
@@ -74,8 +109,20 @@ at all should be keep too (decision 0046 kept it verify).
   `best_achievable_intent` is absent (ground truth before 0.5.0): the script
   falls back to `intent.app_id` there, as before.
 
+- Use the new name reading for not-live signals too: it moves rules toward
+  removal_candidate (item 7); needs approval.
+- Lower C-T1-ONLY (a T1 alone naming the application) to LOW: on Medium
+  0-19, 149 such rules have a best achievable confidence of HIGH and 197 of
+  LOW; no single level fits, left for a later session.
+- A person name list: rejected in decision 0042, still rejected.
+
 ## Consequences
 
 - Verdicts move only toward keep: verify to keep on active deny rules.
+  Items 4 to 6 move intent and confidence only.
+- Medium overconfidence rises on the tuning seeds (7.2% to 9.7%): with the
+  person name gone, a rule whose T1 names the application no longer
+  conflicts with its objects and gets MEDIUM (C-T1-ONLY), where the ground
+  truth often says LOW. Hard overconfidence falls (7.4% to 5.3%).
 - Intent numbers are not comparable with those recorded before session 33;
   the old number is still printed next to the new one.

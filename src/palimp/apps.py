@@ -41,6 +41,24 @@ an exact match. A bare name is never expanded to one of its instances
 (`payroll` does not name `payroll-uk`). A bare name that is not itself a
 related CI while instances of it exist is ambiguous: `candidates` lists the
 instances it may stand for, and confidence is capped (palimp.assess).
+
+Endpoints (session 33, decision 0048). An object whose name holds a workstation or
+remote access word (ENDPOINT_WORDS: `greta-jansen-pc-5`, `LT-Oskar-Gallo`,
+`Calder-Systems-VPN`, `Norland-IT-remote`) is a person's machine or an outside
+party's access: its other words name a person, a company or a site, never an
+application. Its first segment is not learned and it names no application.
+
+Site prefixes (session 33, decision 0048). A first segment that no ticket backs is a
+site, not an application, when the objects it starts go on with the names of two
+applications tickets.csv knows (`GRT-ERP-APP01`, `GRT-LMS-WEB01`), with at least
+MIN_SITE_ROLES server roles (`OKV-DB01`, `OKV-NS01`, `OKV-SMTP01`, `OKV-WEB03`, ...),
+or with a word for where users sit (`MRD-Users`, `DNX-LAN`). It is not learned.
+
+Endpoints and site prefixes change what names an application, so they could create
+not-live signals (a decommission of `crm-it` now matching `DNX-CRMIT-APP01`) or drop
+shared addresses (`RZ-TMS-APP01` named `rz`). Positive not-live signals and shared
+addresses keep the reading before session 33 (`vocabulary(places=False)`) until the
+project lead approves the move, like regional instances.
 """
 
 import re
@@ -173,6 +191,38 @@ CONDITIONAL_ROLES: dict[str, tuple[str, frozenset[str]]] = {
 # Hosting platforms (session 31): where an application runs, not which one it is
 # (`GIT-AZURE-MS-SQL` is SQL hosted in Azure).
 HOSTING = frozenset({"azure", "aws", "gcp", "oci"})
+# Words that make an object a person's machine (`pc`, `lt` for laptop) or an outside
+# party's access (`vpn`, `remote`): such an object names no application (session 33).
+ENDPOINT_WORDS = frozenset(
+    {"pc", "lt", "laptop", "nb", "notebook", "desktop", "wks", "ws", "vpn", "remote", "support"}
+)
+
+
+# Words after a site prefix for where users sit (`MRD-Users`, `brv_clients`).
+SITE_AREAS = frozenset({"users", "user", "clients", "lan", "wifi", "guest", "guests", "staff"})
+# Distinct server roles after one first segment that make it a site prefix: an
+# application's own hosts rarely span that many roles (`crm-web`, `crm-db`, `crm-app`).
+MIN_SITE_ROLES = 6
+
+
+def sites(names: list[str], backed: set[str]) -> set[str]:
+    """First segments of NAMES that are site prefixes, not applications (session 33)."""
+    after: dict[str, set[str]] = {}
+    for name in names:
+        tokens = [re.sub(r"\d+$", "", t) for t in re.split(r"[-_.]", name.lower())]
+        if len(tokens) >= 2 and tokens[0].isalpha() and tokens[1]:
+            after.setdefault(tokens[0], set()).add(tokens[1])
+    found = set()
+    for first, words in after.items():
+        if first in backed:
+            continue
+        apps = words & backed
+        roles = {w for w in words if w in SERVER_ROLES or w in ROLE_WORDS}
+        if len(apps) >= 2 or len(roles) >= MIN_SITE_ROLES or words & SITE_AREAS:
+            found.add(first)
+    return found
+
+
 # Shortest name read as an application when no ticket backs it.
 MIN_NAME = 3
 
@@ -229,10 +279,21 @@ class Vocabulary:
     # Two-letter first segments (`bi`, `hr`): names only when a second source confirms
     # them, never alone (decision 0043).
     short: set[str] = field(default_factory=set)
+    # Endpoints name no application (session 33); False keeps the earlier reading.
+    places: bool = True
+
+    def endpoint(self, name: str) -> bool:
+        """A person's machine or an outside party's access, by a word of its name that no
+        ticket backs as an application (a related CI `vpn` keeps `vpn-gw-01`)."""
+        words = set(re.split(r"[-_.]", name.lower()))
+        return self.places and bool(words & ENDPOINT_WORDS - self.backed)
 
     def short_in(self, name: str) -> list[str]:
         """Two-letter names of `short` in an object, policy or application name. A name
-        the vocabulary already knows (a ticket names `hr`) is read by `in_object`."""
+        the vocabulary already knows (a ticket names `hr`) is read by `in_object`. An
+        endpoint names none."""
+        if self.endpoint(name):
+            return []
         tokens = [t.lower() for t in re.split(r"[-_.]", name)]
         return list(dict.fromkeys(t for t in tokens if t in self.short and t not in self.names))
 
@@ -298,7 +359,7 @@ class Vocabulary:
     def in_application(self, name: str) -> list[str]:
         """Applications named by a custom application or application-set name. A product
         written in two words (`MS-SQL-PORT-GROUP` gives mssql) names it too (session 31)."""
-        found = self.in_object(name)
+        found = self.in_name(name)
         if found:
             return found
         tokens = [t.lower() for t in re.split(r"[-_.]", name) if t.isalpha()]
@@ -306,7 +367,12 @@ class Vocabulary:
         return list(dict.fromkeys(j for j in joined if j in PRODUCTS))
 
     def in_object(self, name: str) -> list[str]:
-        """Applications named by an address object name, for example `vendor-bi-52`."""
+        """Applications named by an address object name, for example `vendor-bi-52`. An
+        endpoint (`greta-jansen-pc-5`, `Calder-Systems-VPN`) names none."""
+        return [] if self.endpoint(name) else self.in_name(name)
+
+    def in_name(self, name: str) -> list[str]:
+        """Applications named by a policy, application or address object name."""
         tokens: list[tuple[str, bool]] = []
         for token in re.split(r"[-_.]", name):
             if not token.isalpha():
@@ -329,11 +395,13 @@ def _ci(value: str | None) -> str | None:
 MIN_ABBREVIATION = 3
 
 
-def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
+def vocabulary(dataset: Dataset, instances: bool = True, places: bool = True) -> Vocabulary:
     """The applications of DATASET. Without `instances`, regional instances are not
     learned: the reading before session 24, kept for positive not-live signals
-    (palimp.notlive, palimp.lineage) until the project lead approves the move."""
-    vocab = Vocabulary()
+    (palimp.notlive, palimp.lineage) until the project lead approves the move. Without
+    `places`, endpoints and site prefixes are read as before session 33, for the same
+    signals."""
+    vocab = Vocabulary(places=places)
     for ticket in dataset.tickets.values():
         if app := _ci(ticket.related_ci):
             vocab.names.add(app)
@@ -355,6 +423,11 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
         if len(apps) == 1 and short not in vocab.names and short not in ROLE_WORDS:
             vocab.aliases[short] = next(iter(apps))
     vocab.backed = set(vocab.names) | set(vocab.aliases)
+    prefixes = (
+        sites([n for n in dataset.config.addresses if not vocab.endpoint(n)], vocab.backed)
+        if places
+        else set()
+    )
     for policy in dataset.config.policies:
         zones = [policy.from_zone, policy.to_zone, *policy.match_from_zones]
         for zone in zones + policy.match_to_zones:
@@ -363,7 +436,11 @@ def vocabulary(dataset: Dataset, instances: bool = True) -> Vocabulary:
     # are names a person chose for what the rule serves (session 28).
     custom = [n for n in dataset.config.applications if not n.lower().startswith("junos-")]
     for name in [*dataset.config.addresses, *custom]:
+        if vocab.endpoint(name):
+            continue
         first = re.split(r"[-_.]", name.lower())[0]
+        if first in prefixes:
+            continue
         if not first.isalpha() or len(first) < 2 or first in ROLE_WORDS:
             continue
         if (

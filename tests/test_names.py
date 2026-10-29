@@ -84,8 +84,9 @@ def confidence(rules: str, name: str) -> tuple[str, str, list[str], str]:
 
 
 def test_a_name_on_one_side_only_stays_low() -> None:
+    # Session 33 (decision 0048): a person's machine (`dan-pc-07`) names no application.
     rules = policy("p1", "any", "dan-pc-07") + policy("p2", "any", "zorvex-db-01")
-    assert confidence(rules, "p1")[:3] == ("LOW", "C-T3-SINGLE", ["dan"])
+    assert confidence(rules, "p1")[:3] == ("LOW", "C-WEAK", [])
     assert confidence(rules, "p2")[:3] == ("LOW", "C-T3-SINGLE", ["zorvex"])
 
 
@@ -277,6 +278,19 @@ def test_a_server_role_matching_the_service_names_it() -> None:
     # A role that does not offer the service names nothing.
     a = collect(dataset(rules), PolicyKey.parse("a/b/p3")).assessment
     assert a.intent_apps == [] and a.confidence == "LOW"
+
+
+def test_a_database_engine_on_a_database_role_names_no_application() -> None:
+    # Session 33 (decision 0048): `srv-db-01` on tcp/1433 is SQL Server for some
+    # application, not the application. The flow is described, nothing is named.
+    rules = (
+        "set security address-book global address srv-db-01 10.4.0.4/32\n"
+        "set applications application tcp-1433 protocol tcp destination-port 1433\n"
+        + policy("p1", "any", "srv-db-01", "tcp-1433")
+    )
+    a = collect(dataset(rules), PolicyKey.parse("a/b/p1")).assessment
+    assert a.intent_apps == [] and (a.confidence, a.confidence_rule) == ("LOW", "C-WEAK")
+    assert a.intent_flow
 
 
 def test_a_two_letter_name_needs_a_second_source() -> None:
@@ -491,3 +505,43 @@ def test_several_conflicts_are_summarized_in_one_clause() -> None:
     first, last = shared[0], shared[-1]
     assert text.endswith(f" Conflicts: 3 shared addresses, see {first} to {last}.")
     assert text.count("Conflict") == 1
+
+
+def test_endpoints_name_no_application() -> None:
+    # Session 33 (decision 0048): workstations, laptops and outside parties' access.
+    objects = "".join(
+        f"set security address-book global address {name} 10.10.9.{i}/32\n"
+        for i, name in enumerate(("LT-Oskar-Gallo", "Calder-Systems-VPN", "greta-jansen-pc-5"))
+    )
+    rules = objects + policy("p1", "LT-Oskar-Gallo", "zorvex-db-01")
+    rules += policy("p2", "Calder-Systems-VPN", "zorvex-db-01")
+    vocab = vocabulary(dataset(rules))
+    for word in ("oskar", "calder", "greta"):
+        assert word not in vocab.names
+    assert vocab.in_object("greta-jansen-pc-5") == []
+    assert vocab.in_object("Norland-IT-remote") == []
+    # A policy name is not an endpoint: it may name the application next to `remote`.
+    assert vocab.in_name("zorvex-remote-access") == ["zorvex"]
+    assert confidence(rules, "p1")[2] == ["zorvex"]
+    assert confidence(rules, "p2")[2] == ["zorvex"]
+
+
+def test_site_prefixes_are_not_applications() -> None:
+    # Session 33 (decision 0048): a site code starts objects of other applications or of
+    # many server roles, or the users of a site.
+    tickets = {
+        f"CHG{i}": Ticket(ticket_id=f"CHG{i}", summary="x", related_ci=ci)
+        for i, ci in enumerate(("erp", "lms"))
+    }
+    names = ["GRT-ERP-APP01", "GRT-LMS-WEB01", "MRD-Users", "zorvex-web-01", "zorvex-db-01"]
+    names += [f"OKV-{r}01" for r in ("DB", "NS", "SMTP", "WEB", "APP", "SQL")]
+    rules = "".join(
+        f"set security address-book global address {n} 10.10.8.{i}/32\n"
+        for i, n in enumerate(names)
+    )
+    vocab = vocabulary(dataset(rules, tickets))
+    for site in ("grt", "mrd", "okv"):
+        assert site not in vocab.names
+    assert "zorvex" in vocab.names
+    assert vocab.in_object("GRT-ERP-APP01") == ["erp"]
+    assert vocab.in_object("OKV-DB01") == []

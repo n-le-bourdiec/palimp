@@ -1,6 +1,6 @@
 # 0042 Name filters, server roles and the corroboration rule
 
-- Status: Accepted, partly superseded by decision 0043 (both sides of a rule count as one source; a dynamic application alone gives MEDIUM)
+- Status: Accepted, partly superseded by decision 0043 (both sides of a rule count as one source; a dynamic application alone gives MEDIUM) and by decision 0048 (a workstation or remote access object names no application)
 - Date: 2026-10-13 (session 27, analyzer)
 - Extends: decision 0022 (applications learned from names) and the
   `ROLE_WORDS` list of `palimp.apps`.

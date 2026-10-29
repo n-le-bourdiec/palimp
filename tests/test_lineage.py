@@ -396,9 +396,9 @@ def test_a_shared_source_never_names_the_intent(tmp_path: Path) -> None:
     # Session 28: a member of the source set shares its address with an
     # object named after another word. The conflict is cited, never the intent.
     config = (
-        "set security address-book global address quill-pc 10.10.7.7/32\n"
-        "set security address-book global address brindle-pc 10.10.7.7/32\n"
-        "set security address-book global address-set hosted-nets address quill-pc\n"
+        "set security address-book global address quill-01 10.10.7.7/32\n"
+        "set security address-book global address brindle-01 10.10.7.7/32\n"
+        "set security address-book global address-set hosted-nets address quill-01\n"
         + rule("late", "hosted-nets", "any", app="any")
     )
     artifacts = write(tmp_path, [config], [""])

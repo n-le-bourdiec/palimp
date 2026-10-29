@@ -210,20 +210,19 @@ PORT_NAMES: dict[str, tuple[str, ...]] = {
 }
 # Server roles (palimp.apps labels) and the services they offer: a role that
 # matches the port names that service as the application (`dns-01` on udp/53).
+# Only services that are an application of their own. A database engine, a file,
+# backup or mail transfer protocol is a part of some business application:
+# `srv-db-01` on tcp/1433 says SQL Server, not which application uses it, so the
+# intent describes the flow and names none (session 33, decision 0048).
 ROLE_SERVICES: dict[str, frozenset[str]] = {
     "DNS": frozenset({"dns"}),
     "NTP": frozenset({"ntp"}),
     "proxy": frozenset({"proxy"}),
-    "mail": frozenset({"smtp"}),
     "directory": frozenset({"ldap", "kerberos"}),
     "RADIUS": frozenset({"radius"}),
     "log": frozenset({"syslog", "splunk"}),
     "monitoring": frozenset({"snmp", "zabbix", "nagios"}),
     "FTP": frozenset({"ftp"}),
-    "file": frozenset({"smb", "nfs"}),
-    "backup": frozenset({"ndmp"}),
-    "SQL": frozenset({"mssql"}),
-    "database": frozenset({"oracle", "mssql", "mysql", "postgresql", "mongodb", "redis"}),
 }
 
 

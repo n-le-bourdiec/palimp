@@ -412,13 +412,17 @@ def collect(
     moves: list[Migration] | None = None,
     cleared: dict[tuple[str, str], Clear] | None = None,
     legacy: Vocabulary | None = None,
+    unplaced: Vocabulary | None = None,
 ) -> Finding:
     policy = dataset.config.policy(key)
     if policy is None:
         raise KeyError(f"policy {key} not found in config.set")
     vocab = vocab or vocabulary(dataset)
-    # Not-live signals keep the reading without regional instances (palimp.apps).
-    legacy = legacy or vocabulary(dataset, instances=False)
+    # Not-live signals keep the reading without regional instances, endpoints and site
+    # prefixes (palimp.apps).
+    legacy = legacy or vocabulary(dataset, instances=False, places=False)
+    # Shared addresses too: they decide verify verdicts (session 33).
+    unplaced = unplaced or vocabulary(dataset, places=False)
     found = markers(dataset, legacy) if found is None else found
     moves = migrations(dataset, legacy) if moves is None else moves
     cleared = clears(dataset) if cleared is None else cleared
@@ -565,7 +569,7 @@ def collect(
     }
     # A two-letter name in the policy name is never read (session 29): the policy name
     # follows the same naming convention as the objects (`FG-MB-AIRCON`, `MB-Air-Con`).
-    name_apps = [a for a in vocab.in_object(policy.name) if a not in echoed]
+    name_apps = [a for a in vocab.in_name(policy.name) if a not in echoed]
     if name_apps:
         claim = (
             f"the policy name names {', '.join(name_apps)}: a name chosen for the rule, "
@@ -574,7 +578,7 @@ def collect(
         locator = f"policy {policy.name} name"
         items.append(Item("T3", "config.set", locator, claim, None, "policy_name", name_apps))
     items += name_service_items(dataset, policy)
-    items += shared_address_items(dataset, policy, vocab)
+    items += shared_address_items(dataset, policy, unplaced)
     if policy.dynamic_applications:
         claim = (
             "the policy matches the dynamic application"
@@ -736,11 +740,12 @@ def collect(
 
 def collect_all(dataset: Dataset) -> list[Finding]:
     vocab = vocabulary(dataset)
-    legacy = vocabulary(dataset, instances=False)
+    legacy = vocabulary(dataset, instances=False, places=False)
+    unplaced = vocabulary(dataset, places=False)
     found = markers(dataset, legacy)
     moves = migrations(dataset, legacy)
     cleared = clears(dataset)
     return [
-        collect(dataset, p.key, vocab, found, moves, cleared, legacy)
+        collect(dataset, p.key, vocab, found, moves, cleared, legacy, unplaced)
         for p in dataset.config.policies
     ]

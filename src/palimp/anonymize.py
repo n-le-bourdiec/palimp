@@ -51,11 +51,13 @@ from palimp import __version__
 from palimp.addresses import NON_PUBLIC
 from palimp.apps import (
     CONDITIONAL_ROLES,
+    ENDPOINT_WORDS,
     GENERIC_WORDS,
     HOSTING,
     PRODUCTS,
     ROLE_WORDS,
     SERVER_ROLES,
+    SITE_AREAS,
     vocabulary,
 )
 from palimp.evidence import TEMPORARY_WORDS
@@ -171,6 +173,8 @@ def is_signal(word: str) -> bool:
         or word in GENERIC_WORDS
         or word in SERVER_ROLES
         or word in CONDITIONAL_ROLES
+        or word in ENDPOINT_WORDS
+        or word in SITE_AREAS
         or word in PRODUCTS
         or word in HOSTING
         or word in TEMPORARY_WORDS
