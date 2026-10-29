@@ -1,6 +1,8 @@
 # 0047 Best achievable intent, rule kind, shadowed rules and ANY sets in the simulator
 
-- Status: Accepted
+- Status: Accepted; the confidence model it relies on (decision 0045 item 2)
+  amended by decision 0049 for `best_achievable_confidence`;
+  `best_achievable_intent` unchanged
 - Date: 2026-10-20 (session 32, simulator)
 - Supersedes: the part of decision 0045 item 3 that makes the pseudo
   application `firewall` the intent of the firewall team rules for scoring.

@@ -1,7 +1,9 @@
 # 0045 Realistic names, naming source confidence and firewall team rules in the simulator
 
 - Status: Accepted; item 3, the pseudo application `firewall` as the scored
-  intent of firewall team rules, superseded by decision 0047
+  intent of firewall team rules, superseded by decision 0047; item 2, the
+  part "one source gives LOW" for a direct statement, superseded by
+  decision 0049
 - Date: 2026-10-20 (session 30, simulator)
 - Supersedes: the Medium and Hard part of the `max_justified_confidence`
   rule of spec section 6 (tiers of the sound evidence: T1 and T2 give HIGH,
