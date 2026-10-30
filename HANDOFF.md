@@ -1,62 +1,96 @@
 # Handoff
 
-## Last session: 34 (2026-10-29), simulator: 0.5.1, a direct statement alone justifies MEDIUM (decision 0049)
+## Status: release candidate 0.1.0, FROZEN (session 35, 2026-10-30)
+
+palimp is a release candidate. It is not published: the project lead
+publishes it later, together with a second tool. Until that joint release,
+the analyzer is frozen: **only bug fixes**, no tuning, no new feature, no
+wording change beyond a fix. A bug fix that moves any verdict, confidence
+or owner must say so in its commit and in this file; one that moves a rule
+toward `removal_candidate` needs the project lead's approval first.
+
+### What the project lead must do before the release
+
+1. Rotate the held-out salt (`HOLDOUT_SALT` repository secret), then run
+   the held-out workflow once (Actions, "Held-out evaluation": Medium 50 +
+   Hard 30, simulator 0.5.1). Record the run in
+   `docs/evaluation-history.md` and replace the "Held-out run: PLACEHOLDER"
+   paragraph of the README with its numbers. Release condition (decision
+   0032): no dangerous error on held-out.
+2. Configure trusted publishing (no token in the repository):
+   - PyPI: add a pending trusted publisher for project `palimp`, owner
+     `n-le-bourdiec`, repository `palimp`, workflow `release.yml`,
+     environment `pypi`;
+   - TestPyPI: the same on test.pypi.org with environment `testpypi`;
+   - in GitHub repository settings, create the environments `pypi` and
+     `testpypi` (a required reviewer on `pypi` is advisable).
+3. Dry run: start the "Release" workflow by hand (it publishes to TestPyPI
+   only), then `pipx install --index-url https://test.pypi.org/simple/
+   --pip-args="--extra-index-url https://pypi.org/simple/" palimp` and
+   `palimp demo`.
+4. Release: set the CHANGELOG date of 0.1.0, push a tag `v0.1.0` on main
+   (the workflow checks the tag matches `pyproject.toml`, runs lint and
+   tests, builds the analyzer only and publishes to PyPI).
+5. Review decision 0050 (config-only wording, unnamed rules grouped by zone
+   pair) and the open questions below.
+
+## Last session: 35 (2026-10-30), analyzer: release candidate
 
 ### Done
 
-- Session 33 metrics finalized (157 calls, 10.69 USD).
-- Branch `sim-0.5.1`, draft PR (not merged). Simulator 0.5.1, decision
-  0049 (supersedes the "one source gives LOW" part of decision 0045 item 2
-  for direct statements; 0045 and 0047 status lines amended; spec 6.1 item
-  4 rewritten; `docs/evaluation-history.md` records 0.5.1 as the release
-  basis).
-- Rule (Medium and Hard, `max_justified_confidence` and Hard
-  `best_achievable_confidence`): a direct statement (description or
-  annotation, retained creation comment, cited exported ticket) counted
-  alone gives MEDIUM, unless the rule is disputed (another description,
-  comment or cited ticket on the rule names a different application, or
-  TRAP-MISLEADING-COMMENT), then LOW. HIGH unchanged (two sources, one
-  direct, plus traffic). Names and services keep the 0045 rule; two or more
-  sources are not lowered by a dispute.
-- Every change is LOW to MEDIUM, application rules only. Medium 0-99:
-  1406/15662 (9.0%); Hard 0-49: 1033/20771 (5.0%), best achievable 1037.
-  Disputed and kept LOW: 118 Medium, 63 Hard. Per trap (moved / rules with
-  the trap, max_justified): Medium no trap 1159/7662, BATCH-COMMIT 117/843,
-  DEACTIVATED 98/1326, RARE-JOB 22/97, LIVE-NOLOG 9/99, SHADOWED-BY-DENY
-  1/10, MISLEADING-COMMENT 0/215, HISTORY-HORIZON 0/6646,
-  EMERGENCY-LOADBEARING 0/147; Hard no trap 778/4799, DEACTIVATED
-  136/3592, BATCH-COMMIT 83/752, RARE-JOB 13/111, SCANNER-HITS 9/102,
-  RENAME-CHAIN 6/259, IP-REUSE 4/137, LIVE-NOLOG 3/80, SHADOWED-BY-DENY
-  2/21, STALE-NAME 0/223 (best achievable 4/223), MISLEADING-COMMENT 0/122,
-  HISTORY-HORIZON 0/14228, EMERGENCY-LOADBEARING 0/117.
-- Easy artifacts byte-identical (ground truth differs by the version
-  string only); Medium and Hard artifacts byte-identical to 0.5.0 too, only
-  `ground_truth.json` and `manifest.json` change. Goldens regenerated; Hard
-  trap counts unchanged.
-
-### Note to analyzer sessions (decision 0017 does not apply: no schema change)
-
-- Simulator 0.5.1 changes only confidence values. Re-measure calibration on
-  Medium 20-99 and Hard 20-49 when merging `sim-0.5.1`; verdict and intent
-  numbers stay comparable with session 33. Overconfidence from C-T1-ONLY
-  (session 33) should fall.
+- Session 34 metrics finalized (60 calls, 2.87 USD).
+- PR 2 (simulator 0.5.1) merged into main (`b27d167`), main green.
+- Re-measured on 0.5.1 (`docs/evaluation-history.md`, session 35 section):
+  Medium 20-99 overconfidence 10.1% to 3.3%, underconfidence 11.1% to
+  13.1%; Hard 20-49 overconfidence 5.3% to 2.1%, underconfidence 9.5% to
+  11.1%; verdicts and intent unchanged (91.7% / 98.1% vs best, intent
+  82.1% / 78.6%); 0 dangerous errors (naive 191 / 148), so no tuning.
+  Overconfidence by confidence code: C-T1-ONLY and C-T3 (both MEDIUM) hold
+  89% (Medium) and 85% (Hard) of the overconfident rules.
+- README rewritten for the release (pitch, demo excerpt, pipx install,
+  quickstart, inputs, evaluation with naive baseline and a held-out
+  placeholder, does not do, could not see, known limits, privacy, LLM
+  writer, how it was built, license). Absolute links, for PyPI.
+- `palimp demo`: bundled synthetic Medium scenario (dev seed 14, artifacts
+  only, 476 KB `src/palimp/data/demo-scenario.tar.gz`), report written to a
+  new temporary or given empty directory. `eval/demo_data.py` rebuilds the
+  archive from the simulator CLI; a slow test checks it still matches.
+  Decisions 0003 and 0032 amended: `demo` did not exist until session 35.
+- Packaging: 0.1.0, metadata, classifiers, project URLs, sdist with the
+  analyzer only. Checked: wheel holds no simulator; `pipx install` of the
+  built wheel in an isolated PIPX_HOME (Python 3.12) then `palimp demo`
+  works, `palimp_sim` not importable there.
+- `.github/workflows/release.yml`: PyPI on a `v*` tag, TestPyPI by hand,
+  trusted publishing; nothing published.
+- `CHANGELOG.md`, `metrics/summary.md` (from `metrics/summary.py`),
+  `.github/ISSUE_TEMPLATE/bug_report.md`, `CONTRIBUTING.md`.
+- Config-only wording (decision 0050): each sentence names only the
+  artifacts provided (no counter clear spot without hit counts, explain
+  "created in: unknown, no commit history was provided", the no-visibility
+  question lists its real reasons, initials note without tickets, empty
+  sections print "None."). Rules with no owner name are grouped by zone
+  pair in the report and the questionnaires
+  (`NN-no-owner-name-<from>-to-<to>.txt`), with a "Who may know:" line per
+  item. Tests in `tests/test_config_only.py`.
 
 ### Next
 
-- Analyzer session: merge `sim-0.5.1` (draft PR), make main green, measure
-  calibration on 0.5.1.
-- Project lead: review decision 0049; run the held-out workflow (Medium 50
-  + Hard 30) on 0.5.1 after rotating the salt; review decision 0048.
-- C-T1-ONLY calibration: a T1 naming the application alone gives MEDIUM;
-  on Medium 0-19, 149 such rules have best achievable HIGH and 197 LOW.
-  Find what separates them (ticket vs description vs commit comment,
-  traffic). It is what raised Medium overconfidence (9.5% to 10.1% on 20-99).
-- Block rules: underconfidence 17.7% (Medium) and 18.4% (Hard).
-- Release preparation (decision 0032 item 5).
+- Project lead: the list above (salt, held-out, trusted publishers,
+  TestPyPI dry run, tag).
+- After the release only: C-T1-ONLY and C-T3 overconfidence; block rule
+  underconfidence (17.7% Medium, 18.4% Hard); the open questions below.
 
 ### Open questions
 
-- Decision 0049 readings to confirm: a description naming both ends of a
+- Decision 0050: zone pair chosen over destination for rules with no owner
+  name (destination order inside each group). Fine?
+- The summary line "N rules carry traffic in the session log or the hit
+  counters" counts every keep rule, including active deny rules kept
+  without traffic (decision 0048); left as is (frozen, wording fix only
+  for config-only).
+
+- Decision 0049 readings to confirm (session 35 prompt: a description
+  naming both ends is kept cautious, a dispute): a description naming both ends of a
   flow (`BILL AS > FILESRV FS 445`) counts as a dispute; a dispute does not
   lower two or more sources; a direct statement alone with traffic stays
   MEDIUM (not HIGH); a two-letter direct statement (`CI acess`) alone gives
@@ -189,7 +223,8 @@ $//'` before scripted edits (session 24).
    budget). The README must state plainly that palimp has never been run on
    a real SRX history, only on synthetic scenarios with formats confirmed by
    Juniper documentation and practitioner captures.
-5. Release preparation, then the second held-out run.
+5. Release preparation (done in session 35, release candidate), then the
+   second held-out run (project lead).
 
 Release as a 0.x beta when these are done and no dangerous error appears
 on held-out or on the real public configs.
@@ -271,9 +306,12 @@ has transcript `82425030-2c0d-4a09-a086-7597631acbb2` (finalized in session
 32). Session 32 has transcript `dd4d1074-e17b-4649-9616-1ff42f7d9709`
 (finalized in session 33). Session 33 has transcript
 `7c1bd47e-a91f-4aa2-9cdf-b9aa66afbb7a` (finalized in session 34). Session 34
-has transcript `1a30456b-3d7f-4f82-879c-0f2217725452`. Finalize it at the
-start of session 35 with:
+has transcript `1a30456b-3d7f-4f82-879c-0f2217725452` (finalized in session
+35). Session 35 has transcript `f38dbea4-97b5-41e2-a3ee-e45708bd459f`.
+Finalize it at the start of the next session with:
 
-    uv run python metrics/session_tokens.py 1a30456b-3d7f-4f82-879c-0f2217725452
+    uv run python metrics/session_tokens.py f38dbea4-97b5-41e2-a3ee-e45708bd459f
+
+then run `uv run python metrics/summary.py` to refresh `metrics/summary.md`.
 
 Cost is API-equivalent (decision 0006), not a billed amount.
