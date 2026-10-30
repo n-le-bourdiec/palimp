@@ -542,8 +542,8 @@ Reading: decision 0049 made a direct statement alone MEDIUM in the ground
 truth, which is what C-T1-ONLY gives, so its overconfidence falls (the
 session 33 rise from C-T1-ONLY is gone: Medium 10.1% to 3.3%). What
 remains comes mostly from two MEDIUM codes, C-T1-ONLY (a T1 naming an
-application the ground truth still holds at LOW, for example a disputed
-statement) and C-T3 (names from objects and the policy name agreeing).
+application where the ground truth still says LOW; not inspected rule by
+rule) and C-T3 (names from objects and the policy name agreeing).
 Underconfidence rises by about 2 points on both levels: rules palimp holds
 at LOW where 0.5.1 now justifies MEDIUM (a direct statement palimp does not
 read as naming the application). HIGH stays above 95% right on both
