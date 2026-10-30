@@ -743,7 +743,7 @@ Field meanings:
   the policy name cites it.
 - `traps`: ids from section 7.3.
 
-### 6.1 Confidence from naming sources (Medium and Hard, decision 0045)
+### 6.1 Confidence from naming sources (Medium and Hard, decisions 0045 and 0049)
 
 Easy computes `max_justified_confidence` from the tiers of the sound evidence
 (T1 and T2 give HIGH, T1 or T3 MEDIUM, otherwise LOW). From simulator 0.4.0,
@@ -776,14 +776,23 @@ wrote into the artifacts and that name the rule's true application:
    application only by a two-letter name (`ci`, `bi`, `hr`, `kb`, `s4`, or the
    code `MX` of `mail`) counts only when the rule has a source that is not a
    name.
-4. Fewer than two counted sources: `LOW`. Two or more: `MEDIUM`. `HIGH` needs
-   two or more, one of them a direct statement (d, e or f), and traffic seen: a
-   sound T2 item that supports `live` (hits or log lines).
+4. Two or more counted sources: `MEDIUM`. `HIGH` needs two or more, one of
+   them a direct statement (d, e or f), and traffic seen: a sound T2 item that
+   supports `live` (hits or log lines). Fewer than two: `LOW`, except a direct
+   statement (d, e or f) counted alone, which gives `MEDIUM` (simulator 0.5.1,
+   decision 0049) unless the rule is disputed, then `LOW`. A rule is disputed
+   when another artifact on it names a different application of the scenario:
+   the description or annotation, or the retained creation comment, names
+   another application (item 1; a description naming both ends of a flow
+   counts), a cited exported ticket has another `related_ci`, or the rule
+   carries a copied comment (TRAP-MISLEADING-COMMENT). The base of a regional
+   instance (`erp` for `erp-de`) is not another application. A dispute does
+   not lower two or more sources.
 5. Misleading sources name another application, so they never count for the
    true one. `best_achievable_confidence` (Hard, decision 0040) applies the
    same rules to what the artifacts show: an unobservable stale name counts
-   the sources that name the old application, and masked T2 evidence counts
-   as traffic. It is never below `max_justified_confidence`.
+   the sources that name the old application (and checks the dispute against
+   it), and masked T2 evidence counts as traffic. It is never below `max_justified_confidence`.
 
 Dynamic applications and custom application names are sources in the
 analyzer's model; the simulator writes neither, so they never appear. The

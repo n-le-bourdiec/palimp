@@ -453,3 +453,28 @@ where the ground truth often says LOW (decision 0048, alternatives).
 Held-out: the workflow now runs Medium 50 (headline) and Hard 30 next to
 it. Not run in this session; the project lead triggers it after rotating
 the salt.
+
+## Simulator 0.5.1, session 34 (2026-10-29, no evaluation run)
+
+Simulator session; the analyzer was not run. Decision 0049: in Medium and
+Hard, a direct statement (description or annotation, retained creation
+comment, cited exported ticket) counted alone justifies MEDIUM instead of
+LOW, unless another artifact on the rule names a different application or
+the rule carries a misleading comment. HIGH is unchanged. Simulator 0.5.1
+replaces 0.5.0 as the release basis; the next held-out run uses it. The
+session 33 numbers above stay comparable on verdicts and intent (artifacts
+and those expected values are byte-identical); confidence calibration must
+be measured again on 0.5.1.
+
+Application rules whose `max_justified_confidence` moves (all LOW to
+MEDIUM):
+
+| set | application rules | moved | LOW before / after | MEDIUM before / after | HIGH |
+|---|---|---|---|---|---|
+| Medium 0-99 | 15662 | 1406 (9.0%) | 69.8% / 60.8% | 10.3% / 19.3% | 19.9% |
+| Medium 20-99 | 12557 | 1143 (9.1%) | 70.4% / 61.2% | 10.3% / 19.4% | 19.3% |
+| Hard 0-49 | 20771 | 1033 (5.0%) | 76.7% / 71.7% | 13.8% / 18.7% | 9.6% |
+| Hard 20-49 | 12502 | 601 (4.8%) | 76.8% / 72.0% | 14.1% / 18.9% | 9.1% |
+
+Hard `best_achievable_confidence`: 1037 rules on 0-49, all LOW to MEDIUM.
+Firewall team rules and Easy do not change.

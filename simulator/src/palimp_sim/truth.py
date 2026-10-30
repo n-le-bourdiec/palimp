@@ -391,11 +391,13 @@ def _rule(
         blocked_need = _still_tried(sim, meta.flow_ids, live)
         verdict = "verify" if blocked_need else "removal_candidate"
         best = "verify"
-    found = _sources(sim, policy, meta.app_id, commit if retained else None)
+    creation = commit if retained else None
+    found = _sources(sim, policy, meta.app_id, creation)
     if sim.level.traps:
-        # Naming sources (spec 6.1, decision 0045).
+        # Naming sources (spec 6.1, decisions 0045 and 0049).
         traffic = any(_shows_traffic(e) and not e["misleading"] for e in evidence)
-        justified = sources.confidence(found, traffic)
+        disputed = _disputed(sim, policy, meta.app_id, creation, copied)
+        justified = sources.confidence(found, traffic, disputed)
     else:
         justified = _confidence(evidence)
     # The application a perfect analyzer can name from the artifacts
@@ -403,7 +405,7 @@ def _rule(
     # name makes the old application the apparent one (decision 0040).
     best_intent = meta.app_id if sources.counted(found) else None
     if best_intent is None and stale_hidden:
-        old_found = _sources(sim, policy, old_app, commit if retained else None)
+        old_found = _sources(sim, policy, old_app, creation)
         best_intent = old_app if sources.counted(old_found) else None
     expected = {
         "verdict": verdict,
@@ -417,8 +419,9 @@ def _rule(
         apparent = [e | {"misleading": e["misleading"] and e["id"] not in masked} for e in evidence]
         seen = any(_shows_traffic(e) and not e["misleading"] for e in apparent)
         named = old_app if stale_hidden else meta.app_id
-        found = _sources(sim, policy, named, commit if retained else None)
-        achievable = sources.confidence(found, seen)
+        found = _sources(sim, policy, named, creation)
+        disputed = _disputed(sim, policy, named, creation, copied)
+        achievable = sources.confidence(found, seen, disputed)
         expected["best_achievable_confidence"] = max(achievable, justified, key=LEVELS.index)
     expected["owner_to_ask"] = sim.apps[reuse["app"]].owner_id if reused else app.owner_id
     if shadow_deny:
@@ -594,6 +597,14 @@ def _sources(sim, policy, app_id: str, commit) -> list:
     objects = []
     for name in _named(sim, policy):
         objects += [name, *config.address_sets.get(name, [])]
+    texts, comment, tickets = _statements(sim, policy, commit)
+    return sources.rule_sources(
+        app_id, objects, policy.name, policy.applications, texts, comment, tickets
+    )
+
+
+def _statements(sim, policy, commit) -> tuple[list[str], str | None, list[str]]:
+    """Direct statements of a rule: texts, retained creation comment, cited tickets' CIs."""
     texts = [policy.description or ""]
     if sim.level.config_format == "hierarchical":
         texts.append(policy.annotation or "")  # HIER-1c
@@ -604,9 +615,14 @@ def _sources(sim, policy, app_id: str, commit) -> list:
         for t in sim.tickets
         if t.exported and any(t.ticket_id in text for text in cited)
     ]
-    return sources.rule_sources(
-        app_id, objects, policy.name, policy.applications, texts, comment, tickets
-    )
+    return texts, comment, tickets
+
+
+def _disputed(sim, policy, app_id: str, commit, misleading: bool) -> bool:
+    """Whether a direct statement names another application (decision 0049)."""
+    others = [a for a in sim.apps if a != FIREWALL]
+    texts, comment, tickets = _statements(sim, policy, commit)
+    return sources.contradicted(app_id, others, texts, comment, tickets, misleading)
 
 
 def _hits_reason(hits: int, reused: bool, scanned: bool, noise_kind: str | None) -> str:

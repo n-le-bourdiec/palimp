@@ -1,11 +1,18 @@
-"""Naming sources and the confidence they justify (spec 6.1, decision 0045)."""
+"""Naming sources and the confidence they justify (spec 6.1, decisions 0045 and 0049)."""
 
 import json
 
 import pytest
 
 from palimp_sim.generate import generate
-from palimp_sim.sources import confidence, copies_object, counted, names, rule_sources
+from palimp_sim.sources import (
+    confidence,
+    contradicted,
+    copies_object,
+    counted,
+    names,
+    rule_sources,
+)
 
 
 def sources(app="crm", objects=(), name="rule-47", services=("junos-https",), texts=(), **kw):
@@ -31,8 +38,39 @@ def test_names_by_id_code_and_trailing_number() -> None:
     assert names("Allow-MX", "mail") == "short"
 
 
-def test_one_source_is_low() -> None:
+def test_one_name_is_low() -> None:
     assert confidence(sources(objects=["crm-web-01"]), traffic=True) == "LOW"
+    assert confidence(sources(name="CRM-HTTPS"), traffic=True) == "LOW"
+
+
+def test_one_direct_statement_is_medium_never_high() -> None:
+    # A direct statement is T1, not a name (decision 0049).
+    for found in (
+        sources(texts=["CRM - 443 from LAN"]),
+        sources(comment="CRM go-live"),
+        sources(name="CHG0012345", tickets=["crm"]),
+    ):
+        assert confidence(found, traffic=False) == "MEDIUM"
+        assert confidence(found, traffic=True) == "MEDIUM"
+
+
+def test_a_disputed_direct_statement_alone_is_low() -> None:
+    found = sources(texts=["CRM - 443 from LAN"])
+    assert confidence(found, traffic=True, disputed=True) == "LOW"
+    # Two sources keep the earlier rule.
+    found = sources(objects=["crm-web-01"], texts=["CRM - 443 from LAN"])
+    assert confidence(found, traffic=True, disputed=True) == "HIGH"
+
+
+def test_contradiction_by_text_comment_ticket_or_trap() -> None:
+    others = ["crm", "erp", "erp-de", "billing"]
+    assert not contradicted("crm", others, ["CRM - 443 from LAN"], "CRM go-live", ["crm"])
+    assert contradicted("crm", others, ["CRM to BILL AS"], None, [])
+    assert contradicted("crm", others, ["CRM - 443"], "ERP rules", [])
+    assert contradicted("crm", others, ["CRM - 443"], None, ["crm", "erp"])
+    assert contradicted("crm", others, ["CRM - 443"], None, [], misleading=True)
+    # The base of a regional instance is part of the instance name.
+    assert not contradicted("erp-de", others, ["erp de app"], None, [])
 
 
 def test_both_sides_and_a_shared_prefix_are_one_source() -> None:
