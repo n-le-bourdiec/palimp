@@ -13,3 +13,5 @@ Computed by `metrics/summary.py` from `metrics/sessions.csv`, sessions 1 to 34 (
 | phase spec | 1 | 27 | 8 | 54 | 38,296 | 2,482,094 | 60,134 | 1.74 |
 
 Commits: 294. Lines added: 38,707, removed: 3,884 (metrics files excluded, as each row records them).
+
+Not counted yet (provisional row, finalized at the start of the next session): session 35.
