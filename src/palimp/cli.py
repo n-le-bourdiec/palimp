@@ -1,6 +1,9 @@
 """Command line entry point."""
 
 import json
+import tarfile
+import tempfile
+from importlib import resources
 from pathlib import Path
 
 import typer
@@ -306,6 +309,12 @@ def report(
 ) -> None:
     """Write a Markdown and a JSON report of every policy."""
     backend = _backend(llm_backend, llm_model, llm_url) if llm else None
+    _write_report(source, out, log_year, backend, llm_model)
+
+
+def _write_report(
+    source: Path, out: Path, log_year: int | None, backend: Backend | None, llm_model: str
+) -> None:
     dataset, findings = _findings(source, log_year)
     built: Report = build_report(dataset, findings)
     out.mkdir(parents=True, exist_ok=True)
@@ -352,6 +361,41 @@ def questions(
     (out / "answers.csv").write_text(answers_csv(built, found), encoding="utf-8")
     rules = len({ref for q in found for ref in q.rules})
     typer.echo(f"{len(found)} questionnaires covering {rules} rules written to {out}")
+
+
+DEMO_DATA = "demo-scenario.tar.gz"
+DEMO_ABOUT = (
+    "Synthetic scenario: a fictional company's SRX history written by palimp's simulator "
+    "(Medium level, dev seed 14). No real network, person or ticket is in it."
+)
+
+
+@app.command()
+def demo(
+    out: Path = typer.Option(
+        None,
+        "--out",
+        "-o",
+        help="Directory for the demo (artifacts/ and the report). Must be new or empty. "
+        "Default: a new temporary directory.",
+    ),
+) -> None:
+    """Run palimp on a bundled synthetic scenario and write its report."""
+    if out is None:
+        out = Path(tempfile.mkdtemp(prefix="palimp-demo-"))
+    elif out.exists() and (not out.is_dir() or any(out.iterdir())):
+        typer.echo(f"error: {out} exists and is not an empty directory", err=True)
+        raise typer.Exit(2)
+    out.mkdir(parents=True, exist_ok=True)
+    data = resources.files("palimp").joinpath("data", DEMO_DATA)
+    with data.open("rb") as raw, tarfile.open(fileobj=raw, mode="r:gz") as tar:
+        tar.extractall(out, filter="data")
+    typer.echo(DEMO_ABOUT)
+    typer.echo(f"artifacts copied to {out / 'artifacts'}")
+    _write_report(out / "artifacts", out, None, None, "")
+    typer.echo(
+        f"next: open {out / 'report.md'}, or try palimp explain --all -a {out / 'artifacts'}"
+    )
 
 
 def _inside(path: Path, directory: Path) -> bool:
