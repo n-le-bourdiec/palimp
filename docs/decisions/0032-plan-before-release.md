@@ -1,6 +1,6 @@
 # 0032 Plan before the first release: hierarchical format, Hard level, real public configs
 
-- Status: Accepted
+- Status: Accepted, amended 2026-10-30 (`demo` did not exist until session 35)
 - Date: 2026-10-06
 - Supersedes: the "set format only" part of decision 0003 (v1 now also reads
   the hierarchical curly-brace format). The rest of decision 0003 stands.
@@ -77,3 +77,14 @@ Yes, three challenges in the session 20 prompt, all adopted:
   release, and the release is a 0.x beta;
 - no paid AWS lab before release: item 4 (vSRX test postponed, README
   states the limitation).
+
+## Amendment (2026-10-30, session 35)
+
+Factual correction to the Context section. "After session 19, every v1
+command exists (`ingest`, `explain`, `report`, `questions`, `anonymize`,
+`demo`)" was wrong for `demo`: it did not exist after session 19, nor at
+any point before session 35 (no `demo` command in `src/palimp` in the git
+history). The project lead pointed out the gap in the session 35 prompt.
+Session 35 wrote it (`palimp demo`, bundled synthetic Medium scenario,
+`tests/test_demo.py`), so the statement is true from session 35 on. The
+plan and the release condition are unchanged.

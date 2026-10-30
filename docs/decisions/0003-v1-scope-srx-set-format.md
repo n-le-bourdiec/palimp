@@ -1,6 +1,6 @@
 # 0003 v1 scope: Juniper SRX, "set" format only
 
-- Status: Accepted, vSRX lab fixtures superseded by 0013 (documentation-sourced fixtures for now), "set format only" superseded by 0032 (hierarchical format also read)
+- Status: Accepted, vSRX lab fixtures superseded by 0013 (documentation-sourced fixtures for now), "set format only" superseded by 0032 (hierarchical format also read), amended 2026-10-30 (`demo` did not exist until session 35)
 - Date: 2026-09-28
 
 ## Context
@@ -35,3 +35,14 @@ changes, advanced shadowing detection, web UI.
 ## Challenged by Nathan
 
 No.
+
+## Amendment (2026-10-30, session 35)
+
+Factual correction. This decision lists `demo` among the v1 commands, and
+decision 0032 (2026-10-06) states that every v1 command existed after
+session 19. That was not true for `demo`: no `demo` command existed in
+palimp until session 35. The other five commands did exist. Session 35 wrote
+`palimp demo` (it unpacks a bundled synthetic Medium scenario, artifacts
+only, and writes its report to a new or given directory; the simulator is
+not shipped) with tests in `tests/test_demo.py`. The scope decision itself
+is unchanged.
