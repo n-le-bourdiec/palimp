@@ -708,12 +708,37 @@ def _shadowed(verdict: tuple[str, str, str, list[str]], finding: Finding) -> tup
     return "verify", "V-SHADOWED", reason, _ids(shadowed + hits)
 
 
+def _no_visibility_question(finding: Finding) -> str:
+    """Why nothing shows use, naming only what was provided or missing (session 35)."""
+    reasons = []
+    policy = finding.policy
+    if not (policy.deactivated or policy.log_init or policy.log_close):
+        reasons.append("the policy does not log")
+    for item in finding.evidence:
+        if item.tier != "T2" or item.signal != "blind":
+            continue
+        if item.locator == "hitcount.txt missing":
+            reasons.append("no hit counts were provided")
+        elif item.locator == "logs/rt_flow.log missing":
+            reasons.append("no session log was provided")
+        elif item.kind == "session_log" and item.locator.endswith("has no logging"):
+            reasons.append("the policy does not log")
+        elif item.kind == "hit_count":
+            reasons.append("no hit count row for it")
+        elif item.kind == "session_log":
+            reasons.append("the session log cannot show it")
+    why = f" ({'; '.join(dict.fromkeys(reasons))})" if reasons else ""
+    return f"Nothing shows whether this policy is used{why}. Is the flow still needed?"
+
+
 def assess(finding: Finding, dataset: Dataset) -> Assessment:
     verdict, v_rule, v_reason, v_evidence = _shadowed(_verdict(finding), finding)
     level, c_rule, c_reason, c_evidence, apps, conflicts = _capped(
         finding, _blocks(finding, _confidence(finding))
     )
     question = QUESTIONS[v_rule] if verdict != "keep" else None
+    if v_rule == "V-NO-VISIBILITY":
+        question = _no_visibility_question(finding)
     # A flow between two applications may belong to either side: every application
     # the objects name is an owner candidate, not only the one the intent names.
     objects = [a for e in finding.evidence if e.kind == "address_objects" for a in e.apps]

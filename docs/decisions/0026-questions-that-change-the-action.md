@@ -1,6 +1,6 @@
 # 0026 Questionnaires: only questions that can change the action, one email per person
 
-- Status: Accepted
+- Status: Accepted, the grouping of rules with no name ("one email per application") superseded by 0050 (one email per zone pair)
 - Date: 2026-10-05
 - Supersedes: the grouping part of decision 0025 ("one per candidate group
   when the owner is unsure", and the rejected alternative "one questionnaire

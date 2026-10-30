@@ -153,7 +153,13 @@ def find_owner(
             else:
                 reasons.setdefault(f"initials {letters}", []).append(
                     f"after req in [{item.id}], "
-                    + ("no ticket requester has them" if not matches else "several people match")
+                    + (
+                        "several people match"
+                        if matches
+                        else "no ticket requester has them"
+                        if dataset.ticket_stats is not None
+                        else "no ticket export was provided to match them"
+                    )
                 )
 
     names = [n for n in reasons if not n.startswith("initials ")]

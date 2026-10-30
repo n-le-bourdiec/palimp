@@ -375,18 +375,30 @@ def conflicts_clause(finding: Finding) -> str:
     return f" Conflicts: {', '.join(parts)}, see {_id_span(ids)}."
 
 
+NO_OWNER = "no owner name"
+
+
+def zone_pair(policy: Policy) -> str:
+    """The zone pair of a rule in words, `trust to servers` (global: its match zones)."""
+    if not policy.is_global:
+        return f"{policy.from_zone} to {policy.to_zone}"
+    sides = [policy.match_from_zones, policy.match_to_zones]
+    return " to ".join(", ".join(zones) or "any zone" for zones in sides) + " (global)"
+
+
 def owner_group(finding: Finding) -> str:
-    """Who to ask: the owner, the candidates when unsure, else the applications."""
+    """Who to ask: the owner, the candidates when unsure, else the zone pair.
+
+    Decision 0050: rules with no owner name are grouped by zone pair, a group the
+    reader can route (the team running the destination zone), not by the application
+    palimp guessed, which on real configs is often a name fragment."""
     assessment = finding.assessment
     assert assessment is not None
     if assessment.owner:
         return assessment.owner
     if assessment.owner_candidates:
         return "not sure: " + ", ".join(sorted(assessment.owner_candidates))
-    # An application a single source names is never listed as an owner (session 29).
-    if assessment.intent_apps and assessment.confidence != "LOW":
-        return "no name found: owner of " + ", ".join(assessment.intent_apps)
-    return "no name found"
+    return f"{NO_OWNER}: {zone_pair(finding.policy)}"
 
 
 def is_cleanup(finding: Finding) -> bool:
@@ -725,14 +737,22 @@ def _blind_spots(
             continue
         item = next(e for e in entry.finding.evidence if e.kind == "session_log")
         nolog.append(f"{entry.key} [{entry.ref}.{item.id}]")
+    # Each sentence names only the artifacts actually provided (session 35).
+    has_log = dataset.log_stats is not None
+    has_hits = dataset.hit_count_stats is not None
+    if has_hits:
+        counters = "only the hit counters can, and a zero there may mean cleared counters"
+    else:
+        counters = "and no hit counts were provided, so nothing shows their use"
+    log = (
+        "the session log cannot show their traffic"
+        if has_log
+        else "a session log (none was provided) would not show their traffic either"
+    )
     spots.append(
         BlindSpot(
             topic="Policies without logging",
-            text=(
-                f"{len(nolog)} active policies have no `then log` statement: the session log "
-                "cannot show their traffic, only the hit counters can, and a zero there may "
-                "mean cleared counters."
-            ),
+            text=(f"{len(nolog)} active policies have no `then log` statement: {log}, {counters}."),
             rules=nolog,
         )
     )
@@ -779,19 +799,20 @@ def _blind_spots(
             )
         )
     cleared = [g.id for g in found if g.locator.startswith("zone pair")]
-    spots.append(
-        BlindSpot(
-            topic="Inferred counter clears",
-            text=(
-                f"{len(cleared)} zone pairs show signs of cleared hit counters: a zero there "
-                "covers only the time since the clear."
-                if cleared
-                else "No counter clear could be inferred. hitcount.txt never gives the date "
-                "of the last clear, so every count covers an unknown period."
-            ),
-            evidence=cleared,
+    if has_hits:
+        spots.append(
+            BlindSpot(
+                topic="Inferred counter clears",
+                text=(
+                    f"{len(cleared)} zone pairs show signs of cleared hit counters: a zero "
+                    "there covers only the time since the clear."
+                    if cleared
+                    else "No counter clear could be inferred. hitcount.txt never gives the "
+                    "date of the last clear, so every count covers an unknown period."
+                ),
+                evidence=cleared,
+            )
         )
-    )
     deactivated = [entry.ref for entry in entries if entry.finding.policy.deactivated]
     if deactivated:
         refs = []
@@ -823,6 +844,32 @@ def _blind_spots(
     return spots
 
 
+def _traffic_sentence(keep: int, counters: int, found: list[GlobalEvidence]) -> str:
+    """The keep line of the summary, naming only the traffic sources provided (session 35)."""
+    missing = {g.artifact for g in found if g.locator == "missing"}
+    has_log = "logs/rt_flow.log" not in missing
+    has_hits = "hitcount.txt" not in missing
+    caveat = " Traffic does not prove the intent is right or that the rule is not too broad."
+    if has_log and has_hits:
+        return (
+            f"{keep} rules carry traffic in the session log or the hit counters. "
+            f"For {counters} of them only the counters show it: hits since the last "
+            "counter clear, whose date is unknown, so that use may be old." + caveat
+        )
+    if has_log:
+        return (
+            f"{keep} rules carry traffic in the session log (no hit counts were provided)." + caveat
+        )
+    if has_hits:
+        return (
+            f"{keep} rules carry traffic on the hit counters (no session log was provided): "
+            "hits since the last counter clear, whose date is unknown, so that use may be old."
+            + caveat
+        )
+    keep_note = f"; {keep} rules are keep for a reason given in their section" if keep else ""
+    return f"No session log and no hit counts were provided, so no rule shows traffic{keep_note}."
+
+
 def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
     count = {s: sum(1 for e in entries if e.section == s) for s in SECTIONS}
     confidence = {
@@ -845,15 +892,7 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
                 "None rests on missing traffic alone."
             )
         ),
-        Cited(
-            text=(
-                f"{count['keep']} rules carry traffic in the session log or the hit counters. "
-                f"For {counters} of them only the counters show it: hits since the last "
-                "counter clear, whose date is unknown, so that use may be old. Traffic does "
-                "not prove the intent is right or that the rule is not too broad."
-            ),
-            evidence=window,
-        ),
+        Cited(text=_traffic_sentence(count["keep"], counters, found), evidence=window),
     ]
     not_sure = [
         Cited(
@@ -996,11 +1035,16 @@ def _refs(refs: list[str]) -> str:
     return "; ".join(refs)
 
 
+def by_destination(entry: RuleEntry) -> tuple[list[str], int]:
+    """Rules to the same destination side by side, in report order otherwise."""
+    return (entry.finding.policy.destinations, entry.finding.policy.position)
+
+
 def group_order(group: str) -> tuple[int, str]:
     """Named owners, then candidate groups, then rules with no name, then the firewall team."""
     if group == FIREWALL_TEAM:
         return (3, group)
-    return (2 if group.startswith("no name") else 1 if group.startswith("not sure") else 0, group)
+    return (2 if group.startswith(NO_OWNER) else 1 if group.startswith("not sure") else 0, group)
 
 
 def plural(count: int, word: str) -> str:
@@ -1070,11 +1114,12 @@ def markdown(report: Report) -> str:
     out += [f"## Removal candidates ({len(removal)})", ""]
     if not removal:
         out += ["None. palimp never proposes removal from missing traffic alone.", ""]
-    out.append(
-        "Each rule below has at least one positive sign that it is not in use (marked "
-        "*not live*). Confirm with the person to ask before removing anything."
-    )
-    out.append("")
+    else:
+        out.append(
+            "Each rule below has at least one positive sign that it is not in use (marked "
+            "*not live*). Confirm with the person to ask before removing anything."
+        )
+        out.append("")
     for entry in removal:
         out += _rule_md(entry, "###")
 
@@ -1085,7 +1130,10 @@ def markdown(report: Report) -> str:
         groups.setdefault(entry.group, []).append(entry)
     for group in sorted(groups, key=group_order):
         out += [f"### {group} ({plural(len(groups[group]), 'rule')})", ""]
-        for entry in groups[group]:
+        listed = groups[group]
+        if group.startswith(NO_OWNER):
+            listed = sorted(listed, key=by_destination)
+        for entry in listed:
             out += _rule_md(entry, "####")
 
     cleanup = [r for r in report.rules if is_cleanup(r.finding)]
@@ -1126,6 +1174,8 @@ def markdown(report: Report) -> str:
         "only. Nothing to ask an owner: worth a look by the firewall team when time allows. "
         "Most risky first: any application or any source, then internet-facing, then traffic "
         "on the counters only, then LOW confidence."
+        if look
+        else "None."
     )
     if len(look) > LOOK_SHOWN:
         out.append(f"The {LOOK_SHOWN} most risky are shown; report.json lists all {len(look)}.")

@@ -170,8 +170,10 @@ def _render(finding: Finding, dataset: Dataset, notes: dict[str, int] | None = N
             f"  created in:   commit {commit.index} "
             f"({commit.timestamp:%Y-%m-%d %H:%M:%S} {commit.time_zone} by {commit.user})"
         )
-    else:
+    elif dataset.commits:
         lines.append("  created in:   before the retained history")
+    else:
+        lines.append("  created in:   unknown, no commit history was provided")
     lines.append("Evidence:")
     if not finding.evidence:
         lines.append("  none found")

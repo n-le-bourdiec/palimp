@@ -4,7 +4,8 @@ Decision 0026 (supersedes the grouping part of decision 0025): one email per
 person, with a section "Rules for your applications" (rules the person owns)
 and a section "Rules you may own (please forward if not)" (rules the person is
 a candidate owner of, decision 0023). Rules with no name go to one email per
-application. A question is sent only if its answer can change the action:
+zone pair (decision 0050, supersedes "one email per application"). A question
+is sent only if its answer can change the action:
 deactivated rules go to the firewall team cleanup list instead, and keep
 rules are never asked about. Removal candidates come first in each section.
 Each question is yes/no and "yes" always means the access is still needed.
@@ -43,11 +44,13 @@ from palimp.models import Finding
 from palimp.report import (
     FIREWALL_TEAM,
     NAME_SERVICE_QUESTION,
+    NO_OWNER,
     SHARED_QUESTION,
     YES_NO,
     Report,
     RuleEntry,
     SharedAddress,
+    by_destination,
     from_untrusted,
     is_cleanup,
     is_shared,
@@ -77,7 +80,7 @@ TEAM_RULES = frozenset({"V-NAME-SERVICE", "V-FACTORY-DEFAULT", "V-BROAD-PERMIT",
 
 class Questionnaire(BaseModel):
     name: str  # file stem
-    group: str  # a person, "no name found: ...", or the firewall team
+    group: str  # a person, "no owner name: FROM to TO", or the firewall team
     recipients: list[str]
     owned: list[str] = []  # R12 references: rules for the person's applications
     may_own: list[str] = []  # rules the person may own (owner candidate)
@@ -138,8 +141,8 @@ def _plain_reason(entry: RuleEntry) -> str:
         "period we looked at.",
         "V-NO-TRAFFIC-SEEN": "No use was recorded in the period we looked at. It may be a rare "
         "job (yearly, quarterly, disaster recovery) that this period does not cover.",
-        "V-NO-VISIBILITY": "The firewall does not record whether this rule is used, so we "
-        "cannot tell from our side.",
+        "V-NO-VISIBILITY": "Nothing we hold shows whether this rule is used, so we cannot "
+        "tell from our side.",
         "V-DENY-NOTLIVE": "This rule blocks traffic, and a record says what it protects was "
         "retired or moved. Removing a block opens that traffic, so we ask first.",
         "V-FACTORY-DEFAULT": "It looks like a policy of the firewall's factory configuration, "
@@ -185,6 +188,8 @@ def _items(entries: list[RuleEntry], start: int, person: str = "") -> list[str]:
         others = [c for c in sorted(assessment.owner_candidates) if c != person]
         if person and not assessment.owner and others:
             lines.append(f"   Also asked: {', '.join(others)}")
+        if not person and assessment.ask:
+            lines.append(f"   Who may know: {assessment.ask}")
         lines += [
             f"   Question: {entry.question}",
             "   Answer: [ ] yes   [ ] no   Comment:",
@@ -233,15 +238,16 @@ def _person_letter(person: str, owned: list[RuleEntry], may_own: list[RuleEntry]
 
 
 def _unnamed_letter(group: str, entries: list[RuleEntry]) -> str:
-    target = group.removeprefix("no name found").removeprefix(": ") or "the team concerned"
+    pair = group.removeprefix(NO_OWNER).removeprefix(": ")
     lines = [
         _subject(entries),
         "",
-        f"Hello ({target}),",
+        "Hello,",
         "",
         "We are reviewing the firewall rules we inherited. We found no owner name for the "
-        "rules below. If they concern you, please answer yes or no for each one; otherwise, "
-        "tell us who to ask.",
+        f"rules below, all from {pair}, grouped by destination. If they concern you, please "
+        "answer yes or no for each one; otherwise, tell us who to ask (each rule says who "
+        "may know).",
         NO_REMOVAL,
         "",
         *_items(entries, 1),
@@ -491,7 +497,9 @@ def build(report: Report) -> list[Questionnaire]:
         )
     for group in sorted(unnamed):
         number += 1
-        entries = unnamed[group]
+        entries = sorted(
+            unnamed[group], key=lambda e: (e.section != "removal_candidate", *by_destination(e))
+        )
         found.append(
             Questionnaire(
                 name=f"{number:02d}-{_slug(group)}",
