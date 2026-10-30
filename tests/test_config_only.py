@@ -9,6 +9,8 @@ Easy seed 0, copied alone.
 
 import re
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,14 +19,21 @@ from typer.testing import CliRunner
 from palimp.cli import app
 
 runner = CliRunner()
-EASY = Path(__file__).parent.parent / "scenarios" / "scenario-easy-000000" / "artifacts"
+
+
+@pytest.fixture(scope="module")
+def easy(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    out = tmp_path_factory.mktemp("easy")
+    command = [sys.executable, "-m", "palimp_sim.cli", "generate", "--level", "easy"]
+    subprocess.run(command + ["--seed", "0", "--out", str(out)], check=True, capture_output=True)
+    return out / "scenario-easy-000000" / "artifacts"
 
 
 @pytest.fixture
-def config_only(tmp_path: Path) -> Path:
+def config_only(easy: Path, tmp_path: Path) -> Path:
     directory = tmp_path / "artifacts"
     directory.mkdir()
-    shutil.copy(EASY / "config.set", directory / "config.set")
+    shutil.copy(easy / "config.set", directory / "config.set")
     return directory
 
 

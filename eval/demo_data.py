@@ -28,7 +28,8 @@ TARGET = Path(__file__).parent.parent / "src" / "palimp" / "data" / "demo-scenar
 def build() -> bytes:
     with tempfile.TemporaryDirectory() as work:
         subprocess.run(
-            ["palimp-sim", "generate", "--level", LEVEL, "--seed", str(SEED), "--out", work],
+            [sys.executable, "-m", "palimp_sim.cli", "generate", "--level", LEVEL]
+            + ["--seed", str(SEED), "--out", work],
             check=True,
             capture_output=True,
         )
