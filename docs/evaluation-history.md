@@ -478,3 +478,77 @@ MEDIUM):
 
 Hard `best_achievable_confidence`: 1037 rules on 0-49, all LOW to MEDIUM.
 Firewall team rules and Easy do not change.
+
+## Simulator 0.5.1 release basis, session 35 (2026-10-30, dev seeds, not a held-out run)
+
+Re-measure on simulator 0.5.1 (decision 0049), no analyzer change: palimp
+at `b27d167` (main after merging `sim-0.5.1`), the same code as the session
+33 "after" column. No dangerous error, so no tuning (session 35 prompt).
+Verdicts and intent are identical to session 33, as expected (0.5.1
+changes only confidence values in the ground truth); confidence
+calibration moves. These are the 0.5.1 release basis numbers, quoted in the
+README.
+
+- Simulator: 0.5.1
+- Command: `uv run python eval/verdicts.py --level medium --seeds 20-99` and
+  `--level hard --seeds 20-49`, with `--json` for the per-rule comparison
+
+| metric | Medium 20-99, 0.5.0 (session 33) | Medium 20-99, 0.5.1 | Hard 20-49, 0.5.0 (session 33) | Hard 20-49, 0.5.1 |
+|---|---|---|---|---|
+| rules | 12840 | 12840 | 12671 | 12671 |
+| verdict vs best achievable | 91.7% | 91.7% | 98.1% | 98.1% |
+| verdict vs expected | 86.9% | 86.9% | 82.7% | 82.7% |
+| intent vs best achievable | 82.1% | 82.1% | 78.6% | 78.6% |
+| intent vs true application | 59.2% | 59.2% | 51.3% | 51.3% |
+| overconfidence (vs best achievable) | 10.1% | 3.3% | 5.3% | 2.1% |
+| underconfidence (vs best achievable) | 11.1% | 13.1% | 9.5% | 11.1% |
+| dangerous errors | 0 | 0 | 0 | 0 |
+| naive baseline dangerous errors | 191 | 191 | 148 | 148 |
+| HIGH: intent vs best / verdict = best | 96.7% / 97.7% | 96.7% / 97.7% | 95.6% / 99.0% | 95.6% / 99.0% |
+| HIGH at or below best achievable | n/a | 96.9% | n/a | 95.2% |
+| MEDIUM at or below best achievable | n/a | 88.4% | n/a | 89.6% |
+
+Per scope on 0.5.1 (verdict vs best, intent vs best achievable, intent vs
+true application, overconfident, underconfident, dangerous palimp / naive):
+
+| scope | Medium rules | Medium | Hard rules | Hard |
+|---|---|---|---|---|
+| application | 12557 | 91.6%, 81.7%, 60.6%, 3.3%, 13.2%, 0 / 164 | 12502 | 98.0%, 78.3%, 52.0%, 2.2%, 11.1%, 0 / 117 |
+| block | 141 | 100%, 100%, 0%, 0.7%, 17.7%, 0 / 27 | 87 | 100%, 100%, 0%, 1.1%, 18.4%, 0 / 31 |
+| cleanup_deny | 72 | 100%, 100%, 0%, 0%, 0%, 0 / 0 | 42 | 100%, 100%, 0%, 0%, 0%, 0 / 0 |
+| broad_permit | 49 | 100%, 100%, 0%, 0%, 0%, 0 / 0 | 30 | 100%, 100%, 0%, 0%, 0%, 0 / 0 |
+| factory_default | 21 | 100%, 100%, 0%, 0%, 0%, 0 / 0 | 10 | 100%, 100%, 0%, 0%, 0%, 0 / 0 |
+| TRAP-SHADOWED-BY-DENY | 4 | 100%, 75.0%, 50.0%, 0%, 25.0%, 0 / 4 | 12 | 100%, 100%, 58.3%, 0%, 8.3%, 0 / 9 |
+| ANY source | 19 | 94.7%, 73.7%, 68.4%, 0%, 15.8%, 0 / 0 | 19 | 100%, 89.5%, 73.7%, 0%, 15.8%, 0 / 0 |
+
+Overconfidence by confidence code on 0.5.1 (rules whose confidence is above
+`best_achievable_confidence`, else `max_justified_confidence`; codes with no
+overconfident rule are listed once at the end):
+
+| code | level | Medium rules | Medium overconfident | Medium share of all overconfident | Hard rules | Hard overconfident | Hard share of all overconfident |
+|---|---|---|---|---|---|---|---|
+| C-T1-ONLY | MEDIUM | 1926 | 251 (13.0%) | 59.6% | 921 | 94 (10.2%) | 34.7% |
+| C-T3 | MEDIUM | 853 | 122 (14.3%) | 29.0% | 988 | 137 (13.9%) | 50.6% |
+| C-T1-T3-AGREE | HIGH | 1377 | 42 (3.1%) | 10.0% | 501 | 24 (4.8%) | 8.9% |
+| C-T1-T3-AGREE-NO-TRAFFIC | MEDIUM | 216 | 6 (2.8%) | 1.4% | 286 | 10 (3.5%) | 3.7% |
+| C-SHARED-ADDRESS | MEDIUM | 0 | 0 | 0% | 16 | 5 (31.2%) | 1.8% |
+| C-T1-T3-CONFLICT | LOW (Hard: LOW or MEDIUM) | 438 | 0 | 0% | 220 | 1 (0.5%) | 0.4% |
+| total | | 12840 | 421 (3.3%) | 100% | 12671 | 271 (2.1%) | 100% |
+
+No overconfident rule: C-BLOCK, C-CLEANUP, C-FACTORY-DEFAULT,
+C-AMBIGUOUS-INSTANCE (Hard), C-T3-SINGLE and C-WEAK (LOW by definition).
+
+Reading: decision 0049 made a direct statement alone MEDIUM in the ground
+truth, which is what C-T1-ONLY gives, so its overconfidence falls (the
+session 33 rise from C-T1-ONLY is gone: Medium 10.1% to 3.3%). What
+remains comes mostly from two MEDIUM codes, C-T1-ONLY (a T1 naming an
+application the ground truth still holds at LOW, for example a disputed
+statement) and C-T3 (names from objects and the policy name agreeing).
+Underconfidence rises by about 2 points on both levels: rules palimp holds
+at LOW where 0.5.1 now justifies MEDIUM (a direct statement palimp does not
+read as naming the application). HIGH stays above 95% right on both
+levels. Not tuned: the session 35 mission freezes the analyzer for the
+release candidate, and no dangerous error appeared.
+
+Held-out: not run. The project lead runs it on 0.5.1 after rotating the
+salt; the README keeps a placeholder for it.
