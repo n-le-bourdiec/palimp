@@ -4,7 +4,7 @@ The simulator is not shipped with palimp. This script runs the simulator CLI (bl
 box) for one Medium dev seed and packs its artifacts only (no ground truth, no
 manifest) into `src/palimp/data/demo-scenario.tar.gz`, byte for byte reproducible:
 sorted members, no owner, fixed times. With `--check`, it only says whether the
-packaged file matches what the simulator writes today.
+packaged archive holds what the simulator writes today.
 
 Usage:
     uv run python eval/demo_data.py          # rewrite the packaged file
@@ -55,7 +55,8 @@ def main() -> int:
     args = parser.parse_args()
     data = build()
     if args.check:
-        same = TARGET.exists() and TARGET.read_bytes() == data
+        # Compare the archive content: gzip bytes may differ with the zlib version.
+        same = TARGET.exists() and gzip.decompress(TARGET.read_bytes()) == gzip.decompress(data)
         print(f"{TARGET.name}: {'up to date' if same else 'differs from the simulator output'}")
         return 0 if same else 1
     TARGET.parent.mkdir(parents=True, exist_ok=True)
