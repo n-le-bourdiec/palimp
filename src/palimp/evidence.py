@@ -18,7 +18,8 @@ temporary, dynamic applications matched (`junos:SLACK` names slack),
 the requesters of the tickets for each application named above (palimp.owners),
 history lineage from the rollbacks (palimp.lineage): removed or deactivated
 policies whose traffic this one took over, and a migration that left this
-policy pointing to a silent old host.
+policy pointing to a silent old host (a question, never a not-live signal,
+decision 0051).
 T2 also says when logged traffic stopped well before the end of the log
 window, and when counters were cleared inside it (palimp.counters).
 T4 contextual: plain service names of the applications the policy matches.

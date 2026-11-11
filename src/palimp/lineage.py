@@ -11,8 +11,10 @@ Migration leftover: a later commit added policies that copy existing ones
 same application, at least MIN_MIRRORS of them: the application moved to new
 hosts. This policy still points to an old host, it logs its sessions, and no
 log line of any policy shows the old host's address in the whole log window.
-A positive not-live signal (decision 0024): the history says the host was
-replaced and the logs show it silent.
+Never a not-live signal (decision 0051, superseding that part of decision
+0024): adding a second node looks the same as a migration, and a standby or
+disaster recovery node is silent by design. The item raises a question
+("Is the old node still kept as a standby?"), verdict at most verify.
 
 Addresses resolve through the active address book, then the newest definition
 found in the rollbacks. Anything that does not resolve to IP networks (DNS

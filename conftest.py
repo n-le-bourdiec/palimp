@@ -1,6 +1,6 @@
 """Slow tests run in CI (the CI variable is set by GitHub Actions) or with --runslow.
 
-Full tests (Medium seeds 10 to 99, about 3 s each) run only with --runslow.
+Full tests (long seed sweeps: Medium 10 to 99, Hard 20 to 49) run only with --runslow.
 """
 
 import os
