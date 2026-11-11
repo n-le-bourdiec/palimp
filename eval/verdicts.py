@@ -227,9 +227,32 @@ def evaluate(truth: dict, findings: list[dict], manifest: dict) -> list[dict]:
                 "conflict": bool(assessment["conflicts"]),
                 "naive": baseline(finding),
                 "evidence": finding["evidence"],
+                "signal": removal_signal(finding),
             }
         )
     return rows
+
+
+# Positive not-live signals a removal_candidate may rest on (decision 0051).
+SIGNALS = {
+    "deactivated": "deactivated",
+    "decommission": "decommission text",
+    "migration_leftover": "lineage",
+}
+
+
+def removal_signal(finding: dict) -> str | None:
+    """The signal a removal_candidate rests on: the one palimp names (decision 0051),
+    else the first not-live kind among its evidence, else "other"."""
+    assessment = finding["assessment"]
+    if assessment["verdict"] != "removal_candidate":
+        return None
+    named = assessment.get("removal_signal")
+    kinds = [e.get("kind") for e in finding["evidence"]]
+    if named:
+        kind = next((e.get("kind") for e in finding["evidence"] if e.get("id") == named), None)
+        return SIGNALS.get(kind or "", "other")
+    return next((SIGNALS[k] for k in SIGNALS if k in kinds), "other")
 
 
 def headline(scores: dict[str, Score]) -> None:
@@ -465,6 +488,12 @@ def main() -> int:
         + ", ".join(f"{a}->{b} {v}" for (a, b), v in sorted(confusion.items()))
     )
 
+    signals = Counter(r["signal"] for r in rows if r["palimp"] == "removal_candidate")
+    order = [*SIGNALS.values(), "other"]
+    print(
+        "Removal candidates by justifying signal: "
+        + ", ".join(f"{name} {signals.get(name, 0)}" for name in order)
+    )
     dangerous = [r for r in rows if r["palimp"] == "removal_candidate" and r["needed"]]
     old = sum(r["live"] for r in dangerous)
     print(f"\nDangerous errors, palimp ({len(dangerous)}; old definition, live only: {old}):")
