@@ -89,6 +89,9 @@ realistic firewall history plus a ground-truth file (true intent of every rule).
   (GitHub refuses the push, see session 21).
 - Every commit passes the tests on its own: never commit code that imports
   a module, or uses a function, added only in a later commit.
+- No test may read a file that git does not track (a local `scenarios/`
+  folder, a real config, a probe): a test generates what it needs or reads a
+  committed fixture. Session 35 broke main for five pushes this way.
 
 ## Decisions
 
