@@ -14,4 +14,6 @@ Computed by `metrics/summary.py` from `metrics/sessions.csv`, sessions 1 to 35 (
 
 Commits: 309. Lines added: 39,880, removed: 4,039 (metrics files excluded, as each row records them).
 
+Not counted yet (provisional row, finalized at the start of the next session): session 36.
+
 Not counted (tokens and cost unknown, never estimated): audit-1 (audit).
