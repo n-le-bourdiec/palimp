@@ -334,6 +334,11 @@ class Assessment(BaseModel):
     ask: str | None = Field(None, description="who to ask about the policy, with the reasons")
     owner: str | None = Field(None, description="application owner, only when the artifacts agree")
     owner_candidates: list[str] = Field([], description="people who may own it, most likely first")
+    removal_signal: str | None = Field(
+        None,
+        description="removal_candidate only: the ID of the one positive not-live signal it "
+        "rests on (decision 0051)",
+    )
 
 
 class Finding(BaseModel):

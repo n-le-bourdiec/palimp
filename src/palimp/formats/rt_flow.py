@@ -34,7 +34,10 @@ Probe traffic (session 24): a source whose sessions reach at least
 PROBE_SPREAD policies and PROBE_SPREAD destinations behaves like a scanner or
 a monitoring probe. Its sessions that close with no packet from the server
 (`packets-from-server` 0) are probe sessions, counted apart from business
-traffic in each summary (`probe_sessions`).
+traffic in each summary (`probe_sessions`). One-way UDP to a service port
+(syslog, SNMP and SNMP traps, NetFlow, IPFIX, sFlow, NTP) never gets a
+server packet by design: it is never an unanswered session, so it neither
+makes a source a probe source nor counts as a probe session (decision 0051).
 Lines that are not RT_FLOW messages (other daemons, `last message repeated`)
 are ignored.
 """
@@ -73,6 +76,9 @@ KINDS = {
     "RT_FLOW_SESSION_DENY": "deny",
 }
 PROTOCOLS = {"1": "icmp", "6": "tcp", "17": "udp", "58": "icmp6"}
+# UDP service ports whose traffic flows one way (decision 0051): syslog, SNMP, SNMP
+# traps, NetFlow, IPFIX, sFlow, NTP.
+ONE_WAY_UDP = frozenset({"514", "161", "162", "2055", "9995", "9996", "4739", "6343", "123"})
 # Lists kept per policy are capped; their counts are exact.
 LIST_CAP = 20
 # A placeholder leap year, so that Feb 29 survives until the real year is known.
@@ -366,24 +372,29 @@ def merge_summaries(name: str, summaries: list[LogSummary]) -> LogSummary:
     return merged
 
 
+def unanswered(event: FlowEvent) -> bool:
+    """A closed session the server never answered, where an answer was expected."""
+    if event.kind != "close" or event.server_packets != 0:
+        return False
+    return not (event.protocol == "udp" and event.destination_port in ONE_WAY_UDP)
+
+
 def probe_sources(events: list[FlowEvent]) -> set[str]:
     """Sources that reach PROBE_SPREAD policies and destinations, with at least one
     session the server never answered."""
     policies: dict[str, set[str]] = {}
     targets: dict[str, set[str]] = {}
-    unanswered: set[str] = set()
+    silent: set[str] = set()
     for event in events:
         if event.kind == "deny" or not event.source:
             continue
         key = summary_key(event.policy_name, event.from_zone, event.to_zone)
         policies.setdefault(event.source, set()).add(key)
         targets.setdefault(event.source, set()).add(event.destination)
-        if event.kind == "close" and event.server_packets == 0:
-            unanswered.add(event.source)
+        if unanswered(event):
+            silent.add(event.source)
     return {
-        s
-        for s in unanswered
-        if len(policies[s]) >= PROBE_SPREAD and len(targets[s]) >= PROBE_SPREAD
+        s for s in silent if len(policies[s]) >= PROBE_SPREAD and len(targets[s]) >= PROBE_SPREAD
     }
 
 
@@ -426,7 +437,7 @@ def parse_rt_flow(
                 policy_name=event.policy_name, from_zone=event.from_zone, to_zone=event.to_zone
             )
             accumulators[key] = _Accumulator(summary)
-        probe = event.kind == "close" and event.server_packets == 0 and event.source in probes
+        probe = unanswered(event) and event.source in probes
         accumulators[key].add(event, probe)
         if event.timestamp is not None:
             if window.start is None or event.timestamp < window.start:

@@ -167,6 +167,8 @@ YES_NO = {
     "V-SHARED-ADDRESS": "Does the application now at this address still need this access?",
     "V-CONTRADICTION": "Is the traffic that still uses this rule expected, and still needed?",
     "V-NOTLIVE": "Is this access still needed by anyone?",
+    "V-MIGRATION-LEFTOVER": "Is the old node still kept as a standby?",
+    "V-NOTLIVE-QUESTION": "Is this access still needed?",
     "V-TEMPORARY-IN-USE": "Is this temporary opening still needed?",
     "V-TAKEOVER-IN-USE": "Is this broad access still needed as it is?",
     "V-NAME-SERVICE": "Is the access this rule matches today still needed?",
@@ -887,9 +889,9 @@ def _summary(entries: list[RuleEntry], found: list[GlobalEvidence]) -> Summary:
         Cited(
             text=(
                 f"{count['removal_candidate']} rules are removal candidates. Each one rests on "
-                "a positive sign that it is not in use (deactivated, decommissioned application, "
-                "or a migration leftover whose old servers are silent), listed in its section. "
-                "None rests on missing traffic alone."
+                "one positive sign that it is not in use (deactivated, or a decommission record "
+                "that names an object of the rule), named in its section. None rests on "
+                "missing traffic, a zero counter or a migration read from the history."
             )
         ),
         Cited(text=_traffic_sentence(count["keep"], counters, found), evidence=window),
@@ -964,6 +966,8 @@ def build(dataset: Dataset, findings: list[Finding] | None = None) -> Report:
             e.kind in NOT_LIVE_KINDS for e in finding.evidence
         ):
             raise ValueError(f"{finding.key}: removal_candidate without a not-live item")
+        if assessment.verdict == "removal_candidate" and not assessment.removal_signal:
+            raise ValueError(f"{finding.key}: removal_candidate without a named signal")
         cleanup = is_cleanup(finding)
         shared = is_shared(finding)
         question = YES_NO[assessment.verdict_rule] if assessment.verdict != "keep" else ""

@@ -522,8 +522,10 @@ def collect(
                     Item("T1", artifact, locator, "not in tickets.csv", None, "ticket_reference")
                 )
 
-    for artifact, locator, claim, apps in decommission_items(dataset, policy, named, found, legacy):
-        items.append(Item("T1", artifact, locator, claim, None, "decommission", apps))
+    for artifact, locator, claim, apps, kind in decommission_items(
+        dataset, policy, named, found, legacy
+    ):
+        items.append(Item("T1", artifact, locator, claim, None, kind, apps))
 
     for locator, claim, objects in leftover_items(dataset, policy, named, moves):
         apps = list(dict.fromkeys(a for o in objects for a in vocab.in_object(o)))

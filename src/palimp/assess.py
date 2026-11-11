@@ -15,12 +15,22 @@ Verdict rules, first match wins:
   another application, and traffic is seen or a not-live signal exists: the
   address may have been reused (or the application renamed). Never keep, never
   removal_candidate (session 24).
-- V-CONTRADICTION (verify): a positive not-live signal, but traffic is seen.
-  When the only logged traffic is probe traffic (scanner or monitoring, see
-  palimp.formats.rt_flow), hits on the counters do not count as traffic seen.
+- V-CONTRADICTION (verify): a positive not-live signal, but traffic is seen:
+  hits, logged sessions or probe sessions (decision 0051).
 - V-NOTLIVE (removal_candidate): a positive not-live signal, no traffic seen.
+  The one signal it rests on is named (`removal_signal`): the rule is
+  deactivated, or a decommission record names an object of this rule
+  (palimp.notlive, decision 0051). Logs and counters are evidence of use only:
+  their silence, a zero or a short window never counts toward not-live.
+- V-MIGRATION-LEFTOVER (verify): a later commit copied this rule's flows to a
+  new host (palimp.lineage). Never removal_candidate: a second node looks the
+  same, and the old one may be a standby (decision 0051, audit B2).
+- V-NOTLIVE-QUESTION (verify): a decommission record that does not clearly
+  retire this rule (names no object of it, negated or conditional, another
+  environment, a ticket linked by its closing day alone), decision 0051.
 - V-PROBE-ONLY (verify): the only logged traffic is probe traffic, no
   not-live signal: not in use as far as the artifacts show, not unused either.
+  Probe sessions and hits still count against a not-live signal (decision 0051).
 - V-TEMPORARY-IN-USE (verify): traffic seen on a policy marked temporary that
   permits any application (the shape of an emergency opening). A narrow
   policy with a "temp" label is judged like any other. Policies it took over
@@ -89,7 +99,18 @@ from palimp.semantics import is_deny
 from palimp.services import ROLE_SERVICES, aliases
 
 # Evidence kinds that say a policy is unused (decision 0020), not that nothing is known.
-NOT_LIVE_KINDS = frozenset({"deactivated", "decommission", "migration_leftover"})
+NOT_LIVE_KINDS = frozenset({"deactivated", "decommission"})
+# Items that raise the question of a rule's end without being a not-live signal
+# (decision 0051): a decommission text that does not clearly apply to this rule, and a
+# migration read from the rollbacks (a second node looks the same, the old one may be a
+# standby). At most verify.
+DOUBT_KINDS = frozenset({"decommission_question", "migration_leftover"})
+# The signal a removal_candidate rests on, most direct first (decision 0051).
+SIGNAL_ORDER = ("deactivated", "decommission")
+SIGNAL_LABELS = {
+    "deactivated": "the rule is deactivated",
+    "decommission": "a decommission record names an object of this rule",
+}
 LEVELS = ("LOW", "MEDIUM", "HIGH")
 # T1 kinds that state why a policy exists (a decommission states why it ended).
 INTENT_KINDS = frozenset({"description", "annotation", "commit_comment", "ticket"})
@@ -118,12 +139,28 @@ def _ids(items: list[Evidence]) -> list[str]:
 
 
 def _in_use(finding: Finding) -> list[Evidence]:
-    """T2 items that show traffic. When the only logged traffic is probe traffic, hits on
-    the counters are not business use (session 24)."""
-    present = [e for e in finding.evidence if e.tier == "T2" and e.signal == "present"]
+    """T2 items that show traffic, for the verdict. Logs and counters are evidence of use
+    only: the scanner reading never cancels them (decision 0051)."""
+    return [e for e in finding.evidence if e.tier == "T2" and e.signal == "present"]
+
+
+def _in_use_for_intent(finding: Finding) -> list[Evidence]:
+    """T2 items that show traffic, for the intent confidence. When the only logged traffic
+    is probe traffic, hits on the counters are not business use (session 24): they may
+    lower the confidence, never the verdict (decision 0051)."""
+    present = _in_use(finding)
     if any(e.kind == "probe_only" for e in finding.evidence):
         present = [e for e in present if e.kind != "hit_count"]
     return present
+
+
+def removal_signal(finding: Finding) -> Evidence | None:
+    """The one positive not-live signal a removal_candidate rests on (decision 0051)."""
+    for kind in SIGNAL_ORDER:
+        item = next((e for e in finding.evidence if e.kind == kind), None)
+        if item is not None:
+            return item
+    return None
 
 
 def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
@@ -140,34 +177,56 @@ def _verdict(finding: Finding) -> tuple[str, str, str, list[str]]:
             _ids(catch_all + present),
         )
     probe = [e for e in evidence if e.kind == "probe_only"]
+    doubt = [e for e in evidence if e.kind in DOUBT_KINDS]
     absent = [e for e in evidence if e.tier == "T2" and e.signal == "absent"]
     if is_deny(policy) and not policy.deactivated:
-        return _deny_verdict(finding, not_live, present, absent)
+        return _deny_verdict(finding, not_live + doubt, present, absent)
     temporary = [e for e in evidence if e.kind == "temporary_marker"]
     shared = [e for e in evidence if e.kind == "shared_address"]
-    if shared and (present or not_live):
+    if shared and (present or not_live or doubt):
         return (
             "verify",
             "V-SHARED-ADDRESS",
             "a destination address is also an object of another application: the rule may "
             "carry traffic it was not written for, or serve an application under a new name",
-            _ids(shared + not_live + present),
+            _ids(shared + not_live + doubt + present),
         )
-    if not_live and present:
+    # Probe sessions are logged sessions: they count against a not-live signal.
+    if not_live and (present or probe):
         return (
             "verify",
             "V-CONTRADICTION",
             "a not-live signal and traffic seen contradict each other",
-            _ids(not_live + present),
+            _ids(not_live + present + probe),
         )
     if not_live:
+        signal = removal_signal(finding)
+        assert signal is not None
         return (
             "removal_candidate",
             "V-NOTLIVE",
-            "a positive not-live signal, and no traffic seen",
-            _ids(not_live + absent),
+            f"a positive not-live signal ({SIGNAL_LABELS[signal.kind]}), and no traffic seen",
+            _ids([signal] + [e for e in not_live if e is not signal] + absent),
         )
-    if probe and not present:
+    migration = [e for e in doubt if e.kind == "migration_leftover"]
+    if migration:
+        return (
+            "verify",
+            "V-MIGRATION-LEFTOVER",
+            "a later change copied this rule's flows to a new host of the same application; "
+            "the old host may be gone, or kept as a standby: never a removal signal on its own",
+            _ids(migration + present + absent),
+        )
+    if doubt:
+        return (
+            "verify",
+            "V-NOTLIVE-QUESTION",
+            "a decommission record may concern this rule, but it does not clearly retire it "
+            "(it names no object of the rule, is negated or conditional, or is about another "
+            "environment): a question, not a not-live signal",
+            _ids(doubt + present + absent),
+        )
+    if probe and not [e for e in present if e.kind != "hit_count"]:
         hits = [e for e in evidence if e.kind == "hit_count"]
         return (
             "verify",
@@ -310,13 +369,13 @@ def _confidence(finding: Finding) -> tuple[str, str, str, list[str], list[str], 
         apps = list(dict.fromkeys(a for e in direct for a in e.apps))
 
     if conflicts:
-        in_use = bool(_in_use(finding))
+        in_use = bool(_in_use_for_intent(finding))
         base = "HIGH" if agree and in_use else "MEDIUM"
         level = LEVELS[LEVELS.index(base) - 1]
         cited = sorted({i for c in conflicts for i in c.evidence} | set(_ids(agree)), key=_order)
         reason = "tiers contradict each other on the application, confidence lowered"
         return level, "C-T1-T3-CONFLICT", reason, cited, apps, conflicts
-    present = _in_use(finding)
+    present = _in_use_for_intent(finding)
     if agree and present:
         reason = "direct evidence names the same application as the address objects, in use"
         cited = _ids(agree) + [objects.id] + _ids(present)
@@ -641,6 +700,9 @@ QUESTIONS = {
     "V-CONTRADICTION": "The artifacts say this policy is unused, yet traffic matches it. "
     "Which systems still use it, and is that traffic expected?",
     "V-NOTLIVE": "Can this policy be removed? Confirm nothing still depends on it.",
+    "V-MIGRATION-LEFTOVER": "Is the old node still kept as a standby?",
+    "V-NOTLIVE-QUESTION": "A change record mentions a retirement that may concern this "
+    "policy, without clearly saying its servers are gone. Is this policy still needed?",
     "V-TEMPORARY-IN-USE": "This policy was labeled temporary and still carries traffic. "
     "Is it still needed, and should it be replaced by a narrower permanent rule?",
     "V-TAKEOVER-IN-USE": "This policy permits any application and now carries the traffic of "
@@ -737,6 +799,7 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
         finding, _blocks(finding, _confidence(finding))
     )
     question = QUESTIONS[v_rule] if verdict != "keep" else None
+    signal = removal_signal(finding)
     if v_rule == "V-NO-VISIBILITY":
         question = _no_visibility_question(finding)
     # A flow between two applications may belong to either side: every application
@@ -777,4 +840,5 @@ def assess(finding: Finding, dataset: Dataset) -> Assessment:
         ask=ask,
         owner=owner.owner,
         owner_candidates=owner.candidates,
+        removal_signal=signal.id if verdict == "removal_candidate" and signal else None,
     )

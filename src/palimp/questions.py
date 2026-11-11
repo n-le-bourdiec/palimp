@@ -115,19 +115,18 @@ def _plain_reason(entry: RuleEntry) -> str:
                 "a change record says the application was retired and the other rules for it "
                 "were deleted, but this one was left behind"
             )
-        if "migration_leftover" in kinds:
-            reasons.append(
-                "a later change moved this flow to new servers, and no log shows the old "
-                "servers since"
-            )
         text = "We think this rule is no longer used: " + "; ".join(reasons) + "."
-        return text + ref("deactivated", "decommission", "migration_leftover")
+        return text + ref("deactivated", "decommission")
     texts = {
         "V-PROBE-ONLY": "The only traffic we saw on it comes from scanning or monitoring tools, "
         "not from people or applications.",
         "V-SHARED-ADDRESS": "A server address it lets through is also registered under another "
         "application. That application may now use this rule, or the application may have "
         "been renamed.",
+        "V-MIGRATION-LEFTOVER": "A later change copied its flows to a new server of the same "
+        "application. The old server may be gone, or kept as a standby.",
+        "V-NOTLIVE-QUESTION": "A change record mentions a retirement that may concern it, "
+        "but does not clearly say its servers are gone.",
         "V-CONTRADICTION": "One record says this rule is no longer used, yet traffic still "
         "goes through it.",
         "V-TEMPORARY-IN-USE": "It was set up as a temporary opening for any application, and "

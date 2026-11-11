@@ -138,8 +138,10 @@ def test_leftover_of_a_migration_to_a_silent_host(tmp_path: Path) -> None:
     item = kinds(finding)["migration_leftover"]
     assert "copied 2 policies from dms-db-01 to dms-db-02" in item.claim
     assert "no log line of any policy shows that address" in item.claim
-    assert finding.assessment.verdict == "removal_candidate"
-    assert finding.assessment.verdict_rule == "V-NOTLIVE"
+    # Never a removal signal: the old host may be a standby (decision 0051).
+    assert finding.assessment.verdict == "verify"
+    assert finding.assessment.verdict_rule == "V-MIGRATION-LEFTOVER"
+    assert finding.assessment.question == "Is the old node still kept as a standby?"
 
 
 def test_no_leftover_when_the_old_host_still_talks(tmp_path: Path) -> None:

@@ -47,15 +47,35 @@ def make(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_leftover_of_a_decommission_is_a_removal_candidate(tmp_path: Path) -> None:
+def test_decommission_naming_no_object_is_a_question(tmp_path: Path) -> None:
+    # The ticket names the application only, and is linked by its closing day alone:
+    # a question, never a not-live signal (decision 0051).
     dataset = ingest(make(tmp_path))
     assert [r.key for r in dataset.removed_by_commit[0]] == ["trust/dc/hr-gone"]
     finding = collect(dataset, PolicyKey.parse("trust/dc/hr-left"))
-    item = next(e for e in finding.evidence if e.kind == "decommission")
+    item = next(e for e in finding.evidence if e.kind == "decommission_question")
     assert item.artifact == "tickets.csv" and item.apps == ["hr"]
     assert "trust/dc/hr-gone" in item.claim
+    assert "names no address, host or object of this rule" in item.claim
+    assert "only by its closing day" in item.claim
+    assert finding.assessment.verdict == "verify"
+    assert finding.assessment.verdict_rule == "V-NOTLIVE-QUESTION"
+    assert finding.assessment.removal_signal is None
+
+
+def test_leftover_of_a_decommission_is_a_removal_candidate(tmp_path: Path) -> None:
+    make(tmp_path)
+    # The commit cites the ticket, and the ticket names the server this rule reaches.
+    cited = COMMITS.replace("by bob via cli\n", "by bob via cli\n    CHG0000900\n", 1)
+    (tmp_path / "commits.txt").write_text(cited)
+    named = TICKETS.replace("HRP retirement", "hr-web-01 retirement")
+    (tmp_path / "tickets.csv").write_text(named)
+    finding = collect(ingest(tmp_path), PolicyKey.parse("trust/dc/hr-left"))
+    item = next(e for e in finding.evidence if e.kind == "decommission")
     assert finding.assessment.verdict == "removal_candidate"
     assert finding.assessment.verdict_rule == "V-NOTLIVE"
+    assert finding.assessment.removal_signal == item.id
+    assert "a decommission record names an object of this rule" in finding.assessment.verdict_reason
 
 
 def test_policy_naming_another_live_application_gets_no_signal(tmp_path: Path) -> None:
