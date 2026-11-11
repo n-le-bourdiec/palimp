@@ -1,13 +1,15 @@
 # Handoff
 
-## Status: release candidate 0.1.0, FROZEN (session 35, 2026-10-30)
+## Status: release candidate 0.1.0, unfrozen for safety fixes (session 36, 2026-11-11)
 
-palimp is a release candidate. It is not published: the project lead
-publishes it later, together with a second tool. Until that joint release,
-the analyzer is frozen: **only bug fixes**, no tuning, no new feature, no
-wording change beyond a fix. A bug fix that moves any verdict, confidence
-or owner must say so in its commit and in this file; one that moves a rule
-toward `removal_candidate` needs the project lead's approval first.
+palimp is a release candidate, not published. An independent audit
+(`../palimp-audit.md`, 2026-11-11, outside the repository) found the core
+safety rule broken (B1, B2, M1); session 36 fixed it (decision 0051). The
+analyzer stays frozen otherwise: **only bug fixes**, no tuning, no new
+feature. A fix that moves any verdict, confidence or owner says so in its
+commit and in this file; one that moves a rule toward `removal_candidate`
+needs the project lead's approval first. The audit's other findings (B3,
+M2 to M4, M6 to M8, minor items) are open, see Next.
 
 ### What the project lead must do before the release
 
@@ -34,53 +36,85 @@ toward `removal_candidate` needs the project lead's approval first.
 5. Review decision 0050 (config-only wording, unnamed rules grouped by zone
    pair) and the open questions below.
 
-## Last session: 35 (2026-10-30), analyzer: release candidate
+## Last session: 36 (2026-11-11), analyzer: safety fixes after the audit
+
+Every change moves rules toward verify or keep only.
 
 ### Done
 
-- Session 34 metrics finalized (60 calls, 2.87 USD).
-- PR 2 (simulator 0.5.1) merged into main (`b27d167`), main green.
-- Re-measured on 0.5.1 (`docs/evaluation-history.md`, session 35 section):
-  Medium 20-99 overconfidence 10.1% to 3.3%, underconfidence 11.1% to
-  13.1%; Hard 20-49 overconfidence 5.3% to 2.1%, underconfidence 9.5% to
-  11.1%; verdicts and intent unchanged (91.7% / 98.1% vs best, intent
-  82.1% / 78.6%); 0 dangerous errors (naive 191 / 148), so no tuning.
-  Overconfidence by confidence code: C-T1-ONLY and C-T3 (both MEDIUM) hold
-  89% (Medium) and 85% (Hard) of the overconfident rules.
-- README rewritten for the release (pitch, demo excerpt, pipx install,
-  quickstart, inputs, evaluation with naive baseline and a held-out
-  placeholder, does not do, could not see, known limits, privacy, LLM
-  writer, how it was built, license). Absolute links, for PyPI.
-- `palimp demo`: bundled synthetic Medium scenario (dev seed 14, artifacts
-  only, 476 KB `src/palimp/data/demo-scenario.tar.gz`), report written to a
-  new temporary or given empty directory. `eval/demo_data.py` rebuilds the
-  archive from the simulator CLI; a slow test checks it still matches.
-  Decisions 0003 and 0032 amended: `demo` did not exist until session 35.
-- Packaging: 0.1.0, metadata, classifiers, project URLs, sdist with the
-  analyzer only. Checked: wheel holds no simulator; `pipx install` of the
-  built wheel in an isolated PIPX_HOME (Python 3.12) then `palimp demo`
-  works, `palimp_sim` not importable there.
-- `.github/workflows/release.yml`: PyPI on a `v*` tag, TestPyPI by hand,
-  trusted publishing; nothing published.
-- `CHANGELOG.md`, `metrics/summary.md` (from `metrics/summary.py`),
-  `.github/ISSUE_TEMPLATE/bug_report.md`, `CONTRIBUTING.md`.
-- Config-only wording (decision 0050): each sentence names only the
-  artifacts provided (no counter clear spot without hit counts, explain
-  "created in: unknown, no commit history was provided", the no-visibility
-  question lists its real reasons, initials note without tickets, empty
-  sections print "None."). Rules with no owner name are grouped by zone
-  pair in the report and the questionnaires
-  (`NN-no-owner-name-<from>-to-<to>.txt`), with a "Who may know:" line per
-  item. Tests in `tests/test_config_only.py`.
+- Session 35 metrics finalized (122 calls, 7.05 USD). Audit row added
+  (`audit-1`, Fable 5.2, about 70 calls as stated by the project lead,
+  tokens and cost `n/a`, never estimated); `metrics/summary.py` lists rows
+  with unknown cost apart instead of failing.
+- CLAUDE.md: no test may read a file that git does not track (session 35
+  broke main for five pushes that way, audit m1; not recorded in this file
+  until now).
+- B1, B2, M1 rebuilt with invented names as failing tests
+  (`tests/test_safety_regressions.py`, commit `9df2212`, not pushed alone),
+  then fixed (decision 0051, commit `6872f03`):
+  - decommission text: a not-live signal only when it names an object of
+    the rule that the deleted policies referenced too, is not negated or
+    conditional, matches the rule's environment, and is linked by a
+    citation; otherwise `decommission_question`, `V-NOTLIVE-QUESTION`
+    (verify);
+  - migration leftover: `V-MIGRATION-LEFTOVER` (verify), question "Is the
+    old node still kept as a standby?";
+  - logs and counters: evidence of use only (no remaining not-live signal
+    reads them);
+  - probe reading lowers intent confidence only; hits and probe sessions
+    next to a not-live signal give V-CONTRADICTION; one-way UDP to service
+    ports (514, 161, 162, 2055, 9995, 9996, 4739, 6343, 123) is never an
+    unanswered session;
+  - `Assessment.removal_signal`: the ID of the one signal every
+    removal_candidate rests on; the report refuses one without it.
+- Safety test (M5): `tests/test_safety_verdicts.py` replaces
+  `tests/test_medium_verdicts.py`. Dangerous = live or still_needed. Fast
+  tier in CI (Medium 0-19, Hard 0-19, 40 scenarios, about 2.5 min), slow
+  tier with `--runslow` (Medium 20-99, Hard 20-49). Each checks every
+  removal_candidate names a cited not-live item.
+- `eval/verdicts.py` prints removal candidates by justifying signal.
+- Measured (`docs/evaluation-history.md`, session 36): Medium 20-99, 36
+  removal_candidate to verify (24 lineage, 12 decommission, all best
+  removal_candidate, none needed), verdict vs best 91.7% to 91.5%; Hard
+  20-49, 22 to verify (15 lineage, 7 decommission, all best verify), 98.1%
+  to 98.2%; 0 confidence changes; 0 dangerous before and after (the
+  simulator never produced the audit histories, audit B3). After the fix
+  every simulated removal candidate is deactivated. Real configs: 0 changes
+  rule by rule.
+- README (verdict numbers, removal wording), CHANGELOG (Fixed), decisions
+  0020, 0024 and 0039 status lines point to 0051.
+
+Session 35 (2026-10-30): release candidate (README, `palimp demo`,
+packaging, release workflow, CHANGELOG, config-only wording, decision 0050).
 
 ### Next
 
-- Project lead: the list above (salt, held-out, trusted publishers,
-  TestPyPI dry run, tag).
+- Project lead: review decision 0051, in particular the session's own
+  initiative (a ticket linked to a commit by its closing day alone is now a
+  question, never a not-live signal) and the doubt word list.
+- Project lead, from the audit, not done in session 36 (one mission per
+  session): B3 (the simulator never generates histories that could make
+  palimp's safety number fail; a simulator session could add near-miss
+  decommission, standby node and one-way UDP cases to the ground truth),
+  M2 to M4, M6 to M8, m2 to m9.
+- Then the release list above (salt, held-out, trusted publishers, TestPyPI
+  dry run, tag). The README held-out placeholder is unchanged.
 - After the release only: C-T1-ONLY and C-T3 overconfidence; block rule
-  underconfidence (17.7% Medium, 18.4% Hard); the open questions below.
+  underconfidence; the open questions below.
 
 ### Open questions
+
+- Decision 0051: the doubt words include `if`, `when`, `before`, `will`
+  and `candidate`, so an affirmative text such as "retired app-03 before
+  the audit" is read as conditional (verify). Safe, but it may hide true
+  decommissions on real histories. Keep the broad list?
+- Decision 0051: the decommission text must name an object that the
+  deleted policies also referenced. A rule left behind that names only the
+  database of a retired server ("retire app-03" while the rule is
+  `backup -> db-01`) is now a question. Fine?
+- V-PROBE-ONLY is kept at verify (not keep) for a policy with hits whose
+  only logged sessions are probes. The prompt's "never cancels hits or logs
+  for the verdict" could also be read as keep. Which?
 
 - Decision 0050: zone pair chosen over destination for rules with no owner
   name (destination order inside each group). Fine?
@@ -120,6 +154,14 @@ toward `removal_candidate` needs the project lead's approval first.
   activate`; CONFIRMED-TEXT; scenario names.
 
 ### Known issues
+
+- Session 36: the simulator's decommission texts never name a server
+  object, so no simulated rule exercises the decommission path to
+  `removal_candidate` any more; only `tests/test_safety_regressions.py`
+  and `tests/test_notlive.py` cover it.
+- Session 36: Python scripts fed through a Bash heredoc on this machine
+  lose one level of backslash escaping (a regex word boundary became a
+  backspace character); use the Edit tool for strings with backslashes.
 
 - Underconfidence measured before simulator 0.4.0 (57%, 68% in session 28)
   came from tier-based ceilings; 0.4.0 replaces them (decision 0045).
@@ -234,6 +276,14 @@ on held-out or on the real public configs.
 For simulator sessions. Analyzer sessions add items here, they never read
 simulator code.
 
+- Audit B3 (session 36): histories that could make the safety number fail.
+  A decommission of one server inside a living application (the text names
+  the server, the rules of its replacement stay), a negated or conditional
+  decommission comment, a ticket about a test environment closed on the day
+  of an unrelated commit, a second node added next to an old one kept as a
+  standby, one-way UDP flows (syslog, traps, NetFlow) from one source to
+  several collectors. Ground truth: live or still needed.
+
 - A product named by an object plus its well-known port (`redis-01` on
   tcp/6379) as two sources (session 34 prompt; see the decision 0043 open
   question). Today the simulator counts no product as naming an
@@ -307,10 +357,13 @@ has transcript `82425030-2c0d-4a09-a086-7597631acbb2` (finalized in session
 (finalized in session 33). Session 33 has transcript
 `7c1bd47e-a91f-4aa2-9cdf-b9aa66afbb7a` (finalized in session 34). Session 34
 has transcript `1a30456b-3d7f-4f82-879c-0f2217725452` (finalized in session
-35). Session 35 has transcript `f38dbea4-97b5-41e2-a3ee-e45708bd459f`.
-Finalize it at the start of the next session with:
+35). Session 35 has transcript `f38dbea4-97b5-41e2-a3ee-e45708bd459f` (finalized
+in session 36). The independent audit (2026-11-11) ran outside this project:
+its tokens are unknown (`n/a`). Session 36 has transcript
+`9d587b25-b097-4e40-82a6-e341497feb07`. Finalize it at the start of the next
+session with:
 
-    uv run python metrics/session_tokens.py f38dbea4-97b5-41e2-a3ee-e45708bd459f
+    uv run python metrics/session_tokens.py 9d587b25-b097-4e40-82a6-e341497feb07
 
 then run `uv run python metrics/summary.py` to refresh `metrics/summary.md`.
 
