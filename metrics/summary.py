@@ -2,7 +2,9 @@
 
 Only finalized rows count (a provisional row, whose notes start with
 "provisional", is listed apart): its token counts are not final until the next
-session measures the transcript. Calls are read from the notes ("N API calls").
+session measures the transcript. A row whose cost is unknown (`n/a`, for example
+the independent audit, run outside this project) is listed apart too: its tokens
+were never measured, and they are never estimated. Calls are read from the notes ("N API calls").
 Cost is API-equivalent (decision 0006), not a billed amount.
 
 Usage:
@@ -31,8 +33,9 @@ def number(value: str) -> int:
 
 def main() -> None:
     rows = list(csv.DictReader(SOURCE.open(encoding="utf-8")))
-    final = [r for r in rows if not r["notes"].startswith("provisional")]
     pending = [r for r in rows if r["notes"].startswith("provisional")]
+    unknown = [r for r in rows if r not in pending and r["est_cost_usd"] == "n/a"]
+    final = [r for r in rows if r not in pending and r not in unknown]
     phases: dict[str, list[dict]] = defaultdict(list)
     for row in final:
         phases[row["phase"]].append(row)
@@ -78,6 +81,12 @@ def main() -> None:
         out += [
             f"Not counted yet (provisional row, finalized at the start of the next "
             f"session): session {ids}.",
+            "",
+        ]
+    if unknown:
+        ids = ", ".join(f"{r['session_id']} ({r['phase']})" for r in unknown)
+        out += [
+            f"Not counted (tokens and cost unknown, never estimated): {ids}.",
             "",
         ]
     TARGET.write_text("\n".join(out), encoding="utf-8")
