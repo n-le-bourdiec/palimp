@@ -1,6 +1,6 @@
 # 0024 History lineage, migration leftovers and counter clears
 
-- Status: Accepted (amended 2026-10-05)
+- Status: Accepted (amended 2026-10-05); "Migration leftover, a positive not-live signal" superseded by decision 0051 (a question, never a not-live signal)
 - Date: 2026-10-05
 
 ## Context

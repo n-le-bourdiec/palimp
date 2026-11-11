@@ -1,6 +1,6 @@
 # 0039 Hard level quality: instances, renames, reused addresses, probes
 
-- Status: Accepted
+- Status: Accepted; item 5 (probe hits stop counting for the verdict) superseded by decision 0051
 - Date: 2026-10-13
 - Extends: decision 0020 (verdict and confidence rules: two new verdict
   rules, two new confidence caps), decision 0036 (Hard tuning on seeds 0 to

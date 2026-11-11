@@ -92,7 +92,7 @@ Dev scenarios, simulator 0.5.1 (tuning used other seeds, 0 to 19):
 
 | metric | Medium, seeds 20-99 (12840 rules) | Hard, seeds 20-49 (12671 rules) |
 |---|---|---|
-| verdict equals the best the artifacts allow | 91.7% | 98.1% |
+| verdict equals the best the artifacts allow | 91.5% | 98.2% |
 | removal candidate on a live or still needed rule (palimp) | 0 | 0 |
 | same, naive baseline | 191 | 148 |
 | intent right vs best achievable | 82.1% | 78.6% |
@@ -121,8 +121,9 @@ paragraph; until then, every number above is from dev seeds.
 - It never connects to a device and never writes a command meant to be
   pushed. Reports, questionnaires and lists are for people to read.
 - It does not decide for you. A removal candidate needs a positive sign that
-  the rule is not in use (deactivated, decommissioned application, migration
-  leftover whose old servers are silent), never missing traffic alone, and
+  the rule is not in use: it is deactivated, or a change record retires a
+  server or object of this very rule. Never missing traffic, a zero counter,
+  a short log or a migration read from the history (those give verify), and
   you still confirm with the person named.
 - It does not judge whether a rule is too broad or compliant, and it does not
   analyze NAT, routing or rule order beyond rules after a catch-all deny of

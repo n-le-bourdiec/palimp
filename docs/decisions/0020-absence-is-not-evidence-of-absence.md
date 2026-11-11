@@ -1,6 +1,6 @@
 # 0020 Absence of evidence is never evidence of absence
 
-- Status: Accepted
+- Status: Accepted; the decommission example is superseded by decision 0051 (a text must name an object of the rule)
 - Date: 2026-10-05
 
 ## Context

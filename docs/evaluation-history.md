@@ -552,3 +552,79 @@ release candidate, and no dangerous error appeared.
 
 Held-out: not run. The project lead runs it on 0.5.1 after rotating the
 salt; the README keeps a placeholder for it.
+
+## Safety fixes after the audit, session 36 (2026-11-11, dev seeds, not a held-out run)
+
+Decision 0051 (audit B1, B2, M1): a decommission text counts only when it
+names an object of the rule, is not negated or conditional, matches the
+rule's environment and is linked by a citation; a migration leftover is
+never a not-live signal; the probe reading never cancels hits or logs for
+the verdict; one-way UDP to service ports is not probe traffic. Before:
+`e212a2d` code (session start). After: `209ae90`. Simulator 0.5.1.
+
+- Command: `uv run python eval/verdicts.py --level medium --seeds 20-99` and
+  `--level hard --seeds 20-49`, with `--json` for the per-rule comparison
+
+| metric | Medium 20-99 before | Medium 20-99 after | Hard 20-49 before | Hard 20-49 after |
+|---|---|---|---|---|
+| rules | 12840 | 12840 | 12671 | 12671 |
+| verdict vs best achievable | 91.7% | 91.5% | 98.1% | 98.2% |
+| verdict vs expected | 86.9% | 86.7% | 82.7% | 82.5% |
+| intent vs best achievable | 82.1% | 82.1% | 78.6% | 78.6% |
+| intent vs true application | 59.2% | 59.2% | 51.3% | 51.3% |
+| overconfidence (vs best achievable) | 3.3% | 3.3% | 2.1% | 2.1% |
+| underconfidence (vs best achievable) | 13.1% | 13.1% | 11.1% | 11.1% |
+| dangerous errors (live or still needed) | 0 | 0 | 0 | 0 |
+| naive baseline dangerous errors | 191 | 191 | 148 | 148 |
+| HIGH: intent vs best / verdict = best | 96.7% / 97.7% | 96.7% / 97.7% | 95.6% / 99.0% | 95.6% / 99.0% |
+| HIGH at or below best achievable | 96.9% | 96.9% | 95.2% | 95.2% |
+| MEDIUM at or below best achievable | 88.4% | 88.4% | 89.6% | 89.6% |
+| verdicts keep / verify / removal_candidate | 10260 / 1459 / 1121 | 10260 / 1495 / 1085 | 8243 / 2189 / 2239 | 8243 / 2211 / 2217 |
+
+Removal candidates by the signal that justifies them:
+
+| signal | Medium before | Medium after | Hard before | Hard after |
+|---|---|---|---|---|
+| deactivated | 1085 | 1085 | 2217 | 2217 |
+| decommission text | 12 | 0 | 7 | 0 |
+| lineage (migration leftover) | 24 | 0 | 15 | 0 |
+| other | 0 | 0 | 0 | 0 |
+
+"Before" has no named signal; the script takes the first not-live kind
+among the rule's evidence (deactivated, then decommission, then migration
+leftover). "After" reads `removal_signal`.
+
+Per scope after: unchanged from session 35 except application rules, verdict
+vs best Medium 91.6% to 91.3%, Hard 98.0% to 98.2%.
+
+Verdict moves rule by rule, all removal_candidate to verify:
+- Medium: 36 (24 lineage to V-MIGRATION-LEFTOVER, 12 decommission to
+  V-NOTLIVE-QUESTION), all on rules neither live nor still needed whose best
+  achievable verdict is removal_candidate (25 with no trap, 10
+  TRAP-HISTORY-HORIZON, 1 TRAP-MISLEADING-COMMENT). Verdict vs best loses
+  0.3 points: the price of the safe reading.
+- Hard: 22 (15 lineage, 7 decommission), all on rules neither live nor still
+  needed whose best achievable verdict is verify: verdict vs best gains.
+- Verify to verify, rule renamed: V-CONTRADICTION to V-NOTLIVE-QUESTION 46
+  (Medium) and 7 (Hard), to V-MIGRATION-LEFTOVER 33 and 1: the doubtful
+  signal next to traffic.
+- No rule moves toward removal_candidate. No confidence changes (0 rules
+  on either level). No V-PROBE-ONLY move: the simulated scanner traffic is
+  not one-way UDP to a service port.
+
+Every decommission text in the simulated dev scenarios names an
+application, never a server object, so none remains a not-live signal: on
+these levels every removal candidate is now a deactivated rule. The
+simulator never produced the B1, B2 and M1 histories (0 dangerous before,
+audit B3), so these numbers show what the fixes cost, not what they
+protect; the protection is tested in `tests/test_safety_regressions.py`.
+
+Tuning seeds: the fast safety tier (Medium 0-19, Hard 0-19) passes: 0
+dangerous, every removal candidate names a deactivated or decommission
+item cited by its verdict.
+
+Real public configurations (32, configuration alone, local only): 292
+rules, verdict, verdict rule and confidence identical rule by rule before
+and after (274 verify, 16 keep, 2 removal candidates, both deactivated).
+Configuration alone carries no commit history and no log, so no changed
+path applies.
